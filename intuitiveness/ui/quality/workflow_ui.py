@@ -92,17 +92,17 @@ def render_apply_all_button(
     Returns:
         Tuple of (transformed_df, transformation_log) if applied, None otherwise
     """
-    if not quality_report.feature_suggestions:
+    if not quality_report.suggestions:
         st.info("✅ No suggestions available - data is already in good shape!")
         return None
 
-    n_suggestions = len(quality_report.feature_suggestions)
+    n_suggestions = len(quality_report.suggestions)
 
     st.markdown(f"### 🔧 Available Improvements ({n_suggestions})")
 
     # Show preview of suggestions
     with st.expander("Preview Suggestions", expanded=False):
-        for i, suggestion in enumerate(quality_report.feature_suggestions[:5], 1):
+        for i, suggestion in enumerate(quality_report.suggestions[:5], 1):
             st.markdown(f"{i}. **{suggestion.suggestion_type}**: {suggestion.rationale}")
 
         if n_suggestions > 5:
@@ -124,7 +124,7 @@ def render_apply_all_button(
 
                     transformed_df, transformation_log = apply_all_suggestions(
                         df,
-                        quality_report.feature_suggestions,
+                        quality_report.suggestions,
                         target_column=target_column
                     )
 
@@ -302,13 +302,13 @@ def render_60_second_workflow(
     )
 
     estimated_improvement = estimate_score_improvement(
-        quality_report.feature_suggestions,
+        quality_report.suggestions,
         quality_report.usability_score
     )
 
     readiness_status = get_readiness_status(
         quality_report.usability_score,
-        n_suggestions=len(quality_report.feature_suggestions),
+        n_suggestions=len(quality_report.suggestions),
         estimated_improvement=estimated_improvement
     )
 

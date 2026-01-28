@@ -99,13 +99,13 @@ def run_60_second_workflow(
 
     # Determine readiness status
     estimated_improvement = estimate_score_improvement(
-        quality_report.feature_suggestions,
+        quality_report.suggestions,
         quality_report.usability_score
     )
 
     readiness_status = get_readiness_status(
         quality_report.usability_score,
-        n_suggestions=len(quality_report.feature_suggestions),
+        n_suggestions=len(quality_report.suggestions),
         estimated_improvement=estimated_improvement
     )
 
@@ -114,9 +114,9 @@ def run_60_second_workflow(
     transformation_log = None
     transformation_time = 0.0
 
-    if auto_apply_suggestions and quality_report.feature_suggestions:
+    if auto_apply_suggestions and quality_report.suggestions:
         report_progress(
-            f"Applying {len(quality_report.feature_suggestions)} suggestions...",
+            f"Applying {len(quality_report.suggestions)} suggestions...",
             0.5
         )
         transformation_start = time.time()
@@ -124,7 +124,7 @@ def run_60_second_workflow(
         try:
             transformed_df, transformation_log = apply_all_suggestions(
                 df,
-                quality_report.feature_suggestions,
+                quality_report.suggestions,
                 target_column=target_column
             )
 
