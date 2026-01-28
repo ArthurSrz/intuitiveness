@@ -379,57 +379,42 @@ def render_search_bar(show_hero: bool = True) -> Optional[str]:
 
         # Absolutely centered upload button (hide if data already uploaded)
         if not st.session_state.get("raw_data"):
-            upload_placeholder = st.empty()
+            # Use columns to center the uploader
+            col1, col2, col3 = st.columns([2, 1, 2])
+            with col2:
+                uploaded_file = st.file_uploader(
+                    "Upload your CSV data",
+                    type=["csv"],
+                    key="search_bar_csv_upload",
+                    label_visibility="collapsed"
+                )
 
-            with upload_placeholder.container():
-                # Use columns to center the uploader - wider side columns
-                col1, col2, col3 = st.columns([2, 1, 2])
-                with col2:
-                    uploaded_file = st.file_uploader(
-                        "Upload your CSV data",
-                        type=["csv"],
-                        key="search_bar_csv_upload",
-                        label_visibility="collapsed"
-                    )
+                if uploaded_file is not None:
+                    # Check if file is already loaded
+                    raw_data = st.session_state.get("raw_data", {})
+                    if not isinstance(raw_data, dict):
+                        st.session_state.raw_data = {}
+                        raw_data = {}
 
-            if uploaded_file is not None:
-                # Check if file is already loaded
-                raw_data = st.session_state.get("raw_data", {})
-                if not isinstance(raw_data, dict):
-                    st.session_state.raw_data = {}
-                    raw_data = {}
+                    already_loaded = uploaded_file.name in raw_data
 
-                already_loaded = uploaded_file.name in raw_data
+                    # Only process if this is a new file
+                    if not already_loaded:
+                        # Show progress with status
+                        with st.status("Loading your data...", expanded=True) as status:
+                            st.write("Reading CSV file...")
+                            df, info_msg = smart_load_csv(uploaded_file)
 
-                # Only process if this is a new file
-                if not already_loaded:
-                    # Show centered progress bar
-                    with upload_placeholder.container():
-                        col1, col2, col3 = st.columns([2, 1, 2])
-                        with col2:
-                            st.markdown("**Loading your data...**")
-                            progress_bar = st.progress(0)
-
-                    try:
-                        progress_bar.progress(20)
-                        df, info_msg = smart_load_csv(uploaded_file)
-                        progress_bar.progress(80)
-
-                        if df is not None and not df.empty:
-                            # Store in raw_data
-                            st.session_state.raw_data[uploaded_file.name] = df
-                            progress_bar.progress(100)
-
-                            # Success - stay on step 0 but wizard will show
-                            st.rerun()
-                        else:
-                            upload_placeholder.empty()
-                            st.error(f"Failed to load CSV: {info_msg if info_msg else 'Unknown error'}")
-                    except Exception as e:
-                        import traceback
-                        upload_placeholder.empty()
-                        st.error(f"Error loading file: {str(e)}")
-                        st.code(traceback.format_exc())
+                            if df is not None and not df.empty:
+                                st.write(f"Loaded {len(df)} rows, {len(df.columns)} columns")
+                                st.session_state.raw_data[uploaded_file.name] = df
+                                status.update(label="Data loaded!", state="complete")
+                                import time
+                                time.sleep(0.5)  # Brief pause to show completion
+                                st.rerun()
+                            else:
+                                status.update(label="Failed to load", state="error")
+                                st.error(f"Failed to load CSV: {info_msg if info_msg else 'Unknown error'}")
         else:
             uploaded_file = None
 
