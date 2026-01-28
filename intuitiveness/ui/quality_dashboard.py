@@ -232,7 +232,7 @@ def _render_quality_report_tabs(report):
         _render_anomaly_tab(report)
     
     with tab6:
-        render_tabpfn_methodology()
+        render_tabpfn_methodology(report)
 
 
 def _render_overview_tab(report):
