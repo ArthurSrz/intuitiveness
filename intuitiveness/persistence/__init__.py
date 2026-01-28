@@ -27,6 +27,9 @@ from .serializers import (
 
 from .storage_backend import StorageBackend
 
+# Cache manager (Spec 005: FR-001-005)
+from .cache_manager import CacheManager, CacheEntry
+
 __all__ = [
     # Main API
     'SessionStore',
@@ -50,4 +53,8 @@ __all__ = [
 
     # Backend
     'StorageBackend',
+
+    # Cache manager (Spec 005)
+    'CacheManager',
+    'CacheEntry',
 ]

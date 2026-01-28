@@ -21,17 +21,15 @@ wheels/
 *.egg
 
 # Virtual environments
-.venv/
-venv/
 myenv/
 myenv311/
+venv/
 ENV/
-env.bak/
-venv.bak/
+env/
 
-# IDE
-.idea/
+# IDEs
 .vscode/
+.idea/
 *.swp
 *.swo
 *~
@@ -40,28 +38,30 @@ venv.bak/
 .DS_Store
 Thumbs.db
 
-# Environment files
+# Secrets and credentials
 .env
-.env.local
-*.env
+.streamlit/secrets.toml
+*.pem
+*.key
 
-# Logs
+# Session data
+sessions/
+csv_uploads/
+
+# Test artifacts
+test_screenshots/
+tests/artifacts/
 *.log
 
-# Testing
-.pytest_cache/
-.coverage
-htmlcov/
-.tox/
-.nox/
+# Build artifacts
+*.pyc
+*.egg-info/
 
-# Jupyter
+# Notebooks
 .ipynb_checkpoints/
+*.ipynb
 
-# Session files
-*.pkl
-*.pickle
-sessions/
-
-# Data files (optional - remove if needed)
-csv_uploads/
+# Raw data
+raw_data/
+ml_ready/
+intuitiveness_datasets/

@@ -808,19 +808,28 @@ def render_search_interface() -> Optional[pd.DataFrame]:
     results: Optional[SearchResult] = st.session_state.get(SESSION_KEYS["results"])
 
     if results is not None:
-        if results.total == 0:
+        # Filter to only show datasets with CSV resources (Spec 008: CSV-only filter)
+        csv_datasets = [d for d in results.datasets if d.has_csv]
+
+        if len(csv_datasets) == 0:
             render_no_results(st.session_state.get(SESSION_KEYS["query"], ""))
         else:
             # Results count with NL keywords indicator
             nl_keywords = st.session_state.get("datagouv_nl_keywords")
+            csv_count = len(csv_datasets)
+            total_count = results.total
+
             if nl_keywords:
                 keywords_display = ", ".join(nl_keywords[:4])
-                st.success(f"**{t('datasets_found', count=results.total)}** — {t('keywords_used', keywords=keywords_display)}")
+                st.success(f"**{t('datasets_found', count=csv_count)}** with CSV — {t('keywords_used', keywords=keywords_display)}")
             else:
-                st.success(f"**{t('datasets_found', count=results.total)}** — {t('click_to_add')}")
+                if csv_count < total_count:
+                    st.success(f"**{t('datasets_found', count=csv_count)}** with CSV ({total_count} total) — {t('click_to_add')}")
+                else:
+                    st.success(f"**{t('datasets_found', count=csv_count)}** — {t('click_to_add')}")
 
-            # Render dataset cards with direct load
-            result = render_dataset_grid(results.datasets, service)
+            # Render dataset cards with direct load (CSV-only datasets)
+            result = render_dataset_grid(csv_datasets, service)
 
             if result:
                 df, filename = result
@@ -841,6 +850,7 @@ def render_search_interface() -> Optional[pd.DataFrame]:
                             )
                             current_results = st.session_state.get(SESSION_KEYS["results"])
                             if current_results:
+                                # Add all datasets (CSV filtering happens at display time)
                                 current_results.datasets.extend(more_results.datasets)
                                 current_results.has_more = more_results.has_more
                                 current_results.page = more_results.page

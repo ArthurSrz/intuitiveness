@@ -45,10 +45,15 @@ def inject_all_styles():
     st.markdown(ALL_STYLES, unsafe_allow_html=True)
 
 
+# Metric card components (Spec 007: FR-004)
+from .metric_card import render_metric_card, render_metric_row
+
 # Re-export for convenience
 __all__ = [
     "COLORS",
     "TYPOGRAPHY",
     "inject_all_styles",
     "ALL_STYLES",
+    "render_metric_card",
+    "render_metric_row",
 ]

@@ -29,10 +29,28 @@ from intuitiveness.quality.models import (
 
 from intuitiveness.quality.assessor import (
     assess_dataset,
-    compute_usability_score,
     apply_all_suggestions,
     get_readiness_indicator,
     quick_benchmark,
+)
+
+# Feature profiling utilities (Spec 009: FR-002, extracted from assessor.py)
+from intuitiveness.quality.feature_profiler import (
+    compute_feature_profile,
+    compute_data_completeness,
+    compute_feature_diversity,
+    compute_size_appropriateness,
+    compute_usability_score,
+    build_feature_profiles,
+)
+
+# Data preparation utilities (Spec 009: FR-009, extracted from assessor.py)
+from intuitiveness.quality.data_preparer import (
+    DatasetWarning,
+    handle_high_cardinality_categorical,
+    select_top_features,
+    check_dataset_edge_cases,
+    prepare_data_for_tabpfn,
 )
 
 from intuitiveness.quality.feature_engineer import (
@@ -67,6 +85,18 @@ from intuitiveness.quality.exporter import (
     get_mime_type,
 )
 
+# 60-second workflow (Spec 010: FR-001 through FR-005)
+from intuitiveness.quality.workflow import (
+    ReadinessStatus,
+    get_readiness_status,
+    estimate_score_improvement,
+    GREEN_THRESHOLD,
+    YELLOW_THRESHOLD,
+    WorkflowResult,
+    run_60_second_workflow,
+    quick_export,
+)
+
 __all__ = [
     # Models
     "QualityReport",
@@ -83,10 +113,22 @@ __all__ = [
     "ExportPackage",
     # Assessment functions
     "assess_dataset",
-    "compute_usability_score",
     "apply_all_suggestions",
     "get_readiness_indicator",
     "quick_benchmark",
+    # Feature profiling functions (extracted from assessor.py)
+    "compute_feature_profile",
+    "compute_data_completeness",
+    "compute_feature_diversity",
+    "compute_size_appropriateness",
+    "compute_usability_score",
+    "build_feature_profiles",
+    # Data preparation functions (extracted from assessor.py)
+    "DatasetWarning",
+    "handle_high_cardinality_categorical",
+    "select_top_features",
+    "check_dataset_edge_cases",
+    "prepare_data_for_tabpfn",
     # Feature engineering functions
     "suggest_features",
     "apply_suggestion",
@@ -109,4 +151,13 @@ __all__ = [
     "export_with_metadata",
     "generate_python_snippet",
     "get_mime_type",
+    # 60-second workflow (Spec 010)
+    "ReadinessStatus",
+    "get_readiness_status",
+    "estimate_score_improvement",
+    "GREEN_THRESHOLD",
+    "YELLOW_THRESHOLD",
+    "WorkflowResult",
+    "run_60_second_workflow",
+    "quick_export",
 ]

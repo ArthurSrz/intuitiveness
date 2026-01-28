@@ -7,7 +7,8 @@ from .complexity import (
     Level1Dataset,
     Level0Dataset
 )
-from .redesign import Redesigner
+# TODO: Uncomment when redesign/core.py is created (Spec 001: FR-018-024)
+# from .redesign import Redesigner
 from .interactive import (
     InteractiveRedesigner,
     TransitionQuestions,
@@ -80,8 +81,8 @@ __all__ = [
     "Level2Dataset",
     "Level1Dataset",
     "Level0Dataset",
-    # Redesigner
-    "Redesigner",
+    # Redesigner (TODO: Uncomment when core.py exists)
+    # "Redesigner",
     # Interactive workflow
     "InteractiveRedesigner",
     "TransitionQuestions",

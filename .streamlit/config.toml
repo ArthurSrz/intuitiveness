@@ -1,13 +1,43 @@
+# Streamlit Configuration
+# Implements Spec 007: Streamlit Design Makeup (FR-001-002)
+#
+# Theme: Klein Blue with IBM Plex Sans
+# - Klein Blue (#002fa7) as primary accent (Yves Klein's iconic pigment)
+# - Slate gray backgrounds for readability
+# - IBM Plex Sans for professional typography
+
 [theme]
+# Base theme
+base = "light"
+
+# Background colors
+backgroundColor = "#f8fafc"  # slate-50
+secondaryBackgroundColor = "#f1f5f9"  # slate-100
+
+# Text colors
+textColor = "#0f172a"  # slate-900
+
+# Primary accent color (Klein Blue)
 primaryColor = "#002fa7"
-backgroundColor = "#f8fafc"
-secondaryBackgroundColor = "#f1f5f9"
-textColor = "#0f172a"
+
+# Font family - IBM Plex Sans
 font = "sans serif"
 
-[client]
-toolbarMode = "minimal"
-showSidebarNavigation = false
+[browser]
+# Gather usage stats (set to false for privacy)
+gatherUsageStats = false
 
 [server]
-runOnSave = true
+# Enable CORS for local development
+enableCORS = false
+enableXsrfProtection = true
+
+# Max upload size (500MB for large datasets)
+maxUploadSize = 500
+
+[runner]
+# Rerun on save for development
+fastReruns = true
+
+# Magic commands (disable for production)
+magicEnabled = true

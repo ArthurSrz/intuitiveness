@@ -14,18 +14,33 @@ from .decision_tree import DecisionTreeComponent, render_simple_tree
 from .json_visualizer import JsonVisualizer, render_navigation_export
 
 # Level-specific display components (003-level-dataviz-display)
-from .level_displays import (
-    NavigationDirection,
-    DisplayType,
-    LevelDisplayConfig,
-    LEVEL_DISPLAY_MAPPING,
-    get_display_level,
-    render_l4_file_list,
-    render_l2_domain_table,
-    render_l1_vector,
+# Updated for Spec 011: Extracted to ui/levels/ package
+from .levels import (
     render_l0_datum,
-    render_navigation_direction_indicator,
+    render_l1_vector,
+    render_l2_domain_table,
+    render_l3_graph_with_tabs,
+    render_l4_file_list,
 )
+
+# Legacy imports for backward compatibility (TODO: Remove in future)
+try:
+    from .level_displays import (
+        NavigationDirection,
+        DisplayType,
+        LevelDisplayConfig,
+        LEVEL_DISPLAY_MAPPING,
+        get_display_level,
+        render_navigation_direction_indicator,
+    )
+except ImportError:
+    # level_displays.py deleted - these are legacy
+    NavigationDirection = None
+    DisplayType = None
+    LevelDisplayConfig = None
+    LEVEL_DISPLAY_MAPPING = None
+    get_display_level = None
+    render_navigation_direction_indicator = None
 
 # Entity/relationship tab components (003-level-dataviz-display)
 from .entity_tabs import (
@@ -138,19 +153,24 @@ from .quality_dashboard import render_quality_dashboard
 from .catalog_browser import render_catalog_browser
 
 # Ascent UI forms (004-ascent-precision)
-from .ascent_forms import (
+# Updated for Spec 011: Extracted to ui/ascent/ package
+from .ascent import (
     # Form renderers
     render_l0_to_l1_unfold_form,
     render_l1_to_l2_domain_form,
     render_l2_to_l3_entity_form,
+    # Constants
+    DEFAULT_SIMILARITY_THRESHOLD,
+    DEFAULT_DOMAINS,
+)
+
+# Discovery wizard components (still in ascent_forms.py)
+from .ascent_forms import (
     # Shared components
     _render_domain_categorization_inputs,
     _parse_domains,
     _apply_domain_categorization,
-    # Constants
-    DEFAULT_SIMILARITY_THRESHOLD,
     DEFAULT_UNMATCHED_LABEL,
-    DEFAULT_DOMAINS,
     # Discovery wizard components (Step 2 simplification)
     render_wizard_step_1_columns,
     render_wizard_step_1_entities,
