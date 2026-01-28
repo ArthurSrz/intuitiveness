@@ -267,8 +267,8 @@ def _render_overview_tab(report):
         
         col1, col2 = st.columns(2)
         with col1:
-            st.markdown(f"**Rows:** {report.n_rows:,}")
-            st.markdown(f"**Columns:** {report.n_columns}")
+            st.markdown(f"**Rows:** {report.row_count:,}")
+            st.markdown(f"**Columns:** {report.feature_count}")
             st.markdown(f"**Target:** {report.target_column}")
         with col2:
             st.markdown(f"**Task Type:** {report.task_type.title()}")
