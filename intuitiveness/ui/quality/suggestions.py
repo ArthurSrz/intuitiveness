@@ -148,7 +148,24 @@ def render_feature_suggestions(report: Any) -> None:
     if applied:
         spacer(8)
         if st.button("Re-assess with Changes", use_container_width=True):
-            st.session_state.pop(SESSION_KEY_QUALITY_REPORT, None)
+            # Save original report for comparison
+            original_report = st.session_state.get(SESSION_KEY_QUALITY_REPORT)
+            if original_report:
+                # Save to history for before/after comparison
+                from intuitiveness.ui.quality.state import save_report_to_history
+                save_report_to_history(original_report)
+
+            # Get current DF (which already has applied suggestions) and target column
+            current_df = st.session_state.get(SESSION_KEY_QUALITY_DF)
+            target_column = original_report.target_column if original_report else None
+
+            if current_df is not None and target_column:
+                # Clear report to trigger reassessment
+                st.session_state.pop(SESSION_KEY_QUALITY_REPORT, None)
+
+                # Set a flag to auto-trigger assessment on next render
+                st.session_state['auto_reassess_target'] = target_column
+
             st.rerun()
 
 

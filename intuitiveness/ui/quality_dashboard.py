@@ -102,25 +102,96 @@ def render_quality_dashboard() -> None:
     
     # Check for existing report in session
     report = st.session_state.get(SESSION_KEY_QUALITY_REPORT)
-    
+
     if report is not None:
         _render_report_view(report)
         return
-    
+
+    # Check for auto-reassessment trigger (after applying suggestions)
+    auto_target = st.session_state.get('auto_reassess_target')
+    if auto_target:
+        df = st.session_state.get(SESSION_KEY_QUALITY_DF)
+        if df is not None:
+            # Clear the flag
+            st.session_state.pop('auto_reassess_target', None)
+
+            # Auto-trigger assessment
+            with st.spinner("Re-assessing with applied changes..."):
+                from intuitiveness.quality.assessor import assess_dataset
+                from intuitiveness.ui.quality.state import save_report_to_history
+
+                try:
+                    new_report = assess_dataset(df, target_column=auto_target)
+
+                    # Save report to history and set as current
+                    save_report_to_history(new_report)
+
+                    st.rerun()
+                except Exception as e:
+                    from intuitiveness.ui.alert import error
+                    error(f"Failed to re-assess dataset: {e}")
+                    # Fall through to upload/assessment flow
+            return
+
     # No report yet - show upload and assessment flow
     _render_upload_and_assessment()
 
 
 def _render_report_view(report) -> None:
     """Render the quality report view with all tabs."""
-    
+
     # New Assessment button
     col1, col2 = st.columns([4, 1])
     with col2:
         if st.button("🔄 New Assessment", use_container_width=True):
             _clear_all_quality_state()
             st.rerun()
-    
+
+    # Show before/after comparison if we have history
+    from intuitiveness.ui.quality.state import get_initial_report, get_current_report
+    from intuitiveness.ui.metric_card import render_metric_card
+
+    initial = get_initial_report()
+    current = get_current_report()
+
+    if initial and current and initial.id != current.id:
+        # We have before/after data - show prominent comparison!
+        spacer(8)
+        with card():
+            st.markdown("### 📊 Before vs. After Comparison")
+            spacer(8)
+
+            col1, col2, col3 = st.columns(3)
+
+            with col1:
+                render_metric_card(
+                    label="Initial Quality",
+                    value=f"{initial.usability_score:.1f}",
+                    color=get_score_color(initial.usability_score)
+                )
+
+            delta = current.usability_score - initial.usability_score
+            delta_color = "#22c55e" if delta > 0 else "#ef4444"
+
+            with col2:
+                st.markdown(f"""
+                <div style="text-align: center; padding: 20px;">
+                    <div style="font-size: 48px; font-weight: bold; color: {delta_color};">
+                        {'+' if delta > 0 else ''}{delta:.1f}
+                    </div>
+                    <div style="color: #64748b;">points</div>
+                </div>
+                """, unsafe_allow_html=True)
+
+            with col3:
+                render_metric_card(
+                    label="Current Quality",
+                    value=f"{current.usability_score:.1f}",
+                    color=get_score_color(current.usability_score)
+                )
+
+        spacer(16)
+
     # Main quality report with tabs
     _render_quality_report_tabs(report)
 
