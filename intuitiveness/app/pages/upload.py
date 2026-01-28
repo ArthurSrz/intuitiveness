@@ -36,21 +36,21 @@ from intuitiveness.interactive import Neo4jDataModel, DataModelNode
 def render_upload_page(step: Dict, skip_header: bool = False) -> None:
     """
     Render Step 0: Search and load data from data.gouv.fr.
-    
+
     This page handles:
     1. Display uploaded files with L4 file list (Spec 003: FR-001, FR-002)
     2. Run AI-powered connection wizard
     3. Show data.gouv.fr search interface (Spec 008)
-    
+
     Args:
         step: Step configuration dictionary
         skip_header: Whether to skip step header rendering
     """
     from intuitiveness.streamlit_app import render_step_header
-    
+
     if not skip_header:
         render_step_header(step)
-    
+
     # Check if data is already loaded (from search)
     raw_data = st.session_state.raw_data
     if raw_data:

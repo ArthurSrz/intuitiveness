@@ -387,18 +387,27 @@ def render_search_bar(show_hero: bool = True) -> Optional[str]:
         )
         st.markdown('</div>', unsafe_allow_html=True)
         if uploaded_file:
-            with st.spinner("Loading..."):
-                try:
-                    df, _ = smart_load_csv(uploaded_file)
-                    if df is not None:
-                        if "raw_data" not in st.session_state:
-                            st.session_state.raw_data = {}
-                        st.session_state.raw_data[uploaded_file.name] = df
-                        # Redirect to descent-ascent workflow (Step 1: Entities)
-                        st.session_state.current_step = 1
-                        st.rerun()
-                except:
-                    pass
+            # Only process if this is a new file (not already in raw_data)
+            if uploaded_file.name not in st.session_state.get("raw_data", {}):
+                with st.spinner("Loading..."):
+                    try:
+                        df, info_msg = smart_load_csv(uploaded_file)
+                        if df is not None:
+                            # Store in raw_data
+                            if "raw_data" not in st.session_state:
+                                st.session_state.raw_data = {}
+                            st.session_state.raw_data[uploaded_file.name] = df
+
+                            # Success message
+                            st.success(f"✅ Loaded {uploaded_file.name}")
+
+                            # Redirect to descent-ascent workflow (Step 1: Entities)
+                            st.session_state.current_step = 1
+                            st.rerun()
+                        else:
+                            st.error("Failed to load CSV file")
+                    except Exception as e:
+                        st.error(f"Error loading file: {e}")
 
     return None
 
