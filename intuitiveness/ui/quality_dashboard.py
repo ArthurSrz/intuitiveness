@@ -288,7 +288,7 @@ def _render_suggestions_tab(report):
         warning("Dataset not found in session state.")
         return
     
-    render_feature_suggestions(report, df)
+    render_feature_suggestions(report)
 
 
 def _render_anomaly_tab(report):
