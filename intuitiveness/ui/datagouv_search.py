@@ -382,8 +382,8 @@ def render_search_bar(show_hero: bool = True) -> Optional[str]:
             upload_placeholder = st.empty()
 
             with upload_placeholder.container():
-                # Use columns to center the uploader
-                col1, col2, col3 = st.columns([1, 1, 1])
+                # Use columns to center the uploader - wider side columns
+                col1, col2, col3 = st.columns([2, 1, 2])
                 with col2:
                     uploaded_file = st.file_uploader(
                         "Upload your CSV data",
