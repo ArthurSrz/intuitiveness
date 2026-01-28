@@ -243,6 +243,5 @@ def _render_search_interface() -> None:
 
         st.session_state.pop('datagouv_last_dataset_name', None)
 
-        # Redirect to descent-ascent workflow (Step 1: Entities)
-        st.session_state.current_step = 1
+        # Stay on step 0 - wizard will automatically show
         st.rerun()

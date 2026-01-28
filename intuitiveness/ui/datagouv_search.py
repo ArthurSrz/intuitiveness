@@ -377,15 +377,18 @@ def render_search_bar(show_hero: bool = True) -> Optional[str]:
 
         from intuitiveness.streamlit_app import smart_load_csv
 
-        # Absolutely centered upload button
-        st.markdown('<div style="display: flex; justify-content: center; width: 100%;">', unsafe_allow_html=True)
-        uploaded_file = st.file_uploader(
-            "Upload your CSV data",
-            type=["csv"],
-            key="search_bar_csv_upload",
-            label_visibility="collapsed"
-        )
-        st.markdown('</div>', unsafe_allow_html=True)
+        # Absolutely centered upload button (hide if data already uploaded)
+        if not st.session_state.get("raw_data"):
+            st.markdown('<div style="display: flex; justify-content: center; width: 100%;">', unsafe_allow_html=True)
+            uploaded_file = st.file_uploader(
+                "Upload your CSV data",
+                type=["csv"],
+                key="search_bar_csv_upload",
+                label_visibility="collapsed"
+            )
+            st.markdown('</div>', unsafe_allow_html=True)
+        else:
+            uploaded_file = None
         if uploaded_file is not None:
             # Check if file is already loaded
             raw_data = st.session_state.get("raw_data", {})
@@ -410,11 +413,8 @@ def render_search_bar(show_hero: bool = True) -> Optional[str]:
                             # Store in raw_data
                             st.session_state.raw_data[uploaded_file.name] = df
 
-                            # Success message with file info
-                            st.success(f"✅ Loaded {uploaded_file.name} ({info_msg})")
-
-                            # Redirect to descent-ascent workflow (Step 1: Entities)
-                            st.session_state.current_step = 1
+                            # Success - stay on step 0 but wizard will show
+                            # (don't show success message to avoid clutter)
                             st.rerun()
                         else:
                             st.error(f"Failed to load CSV: {info_msg if info_msg else 'Unknown error'}")
