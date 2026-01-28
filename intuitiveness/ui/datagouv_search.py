@@ -598,28 +598,24 @@ def _get_minimal_landing_css() -> str:
         background: transparent !important;
         min-height: auto !important;
     }
-    /* Hide ONLY specific text elements - be minimal */
-    [data-testid="stFileUploader"] section small {
+    /* Hide text elements */
+    [data-testid="stFileUploader"] small {
         display: none !important;
     }
-    [data-testid="stFileUploader"] section ul {
+    [data-testid="stFileUploader"] ul {
         display: none !important;
     }
-    /* Hide the "Drag and drop" text span */
-    [data-testid="stFileUploader"] [data-testid="stFileUploaderDropzone"] span {
+    [data-testid="stFileUploader"] section span:not(:has(button)) {
         display: none !important;
     }
-    /* Hide the upload icon */
-    [data-testid="stFileUploader"] [data-testid="stFileUploaderDropzone"] svg {
+    [data-testid="stFileUploader"] section svg {
         display: none !important;
     }
-    /* Hide uploaded file details row */
-    [data-testid="stFileUploaderFile"] {
-        display: none !important;
-    }
-    /* Style the button - use [data-testid] to be specific */
-    [data-testid="stFileUploaderDropzone"] button,
-    [data-testid="stFileUploader"] [data-testid="baseButton-secondary"] {
+    /* FORCE button to be visible */
+    [data-testid="stFileUploader"] button {
+        display: inline-flex !important;
+        visibility: visible !important;
+        opacity: 1 !important;
         font-size: 0 !important;
         padding: 8px 20px !important;
         background: linear-gradient(135deg, #ffffff 0%, #f8fafc 100%) !important;
@@ -629,23 +625,20 @@ def _get_minimal_landing_css() -> str:
         transition: all 0.2s ease !important;
         cursor: pointer !important;
     }
-    [data-testid="stFileUploaderDropzone"] button::before,
-    [data-testid="stFileUploader"] [data-testid="baseButton-secondary"]::before {
+    [data-testid="stFileUploader"] button::before {
         content: 'Upload your data (CSV)' !important;
         font-size: 0.85rem !important;
         color: #475569 !important;
         font-weight: 500 !important;
         font-family: 'Outfit', -apple-system, BlinkMacSystemFont, sans-serif !important;
     }
-    [data-testid="stFileUploaderDropzone"] button:hover,
-    [data-testid="stFileUploader"] [data-testid="baseButton-secondary"]:hover {
+    [data-testid="stFileUploader"] button:hover {
         background: linear-gradient(135deg, #002fa7 0%, #0041d1 100%) !important;
         border-color: #002fa7 !important;
         box-shadow: 0 4px 12px rgba(0, 47, 167, 0.2) !important;
         transform: translateY(-1px) !important;
     }
-    [data-testid="stFileUploaderDropzone"] button:hover::before,
-    [data-testid="stFileUploader"] [data-testid="baseButton-secondary"]:hover::before {
+    [data-testid="stFileUploader"] button:hover::before {
         color: white !important;
     }
 
