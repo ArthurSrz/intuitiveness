@@ -382,14 +382,15 @@ def render_search_bar(show_hero: bool = True) -> Optional[str]:
             upload_placeholder = st.empty()
 
             with upload_placeholder.container():
-                st.markdown('<div style="display: flex; justify-content: center; width: 100%;">', unsafe_allow_html=True)
-                uploaded_file = st.file_uploader(
-                    "Upload your CSV data",
-                    type=["csv"],
-                    key="search_bar_csv_upload",
-                    label_visibility="collapsed"
-                )
-                st.markdown('</div>', unsafe_allow_html=True)
+                # Use columns to center the uploader
+                col1, col2, col3 = st.columns([1, 1, 1])
+                with col2:
+                    uploaded_file = st.file_uploader(
+                        "Upload your CSV data",
+                        type=["csv"],
+                        key="search_bar_csv_upload",
+                        label_visibility="collapsed"
+                    )
 
             if uploaded_file is not None:
                 # Hide uploader immediately
