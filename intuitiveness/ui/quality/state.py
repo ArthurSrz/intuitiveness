@@ -105,57 +105,23 @@ def render_quality_score_evolution() -> None:
 
     # Build evolution display
     st.markdown(
-        f"""
-        <div style="
-            background: linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%);
-            border: 1px solid #e2e8f0;
-            border-radius: 12px;
-            padding: 20px;
-            margin: 16px 0;
-        ">
-            <div style="
-                display: flex;
-                align-items: center;
-                justify-content: space-between;
-                margin-bottom: 16px;
-            ">
-                <div style="font-weight: 600; color: #475569; font-size: 14px;">
-                    Quality Score Evolution
-                </div>
-                <div style="
-                    background: {delta_color}20;
-                    color: {delta_color};
-                    padding: 4px 12px;
-                    border-radius: 16px;
-                    font-weight: 600;
-                    font-size: 14px;
-                ">
-                    {delta_icon} {abs(score_delta):+.1f} pts
-                </div>
-            </div>
-
-            <div style="display: flex; align-items: center; gap: 24px;">
-                <!-- Initial Score -->
-                <div style="text-align: center; flex: 1;">
-                    <div style="color: #94a3b8; font-size: 12px; margin-bottom: 4px;">INITIAL</div>
-                    <div style="font-size: 32px; font-weight: bold; color: {get_score_color(initial.usability_score)};">
-                        {initial.usability_score:.0f}
-                    </div>
-                </div>
-
-                <!-- Arrow -->
-                <div style="font-size: 24px; color: #cbd5e1;">→</div>
-
-                <!-- Current Score -->
-                <div style="text-align: center; flex: 1;">
-                    <div style="color: #94a3b8; font-size: 12px; margin-bottom: 4px;">CURRENT</div>
-                    <div style="font-size: 32px; font-weight: bold; color: {get_score_color(current.usability_score)};">
-                        {current.usability_score:.0f}
-                    </div>
-                </div>
-            </div>
+        f"""<div style="background: linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%); border: 1px solid #e2e8f0; border-radius: 12px; padding: 20px; margin: 16px 0;">
+    <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 16px;">
+        <div style="font-weight: 600; color: #475569; font-size: 14px;">Quality Score Evolution</div>
+        <div style="background: {delta_color}20; color: {delta_color}; padding: 4px 12px; border-radius: 16px; font-weight: 600; font-size: 14px;">{delta_icon} {abs(score_delta):+.1f} pts</div>
+    </div>
+    <div style="display: flex; align-items: center; gap: 24px;">
+        <div style="text-align: center; flex: 1;">
+            <div style="color: #94a3b8; font-size: 12px; margin-bottom: 4px;">INITIAL</div>
+            <div style="font-size: 32px; font-weight: bold; color: {get_score_color(initial.usability_score)};">{initial.usability_score:.0f}</div>
         </div>
-        """,
+        <div style="font-size: 24px; color: #cbd5e1;">→</div>
+        <div style="text-align: center; flex: 1;">
+            <div style="color: #94a3b8; font-size: 12px; margin-bottom: 4px;">CURRENT</div>
+            <div style="font-size: 32px; font-weight: bold; color: {get_score_color(current.usability_score)};">{current.usability_score:.0f}</div>
+        </div>
+    </div>
+</div>""",
         unsafe_allow_html=True,
     )
 
