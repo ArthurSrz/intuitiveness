@@ -69,7 +69,6 @@ from intuitiveness.ui.quality.assessment import (
 # Suggestion components (US-1 Step 3, FR-002)
 from intuitiveness.ui.quality.suggestions import (
     render_feature_suggestions,
-    render_apply_all_button,
 )
 
 # Readiness components (US-4, FR-001)

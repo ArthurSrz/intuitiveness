@@ -3,7 +3,6 @@
 Uses intfloat/multilingual-e5-small for multilingual support (French, etc.)
 with fast local batching.
 """
-import streamlit as st
 import numpy as np
 from typing import List, Optional
 from sklearn.metrics.pairwise import cosine_similarity
@@ -15,17 +14,31 @@ SIMILARITY_MODEL = "intfloat/multilingual-e5-small"
 _model = None
 
 
+def _get_streamlit():
+    """Get Streamlit if available, None otherwise."""
+    try:
+        import streamlit as st
+        return st
+    except ImportError:
+        return None
+
+
 def _get_model():
     """Get or load the SentenceTransformer model (cached)."""
     global _model
+    st = _get_streamlit()
+
     if _model is None:
         try:
             from sentence_transformers import SentenceTransformer
-            st.info(f"Loading model {SIMILARITY_MODEL}...")
+            if st:
+                st.info(f"Loading model {SIMILARITY_MODEL}...")
             _model = SentenceTransformer(SIMILARITY_MODEL)
-            st.success("Model loaded!")
+            if st:
+                st.success("Model loaded!")
         except ImportError:
-            st.error("sentence-transformers not installed. Run: pip install sentence-transformers")
+            if st:
+                st.error("sentence-transformers not installed. Run: pip install sentence-transformers")
             return None
     return _model
 

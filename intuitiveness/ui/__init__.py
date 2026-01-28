@@ -23,24 +23,8 @@ from .levels import (
     render_l4_file_list,
 )
 
-# Legacy imports for backward compatibility (TODO: Remove in future)
-try:
-    from .level_displays import (
-        NavigationDirection,
-        DisplayType,
-        LevelDisplayConfig,
-        LEVEL_DISPLAY_MAPPING,
-        get_display_level,
-        render_navigation_direction_indicator,
-    )
-except ImportError:
-    # level_displays.py deleted - these are legacy
-    NavigationDirection = None
-    DisplayType = None
-    LevelDisplayConfig = None
-    LEVEL_DISPLAY_MAPPING = None
-    get_display_level = None
-    render_navigation_direction_indicator = None
+# Note: Legacy level_displays.py module was removed during Spec 011 refactoring
+# If needed, these functions now live in ui/levels/ package
 
 # Entity/relationship tab components (003-level-dataviz-display)
 from .entity_tabs import (
@@ -166,11 +150,6 @@ from .ascent import (
 
 # Discovery wizard components (still in ascent_forms.py)
 from .ascent_forms import (
-    # Shared components
-    _render_domain_categorization_inputs,
-    _parse_domains,
-    _apply_domain_categorization,
-    DEFAULT_UNMATCHED_LABEL,
     # Discovery wizard components (Step 2 simplification)
     render_wizard_step_1_columns,
     render_wizard_step_1_entities,
@@ -187,6 +166,9 @@ from .ascent_forms import (
     _perform_table_join,
 )
 
+# Shared constants from ascent package
+from .ascent.shared import DEFAULT_UNMATCHED_LABEL
+
 __all__ = [
     # Drag-and-drop relationship builder (L2→L3)
     'DragDropRelationshipBuilder',
@@ -198,16 +180,10 @@ __all__ = [
     'JsonVisualizer',
     'render_navigation_export',
     # Level-specific displays (003-level-dataviz-display)
-    'NavigationDirection',
-    'DisplayType',
-    'LevelDisplayConfig',
-    'LEVEL_DISPLAY_MAPPING',
-    'get_display_level',
     'render_l4_file_list',
     'render_l2_domain_table',
     'render_l1_vector',
     'render_l0_datum',
-    'render_navigation_direction_indicator',
     # Entity/relationship tabs (003-level-dataviz-display)
     'EntityTabData',
     'RelationshipTabData',
@@ -223,12 +199,7 @@ __all__ = [
     'render_l0_to_l1_unfold_form',
     'render_l1_to_l2_domain_form',
     'render_l2_to_l3_entity_form',
-    '_render_domain_categorization_inputs',
-    '_parse_domains',
-    '_apply_domain_categorization',
-    'DEFAULT_SIMILARITY_THRESHOLD',
     'DEFAULT_UNMATCHED_LABEL',
-    'DEFAULT_DOMAINS',
     # Discovery wizard components (Step 2 simplification)
     'render_wizard_step_1_columns',
     'render_wizard_step_1_entities',
