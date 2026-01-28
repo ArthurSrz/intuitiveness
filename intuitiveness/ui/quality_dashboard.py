@@ -255,7 +255,7 @@ def _render_overview_tab(report):
         {
             "label": "Data Completeness",
             "value": f"{report.data_completeness:.1f}%",
-            "delta": f"{report.n_missing_total:,} missing values",
+            "delta": f"{sum(fp.missing_count for fp in report.feature_profiles):,} missing values",
         },
     ])
     
