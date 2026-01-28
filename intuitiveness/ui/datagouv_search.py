@@ -587,6 +587,7 @@ def _get_minimal_landing_css() -> str:
         display: flex !important;
         justify-content: center !important;
         width: 100% !important;
+        text-align: center !important;
     }
     [data-testid="stFileUploader"] > div {
         display: flex !important;
@@ -598,6 +599,14 @@ def _get_minimal_landing_css() -> str:
         padding: 0 !important;
         background: transparent !important;
         min-height: auto !important;
+        display: flex !important;
+        justify-content: center !important;
+        width: 100% !important;
+    }
+    [data-testid="stFileUploader"] section > div {
+        display: flex !important;
+        justify-content: center !important;
+        width: 100% !important;
     }
     /* Hide text elements */
     [data-testid="stFileUploader"] small {
@@ -612,7 +621,7 @@ def _get_minimal_landing_css() -> str:
     [data-testid="stFileUploader"] section svg {
         display: none !important;
     }
-    /* FORCE button to be visible */
+    /* FORCE button to be visible and CENTERED */
     [data-testid="stFileUploader"] button {
         display: inline-flex !important;
         visibility: visible !important;
@@ -625,6 +634,7 @@ def _get_minimal_landing_css() -> str:
         box-shadow: 0 1px 3px rgba(0, 0, 0, 0.06) !important;
         transition: all 0.2s ease !important;
         cursor: pointer !important;
+        margin: 0 auto !important;
     }
     [data-testid="stFileUploader"] button::before {
         content: 'Upload your data (CSV)' !important;
