@@ -577,15 +577,27 @@ def _get_minimal_landing_css() -> str:
         background: white !important;
         border: 1px solid #cbd5e1 !important;
         border-radius: 6px !important;
-        color: #64748b !important;
+        color: transparent !important;
         font-weight: 400 !important;
         width: 100% !important;
         margin: 0 auto !important;
         display: block !important;
+        position: relative !important;
+    }
+    [data-testid="stFileUploader"] button::before {
+        content: 'Upload your CSV data' !important;
+        color: #64748b !important;
+        position: absolute !important;
+        left: 50% !important;
+        top: 50% !important;
+        transform: translate(-50%, -50%) !important;
+        width: 100% !important;
     }
     [data-testid="stFileUploader"] button:hover {
         background: #f8fafc !important;
         border-color: #002fa7 !important;
+    }
+    [data-testid="stFileUploader"] button:hover::before {
         color: #002fa7 !important;
     }
 
