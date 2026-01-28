@@ -347,8 +347,9 @@ def render_search_bar(show_hero: bool = True) -> Optional[str]:
         </div>
         """, unsafe_allow_html=True)
 
-    # Full-width search form (matches dataset grid width)
-    col_spacer1, col_search, col_spacer2 = st.columns([0.5, 5, 0.5])
+    # Full-width search form with small upload icon
+    col_spacer1, col_search, col_upload, col_spacer2 = st.columns([0.5, 4.5, 0.3, 0.5])
+
     with col_search:
         with st.form(key="datagouv_search_form", clear_on_submit=False):
             query = st.text_input(
@@ -365,6 +366,29 @@ def render_search_bar(show_hero: bool = True) -> Optional[str]:
 
             if submitted and query:
                 return query.strip()
+
+    # Small upload icon next to search
+    with col_upload:
+        st.markdown("<div style='height: 10px;'></div>", unsafe_allow_html=True)  # Align with search button
+        from intuitiveness.streamlit_app import smart_load_csv
+        uploaded_file = st.file_uploader(
+            "📁",
+            type=["csv"],
+            key="search_bar_csv_upload",
+            label_visibility="collapsed",
+            help="Upload your own CSV"
+        )
+        if uploaded_file:
+            with st.spinner("Loading..."):
+                try:
+                    df, _ = smart_load_csv(uploaded_file)
+                    if df is not None:
+                        if "raw_data" not in st.session_state:
+                            st.session_state.raw_data = {}
+                        st.session_state.raw_data[uploaded_file.name] = df
+                        st.rerun()
+                except:
+                    pass
 
     return None
 
@@ -522,6 +546,29 @@ def _get_minimal_landing_css() -> str:
     .stTextInput input:focus {
         border-color: #002fa7 !important;
         box-shadow: 0 0 0 2px rgba(0, 47, 167, 0.1) !important;
+    }
+
+    /* Minimal upload icon styling */
+    [data-testid="stFileUploader"] {
+        margin-top: 8px;
+    }
+    [data-testid="stFileUploader"] section {
+        display: none !important;
+    }
+    [data-testid="stFileUploader"] button {
+        font-size: 1.2rem !important;
+        padding: 8px !important;
+        background: transparent !important;
+        border: 1px solid #e2e8f0 !important;
+        border-radius: 8px !important;
+        color: #64748b !important;
+        min-width: unset !important;
+        height: 45px !important;
+    }
+    [data-testid="stFileUploader"] button:hover {
+        background: #f8fafc !important;
+        border-color: #002fa7 !important;
+        color: #002fa7 !important;
     }
 
     /* Style the search button */
