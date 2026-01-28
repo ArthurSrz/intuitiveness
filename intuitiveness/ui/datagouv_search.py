@@ -393,8 +393,13 @@ def render_search_bar(show_hero: bool = True) -> Optional[str]:
                     )
 
             if uploaded_file is not None:
-                # Hide uploader immediately
-                upload_placeholder.empty()
+                # Hide uploader and show centered spinner
+                with upload_placeholder.container():
+                    col1, col2, col3 = st.columns([2, 1, 2])
+                    with col2:
+                        st.markdown('<div style="text-align: center; padding: 10px 0;">', unsafe_allow_html=True)
+                        st.spinner("Loading...")
+                        st.markdown('</div>', unsafe_allow_html=True)
 
                 # Check if file is already loaded
                 raw_data = st.session_state.get("raw_data", {})
@@ -406,7 +411,7 @@ def render_search_bar(show_hero: bool = True) -> Optional[str]:
 
                 # Only process if this is a new file
                 if not already_loaded:
-                    with st.spinner("Loading..."):
+                    with st.spinner("Loading your data..."):
                         try:
                             df, info_msg = smart_load_csv(uploaded_file)
 
