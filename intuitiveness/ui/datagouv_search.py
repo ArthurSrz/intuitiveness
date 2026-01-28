@@ -581,11 +581,10 @@ def _get_minimal_landing_css() -> str:
         box-shadow: 0 0 0 2px rgba(0, 47, 167, 0.1) !important;
     }
 
-    /* Hide everything except the browse button - CENTERED & STYLISH */
+    /* File Uploader - Clean Button Only */
     [data-testid="stFileUploader"] {
         display: flex !important;
         justify-content: center !important;
-        align-items: center !important;
         width: 100% !important;
     }
     [data-testid="stFileUploader"] > div {
@@ -597,77 +596,42 @@ def _get_minimal_landing_css() -> str:
         border: none !important;
         padding: 0 !important;
         background: transparent !important;
-        display: flex !important;
-        justify-content: center !important;
-        width: auto !important;
+        min-height: auto !important;
     }
-    /* Hide ALL text, icons, and secondary elements */
-    [data-testid="stFileUploader"] section > div:not(:has(button)) {
+    /* Hide the text elements but NOT the button container */
+    [data-testid="stFileUploader"] section small,
+    [data-testid="stFileUploader"] section ul,
+    [data-testid="stFileUploader"] section [data-testid="stMarkdownContainer"] {
         display: none !important;
     }
-    [data-testid="stFileUploader"] section > ul,
-    [data-testid="stFileUploader"] section > small,
-    [data-testid="stFileUploader"] section > div > span,
-    [data-testid="stFileUploader"] section > div > svg,
-    [data-testid="stFileUploader"] section p,
-    [data-testid="stFileUploader"] [data-testid="stFileUploaderDropzone"],
-    [data-testid="stFileUploaderDropzoneInput"] {
+    /* Hide drag-drop instruction text (the span inside) */
+    [data-testid="stFileUploader"] section > div > div > span {
         display: none !important;
     }
-    /* Hide drag and drop text */
-    [data-testid="stFileUploader"] section > div:first-child {
+    /* Hide the cloud/upload icon */
+    [data-testid="stFileUploader"] section svg {
         display: none !important;
     }
-    /* Show only the button container */
-    [data-testid="stFileUploader"] section > div:has(button) {
-        display: flex !important;
-        justify-content: center !important;
-    }
-    /* Show only first button (Browse), hide delete/other buttons */
-    [data-testid="stFileUploader"] button:not(:first-of-type) {
-        display: none !important;
-    }
-    /* Style the visible button */
+    /* Style the button */
     [data-testid="stFileUploader"] button {
         font-size: 0.85rem !important;
         padding: 8px 20px !important;
         background: linear-gradient(135deg, #ffffff 0%, #f8fafc 100%) !important;
         border: 1.5px solid #e2e8f0 !important;
         border-radius: 8px !important;
-        color: transparent !important;
+        color: #475569 !important;
         font-weight: 500 !important;
-        width: auto !important;
-        margin: 0 auto !important;
-        display: inline-block !important;
-        position: relative !important;
+        font-family: 'Outfit', -apple-system, BlinkMacSystemFont, sans-serif !important;
         box-shadow: 0 1px 3px rgba(0, 0, 0, 0.06) !important;
         transition: all 0.2s ease !important;
         cursor: pointer !important;
     }
-    [data-testid="stFileUploader"] button::before {
-        content: 'Upload CSV' !important;
-        color: #475569 !important;
-        position: absolute !important;
-        left: 50% !important;
-        top: 50% !important;
-        transform: translate(-50%, -50%) !important;
-        white-space: nowrap !important;
-        font-family: 'Outfit', -apple-system, BlinkMacSystemFont, sans-serif !important;
-        letter-spacing: 0.02em !important;
-        font-weight: 500 !important;
-    }
     [data-testid="stFileUploader"] button:hover {
         background: linear-gradient(135deg, #002fa7 0%, #0041d1 100%) !important;
         border-color: #002fa7 !important;
+        color: white !important;
         box-shadow: 0 4px 12px rgba(0, 47, 167, 0.2) !important;
         transform: translateY(-1px) !important;
-    }
-    [data-testid="stFileUploader"] button:hover::before {
-        color: white !important;
-    }
-    [data-testid="stFileUploader"] button:active {
-        transform: translateY(0px) !important;
-        box-shadow: 0 1px 3px rgba(0, 47, 167, 0.3) !important;
     }
 
     /* Style the search button */
