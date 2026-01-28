@@ -593,7 +593,7 @@ def _get_minimal_landing_css() -> str:
         cursor: pointer !important;
     }
     [data-testid="stFileUploader"] button::before {
-        content: '📁  Upload your CSV data' !important;
+        content: 'Upload CSV' !important;
         color: #475569 !important;
         position: absolute !important;
         left: 50% !important;
@@ -601,7 +601,8 @@ def _get_minimal_landing_css() -> str:
         transform: translate(-50%, -50%) !important;
         white-space: nowrap !important;
         font-family: 'Outfit', -apple-system, BlinkMacSystemFont, sans-serif !important;
-        letter-spacing: 0.01em !important;
+        letter-spacing: 0.02em !important;
+        font-weight: 500 !important;
     }
     [data-testid="stFileUploader"] button:hover {
         background: linear-gradient(135deg, #002fa7 0%, #0041d1 100%) !important;
