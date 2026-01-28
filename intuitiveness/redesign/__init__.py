@@ -31,11 +31,13 @@ Example:
 """
 
 from intuitiveness.redesign.lineage import DataLineage, SourceReference
-# TODO: Create redesign/core.py with Redesigner class (Spec 001: FR-018-024)
-# from intuitiveness.redesign.core import Redesigner
+
+# TODO (Spec 001: FR-018-024): Refactor Redesigner into redesign/core.py
+# For now, import from legacy redesign_legacy.py module for backward compatibility
+from intuitiveness.redesign_legacy import Redesigner
 
 __all__ = [
-    # "Redesigner",  # TODO: Uncomment when core.py is created
+    "Redesigner",  # Legacy import from intuitiveness.redesign_legacy
     "DataLineage",
     "SourceReference",
 ]
