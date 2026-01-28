@@ -386,32 +386,42 @@ def render_search_bar(show_hero: bool = True) -> Optional[str]:
             label_visibility="collapsed"
         )
         st.markdown('</div>', unsafe_allow_html=True)
-        if uploaded_file:
+        if uploaded_file is not None:
             # Check if file is already loaded
             raw_data = st.session_state.get("raw_data", {})
-            already_loaded = isinstance(raw_data, dict) and uploaded_file.name in raw_data
+            if not isinstance(raw_data, dict):
+                st.session_state.raw_data = {}
+                raw_data = {}
+
+            already_loaded = uploaded_file.name in raw_data
 
             # Only process if this is a new file
             if not already_loaded:
                 with st.spinner("Loading..."):
                     try:
+                        # Ensure file object is valid
+                        if uploaded_file is None:
+                            st.error("No file selected")
+                            return None
+
                         df, info_msg = smart_load_csv(uploaded_file)
-                        if df is not None:
+
+                        if df is not None and not df.empty:
                             # Store in raw_data
-                            if "raw_data" not in st.session_state:
-                                st.session_state.raw_data = {}
                             st.session_state.raw_data[uploaded_file.name] = df
 
-                            # Success message
-                            st.success(f"✅ Loaded {uploaded_file.name}")
+                            # Success message with file info
+                            st.success(f"✅ Loaded {uploaded_file.name} ({info_msg})")
 
                             # Redirect to descent-ascent workflow (Step 1: Entities)
                             st.session_state.current_step = 1
                             st.rerun()
                         else:
-                            st.error("Failed to load CSV file")
+                            st.error(f"Failed to load CSV: {info_msg if info_msg else 'Unknown error'}")
                     except Exception as e:
-                        st.error(f"Error loading file: {e}")
+                        import traceback
+                        st.error(f"Error loading file: {str(e)}")
+                        st.code(traceback.format_exc())
 
     return None
 
@@ -585,7 +595,11 @@ def _get_minimal_landing_css() -> str:
         display: flex !important;
         justify-content: center !important;
     }
-    [data-testid="stFileUploader"] section > div {
+    /* Hide all children except button */
+    [data-testid="stFileUploader"] section > div,
+    [data-testid="stFileUploader"] section > ul,
+    [data-testid="stFileUploader"] section > small,
+    [data-testid="stFileUploader"] section span[data-testid="stMarkdownContainer"] {
         display: none !important;
     }
     [data-testid="stFileUploader"] section button {
