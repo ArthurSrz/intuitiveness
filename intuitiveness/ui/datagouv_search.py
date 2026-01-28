@@ -379,16 +379,22 @@ def render_search_bar(show_hero: bool = True) -> Optional[str]:
 
         # Absolutely centered upload button (hide if data already uploaded)
         if not st.session_state.get("raw_data"):
-            st.markdown('<div style="display: flex; justify-content: center; width: 100%;">', unsafe_allow_html=True)
-            uploaded_file = st.file_uploader(
-                "Upload your CSV data",
-                type=["csv"],
-                key="search_bar_csv_upload",
-                label_visibility="collapsed"
-            )
-            st.markdown('</div>', unsafe_allow_html=True)
+            upload_placeholder = st.empty()
+
+            with upload_placeholder.container():
+                st.markdown('<div style="display: flex; justify-content: center; width: 100%;">', unsafe_allow_html=True)
+                uploaded_file = st.file_uploader(
+                    "Upload your CSV data",
+                    type=["csv"],
+                    key="search_bar_csv_upload",
+                    label_visibility="collapsed"
+                )
+                st.markdown('</div>', unsafe_allow_html=True)
 
             if uploaded_file is not None:
+                # Hide uploader immediately
+                upload_placeholder.empty()
+
                 # Check if file is already loaded
                 raw_data = st.session_state.get("raw_data", {})
                 if not isinstance(raw_data, dict):
@@ -401,11 +407,6 @@ def render_search_bar(show_hero: bool = True) -> Optional[str]:
                 if not already_loaded:
                     with st.spinner("Loading..."):
                         try:
-                            # Ensure file object is valid
-                            if uploaded_file is None:
-                                st.error("No file selected")
-                                return None
-
                             df, info_msg = smart_load_csv(uploaded_file)
 
                             if df is not None and not df.empty:
