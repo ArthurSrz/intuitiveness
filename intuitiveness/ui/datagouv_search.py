@@ -585,29 +585,29 @@ def _get_minimal_landing_css() -> str:
 
     /* File Uploader - Clean Button Only */
     [data-testid="stFileUploader"] {
-        display: flex !important;
-        justify-content: center !important;
         width: 100% !important;
         text-align: center !important;
     }
     [data-testid="stFileUploader"] > div {
-        display: flex !important;
-        justify-content: center !important;
         width: 100% !important;
+        text-align: center !important;
     }
     [data-testid="stFileUploader"] section {
         border: none !important;
         padding: 0 !important;
         background: transparent !important;
         min-height: auto !important;
-        display: flex !important;
-        justify-content: center !important;
         width: 100% !important;
+        text-align: center !important;
     }
     [data-testid="stFileUploader"] section > div {
-        display: flex !important;
-        justify-content: center !important;
         width: 100% !important;
+        text-align: center !important;
+    }
+    [data-testid="stFileUploader"] section > div > div {
+        width: 100% !important;
+        text-align: center !important;
+        display: inline-block !important;
     }
     /* Hide text elements */
     [data-testid="stFileUploader"] small {
