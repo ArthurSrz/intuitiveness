@@ -552,28 +552,33 @@ def _get_minimal_landing_css() -> str:
         box-shadow: 0 0 0 2px rgba(0, 47, 167, 0.1) !important;
     }
 
-    /* Minimal upload button styling */
+    /* Hide everything except the browse button */
     [data-testid="stFileUploader"] {
         text-align: center !important;
-    }
-    [data-testid="stFileUploader"] section > div:first-child {
-        display: none !important;
+        max-width: 150px !important;
+        margin: 0 auto !important;
     }
     [data-testid="stFileUploader"] section {
         border: none !important;
         padding: 0 !important;
+        background: transparent !important;
+    }
+    [data-testid="stFileUploader"] section > div {
+        display: none !important;
+    }
+    [data-testid="stFileUploader"] section button {
+        display: block !important;
     }
     [data-testid="stFileUploader"] button {
-        font-size: 0.85rem !important;
-        padding: 6px 16px !important;
+        font-size: 0.75rem !important;
+        padding: 4px 12px !important;
         background: white !important;
         border: 1px solid #cbd5e1 !important;
         border-radius: 6px !important;
         color: #64748b !important;
         font-weight: 400 !important;
-        width: auto !important;
+        width: 100% !important;
         margin: 0 auto !important;
-        display: inline-block !important;
     }
     [data-testid="stFileUploader"] button:hover {
         background: #f8fafc !important;
