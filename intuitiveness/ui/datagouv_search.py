@@ -556,7 +556,7 @@ def _get_minimal_landing_css() -> str:
         box-shadow: 0 0 0 2px rgba(0, 47, 167, 0.1) !important;
     }
 
-    /* Hide everything except the browse button - CENTERED */
+    /* Hide everything except the browse button - CENTERED & STYLISH */
     [data-testid="stFileUploader"] {
         display: flex !important;
         justify-content: center !important;
@@ -577,33 +577,44 @@ def _get_minimal_landing_css() -> str:
         display: block !important;
     }
     [data-testid="stFileUploader"] button {
-        font-size: 0.8rem !important;
-        padding: 6px 16px !important;
-        background: white !important;
-        border: 1px solid #cbd5e1 !important;
-        border-radius: 6px !important;
+        font-size: 0.85rem !important;
+        padding: 8px 20px !important;
+        background: linear-gradient(135deg, #ffffff 0%, #f8fafc 100%) !important;
+        border: 1.5px solid #e2e8f0 !important;
+        border-radius: 8px !important;
         color: transparent !important;
-        font-weight: 400 !important;
+        font-weight: 500 !important;
         width: auto !important;
         margin: 0 !important;
         display: inline-block !important;
         position: relative !important;
+        box-shadow: 0 1px 3px rgba(0, 0, 0, 0.06) !important;
+        transition: all 0.2s ease !important;
+        cursor: pointer !important;
     }
     [data-testid="stFileUploader"] button::before {
-        content: 'Upload your CSV data' !important;
-        color: #64748b !important;
+        content: '📁  Upload your CSV data' !important;
+        color: #475569 !important;
         position: absolute !important;
         left: 50% !important;
         top: 50% !important;
         transform: translate(-50%, -50%) !important;
         white-space: nowrap !important;
+        font-family: 'Outfit', -apple-system, BlinkMacSystemFont, sans-serif !important;
+        letter-spacing: 0.01em !important;
     }
     [data-testid="stFileUploader"] button:hover {
-        background: #f8fafc !important;
+        background: linear-gradient(135deg, #002fa7 0%, #0041d1 100%) !important;
         border-color: #002fa7 !important;
+        box-shadow: 0 4px 12px rgba(0, 47, 167, 0.2) !important;
+        transform: translateY(-1px) !important;
     }
     [data-testid="stFileUploader"] button:hover::before {
-        color: #002fa7 !important;
+        color: white !important;
+    }
+    [data-testid="stFileUploader"] button:active {
+        transform: translateY(0px) !important;
+        box-shadow: 0 1px 3px rgba(0, 47, 167, 0.3) !important;
     }
 
     /* Style the search button */
