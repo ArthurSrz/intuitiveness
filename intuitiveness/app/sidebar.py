@@ -1,152 +1,155 @@
 """
 Sidebar Module
 
-Centralizes all sidebar rendering components.
+Implements Spec 011: Code Simplification
+Extracted from streamlit_app.py (lines 4720-4816)
 
-Phase 1 - Code Simplification (011-code-simplification)
-Created: 2026-01-09
+Responsibilities:
+- Branding and logo display
+- Language toggle
+- Dataset basket (data.gouv.fr)
+- Mode selection (guided/free)
+- Quality tools selector
+- Navigation tree (free mode)
+- Session persistence buttons
 
-Spec Traceability:
-------------------
-- 005-session-persistence: Save/clear buttons
-- 006-playwright-mcp-e2e: Language toggle
-- 007-streamlit-design-makeup: Branding, styling
-- 008-datagouv-search: Dataset basket
-- 009-010: Quality tools selector
+Target: <200 lines (focused sidebar logic)
 """
 
 import streamlit as st
-from typing import Callable, Any
+from typing import Optional
 
-from intuitiveness.utils import SessionStateKeys
+from intuitiveness.complexity import Level4Dataset
+from intuitiveness.ui import (
+    render_language_toggle_compact,
+    render_basket_sidebar,
+    _set_wizard_step,
+    t,
+    render_tutorial_replay_button,
+    is_tutorial_completed,
+    reset_tutorial,
+)
 from intuitiveness.persistence import SessionStore
 
 
-def render_sidebar(
-    store: SessionStore,
-    t: Callable[[str], str],
-    reset_workflow: Callable,
-    Level4Dataset: Any,
-):
+def _get_sidebar_branding_html() -> str:
+    """Generate animated gear cube logo HTML for sidebar."""
+    from pathlib import Path
+    
+    PROJECT_ROOT = Path(__file__).parent.parent.parent
+    ASSETS_DIR = PROJECT_ROOT / "assets"
+    
+    # Try to load SVG logo
+    logo_path = ASSETS_DIR / "gear_cube_logo.svg"
+    if logo_path.exists():
+        with open(logo_path, 'r') as f:
+            logo_svg = f.read()
+    else:
+        logo_svg = '<div style="width: 100px; height: 100px; background: #002fa7;"></div>'
+    
+    return f"""
+    <div style="text-align: center; padding: 1rem 0;">
+        <div style="width: 100px; height: 100px; margin: 0 auto;">
+            {logo_svg}
+        </div>
+        <h3 style="margin: 0.5rem 0 0 0; font-size: 1.1rem; font-weight: 600;">
+            Data Redesign Method
+        </h3>
+        <p style="margin: 0.25rem 0 0 0; font-size: 0.8rem; color: #666;">
+            Intuitive Datasets Framework
+        </p>
+    </div>
     """
-    Render the complete left sidebar.
 
+
+def render_sidebar(store: SessionStore) -> None:
+    """
+    Render complete sidebar with all controls.
+    
     Args:
-        store: SessionStore for persistence
-        t: Translation function (i18n)
-        reset_workflow: Function to reset workflow
-        Level4Dataset: Level4Dataset class for data loading
+        store: SessionStore instance for save/load operations
     """
-    # Import UI components
-    from intuitiveness.streamlit_app import (
-        _get_sidebar_branding_html,
-        render_free_navigation_sidebar,
-    )
-    from intuitiveness.ui import (
-        render_basket_sidebar,
-        render_language_toggle_compact,
-        render_tutorial_replay_button,
-        is_tutorial_completed,
-        reset_tutorial,
-        _set_wizard_step,
-    )
-
-    with st.sidebar:
-        # Branding (007)
-        _render_branding(_get_sidebar_branding_html())
-
-        # Language toggle (006)
-        _render_language_section(render_language_toggle_compact)
-
-        # Dataset basket (008)
-        _render_basket_section(
-            render_basket_sidebar=render_basket_sidebar,
-            reset_tutorial=reset_tutorial,
-            _set_wizard_step=_set_wizard_step,
-            Level4Dataset=Level4Dataset,
-        )
-
-        # Mode toggle (002)
-        _render_mode_section(t)
-
-        # Quality tools (009-010)
-        _render_quality_tools_section()
-
-        # Free navigation (002)
-        _render_free_nav_section(render_free_navigation_sidebar)
-
-        # Reset button
-        _render_reset_button(t, reset_workflow)
-
-        # Tutorial replay (007)
-        _render_tutorial_section(
-            is_tutorial_completed=is_tutorial_completed,
-            render_tutorial_replay_button=render_tutorial_replay_button,
-        )
-
-        # Session persistence (005)
-        _render_session_section(t, store, reset_workflow)
-
-
-def _render_branding(branding_html: str):
-    """Render branding section."""
-    st.markdown(branding_html, unsafe_allow_html=True)
+    # Animated gear cube logo + branding
+    st.markdown(_get_sidebar_branding_html(), unsafe_allow_html=True)
     st.markdown("---")
-
-
-def _render_language_section(render_language_toggle_compact: Callable):
-    """Render language toggle section (006)."""
+    
+    # Language toggle (006-playwright-mcp-e2e: Bilingual support)
     render_language_toggle_compact()
     st.divider()
-
-
-def _render_basket_section(
-    render_basket_sidebar: Callable,
-    reset_tutorial: Callable,
-    _set_wizard_step: Callable,
-    Level4Dataset: Any,
-):
-    """Render dataset basket section (008)."""
+    
+    # Dataset basket in sidebar (008-datagouv-search)
     if render_basket_sidebar():
-        # User clicked "Continue" - proceed with loaded datasets
-        raw_data = st.session_state.datagouv_loaded_datasets.copy()
-        st.session_state[SessionStateKeys.RAW_DATA] = raw_data
-        st.session_state.datasets['l4'] = Level4Dataset(raw_data)
-        st.session_state.datagouv_loaded_datasets = {}
-        st.session_state[SessionStateKeys.CURRENT_STEP] = 0
-        _set_wizard_step(1)
-        reset_tutorial()
+        _handle_basket_continue()
+    
+    # Mode toggle - Constitution v1.2.0: Use domain-friendly labels
+    _render_mode_selector()
+    
+    st.divider()
+    
+    # Data modeling Tools section (009-quality-data-platform)
+    _render_quality_tools_selector()
+    
+    st.divider()
+    
+    # Free exploration mode - render exploration tree (only when active)
+    if st.session_state.nav_mode == 'free' and st.session_state.nav_session:
+        from intuitiveness.streamlit_app import render_free_navigation_sidebar
+        render_free_navigation_sidebar()
+        st.divider()
+    
+    # Reset workflow button
+    if st.button(f"🔄 {t('reset_workflow')}"):
+        from intuitiveness.streamlit_app import reset_workflow
+        reset_workflow()
         st.rerun()
+    
+    # Tutorial replay button (007-streamlit-design-makeup, Phase 9)
+    if is_tutorial_completed() and st.session_state.raw_data is not None:
+        render_tutorial_replay_button()
+    
+    # Session persistence buttons (005-session-persistence)
+    _render_persistence_buttons(store)
 
 
-def _render_mode_section(t: Callable[[str], str]):
-    """Render mode toggle section (002)."""
+def _handle_basket_continue() -> None:
+    """Handle user clicking 'Continue' in dataset basket."""
+    # User clicked "Continue" - proceed with loaded datasets
+    raw_data = st.session_state.datagouv_loaded_datasets.copy()
+    st.session_state.raw_data = raw_data
+    st.session_state.datasets['l4'] = Level4Dataset(raw_data)
+    st.session_state.datagouv_loaded_datasets = {}
+    
+    # Go to upload step to show column selection wizard
+    st.session_state.current_step = 0
+    # Initialize wizard to step 1 (column selection)
+    _set_wizard_step(1)
+    # Reset and show tutorial for new data session
+    reset_tutorial()
+    st.rerun()
+
+
+def _render_mode_selector() -> None:
+    """Render guided/free mode selector."""
     st.markdown(f"### {t('exploration_mode')}")
-
-    current_mode = st.session_state.get(SessionStateKeys.NAV_MODE, 'guided')
     mode = st.radio(
         t('select_mode'),
         options=['guided', 'free'],
         format_func=lambda x: t('step_by_step') if x == 'guided' else t('free_exploration'),
-        index=0 if current_mode == 'guided' else 1,
+        index=0 if st.session_state.nav_mode == 'guided' else 1,
         key='mode_selector',
         help=t('step_by_step_help')
     )
-
-    # Sync radio with nav_mode (skip if in ascent mode)
-    has_loaded_graph = st.session_state.get(SessionStateKeys.LOADED_SESSION_GRAPH)
-    if mode != current_mode and not has_loaded_graph:
-        st.session_state[SessionStateKeys.NAV_MODE] = mode
+    
+    # Sync radio with nav_mode, but skip if in ascent mode (has loaded_session_graph)
+    # During ascent, we force free mode regardless of radio selection
+    if mode != st.session_state.nav_mode and not st.session_state.get('loaded_session_graph'):
+        st.session_state.nav_mode = mode
         st.rerun()
 
-    st.divider()
 
-
-def _render_quality_tools_section():
-    """Render quality tools section (009-010)."""
+def _render_quality_tools_selector() -> None:
+    """Render quality tools selector (assessment/catalog)."""
     st.markdown("### Data modeling Tools")
-
-    current_tool = st.session_state.get('active_quality_tool', 'none')
     quality_tool = st.radio(
         "Select tool",
         options=['none', 'quality', 'catalog'],
@@ -155,55 +158,20 @@ def _render_quality_tools_section():
             'quality': '📊 Quality Assessment',
             'catalog': '📁 Dataset Catalog'
         }.get(x, x),
-        index=['none', 'quality', 'catalog'].index(current_tool) if current_tool in ['none', 'quality', 'catalog'] else 0,
+        index=0,
         key='quality_tool_selector',
         label_visibility='collapsed',
     )
-
-    if quality_tool != current_tool:
+    if quality_tool != st.session_state.get('active_quality_tool', 'none'):
         st.session_state.active_quality_tool = quality_tool
         st.rerun()
 
-    st.divider()
 
-
-def _render_free_nav_section(render_free_navigation_sidebar: Callable):
-    """Render free navigation section (002)."""
-    is_free_mode = st.session_state.get(SessionStateKeys.NAV_MODE) == 'free'
-    has_session = st.session_state.get(SessionStateKeys.NAV_SESSION) is not None
-
-    if is_free_mode and has_session:
-        render_free_navigation_sidebar()
-        st.divider()
-
-
-def _render_reset_button(t: Callable[[str], str], reset_workflow: Callable):
-    """Render reset workflow button."""
-    if st.button(f"🔄 {t('reset_workflow')}"):
-        reset_workflow()
-        st.rerun()
-
-
-def _render_tutorial_section(
-    is_tutorial_completed: Callable,
-    render_tutorial_replay_button: Callable,
-):
-    """Render tutorial replay section (007)."""
-    has_data = st.session_state.get(SessionStateKeys.RAW_DATA) is not None
-    if is_tutorial_completed() and has_data:
-        render_tutorial_replay_button()
-
-
-def _render_session_section(
-    t: Callable[[str], str],
-    store: SessionStore,
-    reset_workflow: Callable,
-):
-    """Render session persistence section (005)."""
+def _render_persistence_buttons(store: SessionStore) -> None:
+    """Render session save/clear buttons."""
     st.markdown(f"### {t('sidebar_session')}")
-
     col1, col2 = st.columns(2)
-
+    
     with col1:
         if st.button(f"💾 {t('save_button')}", help=t('save_help')):
             try:
@@ -214,9 +182,10 @@ def _render_session_section(
                     st.warning(t('save_too_large'))
             except Exception as e:
                 st.error(t('save_failed', error=str(e)))
-
+    
     with col2:
         if st.button(f"🗑️ {t('clear_button')}", help=t('clear_help')):
+            from intuitiveness.streamlit_app import reset_workflow
             store.clear()
             reset_workflow()
             st.session_state.session_recovery_handled = True
