@@ -377,15 +377,15 @@ def render_search_bar(show_hero: bool = True) -> Optional[str]:
 
         from intuitiveness.streamlit_app import smart_load_csv
 
-        # Center container for upload button
-        col1, col2, col3 = st.columns([1, 1, 1])
-        with col2:
-            uploaded_file = st.file_uploader(
-                "Upload your CSV data",
-                type=["csv"],
-                key="search_bar_csv_upload",
-                label_visibility="collapsed"
-            )
+        # Absolutely centered upload button
+        st.markdown('<div style="display: flex; justify-content: center; width: 100%;">', unsafe_allow_html=True)
+        uploaded_file = st.file_uploader(
+            "Upload your CSV data",
+            type=["csv"],
+            key="search_bar_csv_upload",
+            label_visibility="collapsed"
+        )
+        st.markdown('</div>', unsafe_allow_html=True)
         if uploaded_file:
             with st.spinner("Loading..."):
                 try:
@@ -556,14 +556,19 @@ def _get_minimal_landing_css() -> str:
         box-shadow: 0 0 0 2px rgba(0, 47, 167, 0.1) !important;
     }
 
-    /* Hide everything except the browse button */
+    /* Hide everything except the browse button - CENTERED */
     [data-testid="stFileUploader"] {
-        text-align: center !important;
+        display: flex !important;
+        justify-content: center !important;
+        align-items: center !important;
+        width: 100% !important;
     }
     [data-testid="stFileUploader"] section {
         border: none !important;
         padding: 0 !important;
         background: transparent !important;
+        display: flex !important;
+        justify-content: center !important;
     }
     [data-testid="stFileUploader"] section > div {
         display: none !important;
@@ -579,9 +584,9 @@ def _get_minimal_landing_css() -> str:
         border-radius: 6px !important;
         color: transparent !important;
         font-weight: 400 !important;
-        width: 100% !important;
-        margin: 0 auto !important;
-        display: block !important;
+        width: auto !important;
+        margin: 0 !important;
+        display: inline-block !important;
         position: relative !important;
     }
     [data-testid="stFileUploader"] button::before {
@@ -591,7 +596,7 @@ def _get_minimal_landing_css() -> str:
         left: 50% !important;
         top: 50% !important;
         transform: translate(-50%, -50%) !important;
-        width: 100% !important;
+        white-space: nowrap !important;
     }
     [data-testid="stFileUploader"] button:hover {
         background: #f8fafc !important;
