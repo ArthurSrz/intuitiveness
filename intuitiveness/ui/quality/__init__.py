@@ -78,6 +78,27 @@ from intuitiveness.ui.quality.readiness import (
     render_tabpfn_methodology,
 )
 
+# Anomaly detection components (Spec 009: FR-003, FR-007)
+from intuitiveness.ui.quality.anomaly_ui import (
+    render_anomaly_detection,
+    render_anomaly_results,
+    render_anomaly_export,
+)
+
+# 60-second workflow components (Spec 010: FR-001 through FR-005)
+from intuitiveness.ui.quality.workflow_ui import (
+    render_traffic_light_indicator,
+    render_apply_all_button,
+    render_transformation_summary,
+    render_export_section,
+    render_60_second_workflow,
+)
+
+# ML Diagnostics (Spec 011: extracted from quality_dashboard.py)
+from intuitiveness.ui.quality.ml_diagnostics import (
+    render_ml_diagnostics,
+)
+
 __all__ = [
     # Session state keys
     'SESSION_KEY_QUALITY_REPORT',
@@ -117,4 +138,19 @@ __all__ = [
     # Readiness (US-4, FR-001)
     'render_readiness_indicator',
     'render_tabpfn_methodology',
+
+    # Anomaly detection (Spec 009: FR-003, FR-007)
+    'render_anomaly_detection',
+    'render_anomaly_results',
+    'render_anomaly_export',
+
+    # 60-second workflow (Spec 010: FR-001 through FR-005)
+    'render_traffic_light_indicator',
+    'render_apply_all_button',
+    'render_transformation_summary',
+    'render_export_section',
+    'render_60_second_workflow',
+
+    # ML Diagnostics (Spec 011)
+    'render_ml_diagnostics',
 ]
