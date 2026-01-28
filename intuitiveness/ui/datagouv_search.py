@@ -377,8 +377,10 @@ def render_search_bar(show_hero: bool = True) -> Optional[str]:
 
         from intuitiveness.streamlit_app import smart_load_csv
 
-        # Absolutely centered upload button (hide if data already uploaded)
-        if not st.session_state.get("raw_data"):
+        # Absolutely centered upload button (hide if data already uploaded or being uploaded)
+        show_button = not st.session_state.get("raw_data") and not st.session_state.get("_uploading")
+
+        if show_button:
             st.markdown('<div style="display: flex; justify-content: center; width: 100%;">', unsafe_allow_html=True)
             uploaded_file = st.file_uploader(
                 "Upload your CSV data",
@@ -389,7 +391,10 @@ def render_search_bar(show_hero: bool = True) -> Optional[str]:
             st.markdown('</div>', unsafe_allow_html=True)
         else:
             uploaded_file = None
+
         if uploaded_file is not None:
+            # Mark as uploading to hide button on next render
+            st.session_state._uploading = True
             # Check if file is already loaded
             raw_data = st.session_state.get("raw_data", {})
             if not isinstance(raw_data, dict):
@@ -413,13 +418,18 @@ def render_search_bar(show_hero: bool = True) -> Optional[str]:
                             # Store in raw_data
                             st.session_state.raw_data[uploaded_file.name] = df
 
+                            # Clear uploading flag (though rerun will reset it anyway)
+                            st.session_state._uploading = False
+
                             # Success - stay on step 0 but wizard will show
                             # (don't show success message to avoid clutter)
                             st.rerun()
                         else:
+                            st.session_state._uploading = False
                             st.error(f"Failed to load CSV: {info_msg if info_msg else 'Unknown error'}")
                     except Exception as e:
                         import traceback
+                        st.session_state._uploading = False
                         st.error(f"Error loading file: {str(e)}")
                         st.code(traceback.format_exc())
 
