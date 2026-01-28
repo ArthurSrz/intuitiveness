@@ -18,13 +18,11 @@ import pandas as pd
 
 from intuitiveness.ui.i18n import t
 
-# Import shared domain categorization from ascent package
-from intuitiveness.ui.ascent.shared import (
-    _render_domain_categorization_inputs,
-    _parse_domains,
-    _apply_domain_categorization,
-    DEFAULT_UNMATCHED_LABEL,
-)
+# Import shared constants from ascent package
+from intuitiveness.ui.ascent.shared import DEFAULT_UNMATCHED_LABEL
+
+# Note: _render_domain_categorization_inputs, _parse_domains, _apply_domain_categorization
+# are no longer used - these functions were moved to ui/ascent/ package during refactoring
 
 
 # =============================================================================
@@ -1244,10 +1242,7 @@ __all__ = [
     '_clear_all_ascent_form_states',
     '_get_wizard_step',
     '_set_wizard_step',
-    # Shared components
-    '_render_domain_categorization_inputs',
-    '_parse_domains',
-    '_apply_domain_categorization',
+    # Note: Shared components moved to ui/ascent/ package (Spec 011)
     # Form renderers
     'render_l0_to_l1_unfold_form',
     'render_l1_to_l2_domain_form',
