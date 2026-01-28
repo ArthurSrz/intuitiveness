@@ -218,16 +218,16 @@ def _render_fallback_continue() -> None:
 def _render_search_interface() -> None:
     """
     Render data.gouv.fr search interface when no files are uploaded.
-    
+
     Implements Spec 008: DataGouv Search Integration
     """
     # Initialize loaded datasets tracking
     if 'datagouv_loaded_datasets' not in st.session_state:
         st.session_state.datagouv_loaded_datasets = {}
-    
+
     # Clean search interface only - basket is in sidebar
     loaded_df = render_search_interface()
-    
+
     if loaded_df is not None:
         # Get the dataset name from session state or generate one
         dataset_name = st.session_state.get(
@@ -237,3 +237,31 @@ def _render_search_interface() -> None:
         st.session_state.datagouv_loaded_datasets[dataset_name] = loaded_df
         st.session_state.pop('datagouv_last_dataset_name', None)
         st.rerun()
+
+    # Small, discrete CSV upload option (below search)
+    st.markdown("---")
+    with st.expander("📁 Or upload your own CSV file", expanded=False):
+        from intuitiveness.streamlit_app import smart_load_csv
+
+        uploaded_file = st.file_uploader(
+            "Choose a CSV file",
+            type=["csv"],
+            key="discrete_csv_upload",
+            label_visibility="collapsed"
+        )
+
+        if uploaded_file is not None:
+            with st.spinner("Loading..."):
+                try:
+                    df, info_msg = smart_load_csv(uploaded_file)
+                    if df is not None:
+                        filename = uploaded_file.name
+                        if "raw_data" not in st.session_state:
+                            st.session_state.raw_data = {}
+                        st.session_state.raw_data[filename] = df
+                        st.success(f"✅ {filename} loaded")
+                        st.rerun()
+                    else:
+                        st.error("Could not load file")
+                except Exception as e:
+                    st.error(f"Error: {e}")
