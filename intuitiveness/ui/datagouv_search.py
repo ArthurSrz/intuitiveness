@@ -614,24 +614,31 @@ def _get_minimal_landing_css() -> str:
     }
     /* Style the button */
     [data-testid="stFileUploader"] button {
-        font-size: 0.85rem !important;
+        font-size: 0 !important;  /* Hide native text */
         padding: 8px 20px !important;
         background: linear-gradient(135deg, #ffffff 0%, #f8fafc 100%) !important;
         border: 1.5px solid #e2e8f0 !important;
         border-radius: 8px !important;
-        color: #475569 !important;
-        font-weight: 500 !important;
-        font-family: 'Outfit', -apple-system, BlinkMacSystemFont, sans-serif !important;
         box-shadow: 0 1px 3px rgba(0, 0, 0, 0.06) !important;
         transition: all 0.2s ease !important;
         cursor: pointer !important;
     }
+    [data-testid="stFileUploader"] button::before {
+        content: 'Upload your data (CSV)' !important;
+        font-size: 0.85rem !important;
+        color: #475569 !important;
+        font-weight: 500 !important;
+        font-family: 'Outfit', -apple-system, BlinkMacSystemFont, sans-serif !important;
+        letter-spacing: 0.01em !important;
+    }
     [data-testid="stFileUploader"] button:hover {
         background: linear-gradient(135deg, #002fa7 0%, #0041d1 100%) !important;
         border-color: #002fa7 !important;
-        color: white !important;
         box-shadow: 0 4px 12px rgba(0, 47, 167, 0.2) !important;
         transform: translateY(-1px) !important;
+    }
+    [data-testid="stFileUploader"] button:hover::before {
+        color: white !important;
     }
 
     /* Style the search button */
