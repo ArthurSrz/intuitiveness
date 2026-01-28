@@ -389,15 +389,6 @@ def render_search_bar(show_hero: bool = True) -> Optional[str]:
             st.markdown('</div>', unsafe_allow_html=True)
 
             if uploaded_file is not None:
-                # Immediately hide the uploader to prevent ugly UI
-                st.markdown("""
-                <style>
-                [key="search_bar_csv_upload"] {
-                    display: none !important;
-                }
-                </style>
-                """, unsafe_allow_html=True)
-
                 # Check if file is already loaded
                 raw_data = st.session_state.get("raw_data", {})
                 if not isinstance(raw_data, dict):
@@ -604,12 +595,13 @@ def _get_minimal_landing_css() -> str:
         display: flex !important;
         justify-content: center !important;
     }
-    /* Hide file details that appear after selection */
-    [data-testid="stFileUploader"] section > div:not(:has(button)),
+    /* Keep button visible, hide file info that appears after selection */
     [data-testid="stFileUploader"] section > ul,
-    [data-testid="stFileUploader"] section > small,
-    [data-testid="stFileUploader"] section button[kind="secondary"],
-    [data-testid="stFileUploader"] [data-testid="stMarkdownContainer"] {
+    [data-testid="stFileUploader"] section > small {
+        display: none !important;
+    }
+    /* Hide any text/filename display */
+    [data-testid="stFileUploader"] section > div > span {
         display: none !important;
     }
     [data-testid="stFileUploader"] button {
