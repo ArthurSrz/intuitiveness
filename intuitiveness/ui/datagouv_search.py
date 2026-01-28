@@ -598,33 +598,29 @@ def _get_minimal_landing_css() -> str:
         background: transparent !important;
         min-height: auto !important;
     }
-    /* Hide the text elements but NOT the button container */
-    [data-testid="stFileUploader"] section small,
-    [data-testid="stFileUploader"] section ul,
-    [data-testid="stFileUploader"] section [data-testid="stMarkdownContainer"] {
+    /* Hide ONLY specific text elements - be minimal */
+    [data-testid="stFileUploader"] section small {
         display: none !important;
     }
-    /* Hide drag-drop instruction text (the span inside) */
-    [data-testid="stFileUploader"] section > div > div > span {
+    [data-testid="stFileUploader"] section ul {
         display: none !important;
     }
-    /* Hide the cloud/upload icon */
-    [data-testid="stFileUploader"] section svg {
+    /* Hide the "Drag and drop" text span */
+    [data-testid="stFileUploader"] [data-testid="stFileUploaderDropzone"] span {
         display: none !important;
     }
-    /* Hide the uploaded file info (filename + delete button row) */
-    [data-testid="stFileUploader"] [data-testid="stFileUploaderFile"],
-    [data-testid="stFileUploader"] section > div:has([data-testid="stFileUploaderFile"]) {
+    /* Hide the upload icon */
+    [data-testid="stFileUploader"] [data-testid="stFileUploaderDropzone"] svg {
         display: none !important;
     }
-    /* Hide any secondary buttons (delete, etc.) */
-    [data-testid="stFileUploader"] button[kind="secondary"],
-    [data-testid="stFileUploader"] button:not(:first-of-type) {
+    /* Hide uploaded file details row */
+    [data-testid="stFileUploaderFile"] {
         display: none !important;
     }
-    /* Style the browse button (first button only) */
-    [data-testid="stFileUploader"] button:first-of-type {
-        font-size: 0 !important;  /* Hide native text */
+    /* Style the button - use [data-testid] to be specific */
+    [data-testid="stFileUploaderDropzone"] button,
+    [data-testid="stFileUploader"] [data-testid="baseButton-secondary"] {
+        font-size: 0 !important;
         padding: 8px 20px !important;
         background: linear-gradient(135deg, #ffffff 0%, #f8fafc 100%) !important;
         border: 1.5px solid #e2e8f0 !important;
@@ -633,21 +629,23 @@ def _get_minimal_landing_css() -> str:
         transition: all 0.2s ease !important;
         cursor: pointer !important;
     }
-    [data-testid="stFileUploader"] button:first-of-type::before {
+    [data-testid="stFileUploaderDropzone"] button::before,
+    [data-testid="stFileUploader"] [data-testid="baseButton-secondary"]::before {
         content: 'Upload your data (CSV)' !important;
         font-size: 0.85rem !important;
         color: #475569 !important;
         font-weight: 500 !important;
         font-family: 'Outfit', -apple-system, BlinkMacSystemFont, sans-serif !important;
-        letter-spacing: 0.01em !important;
     }
-    [data-testid="stFileUploader"] button:first-of-type:hover {
+    [data-testid="stFileUploaderDropzone"] button:hover,
+    [data-testid="stFileUploader"] [data-testid="baseButton-secondary"]:hover {
         background: linear-gradient(135deg, #002fa7 0%, #0041d1 100%) !important;
         border-color: #002fa7 !important;
         box-shadow: 0 4px 12px rgba(0, 47, 167, 0.2) !important;
         transform: translateY(-1px) !important;
     }
-    [data-testid="stFileUploader"] button:first-of-type:hover::before {
+    [data-testid="stFileUploaderDropzone"] button:hover::before,
+    [data-testid="stFileUploader"] [data-testid="baseButton-secondary"]:hover::before {
         color: white !important;
     }
 
