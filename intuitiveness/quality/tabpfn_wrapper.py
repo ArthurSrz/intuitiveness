@@ -120,7 +120,19 @@ try:
 
     # Set the token if found
     if _token:
-        tabpfn_client.set_access_token(_token)
+        try:
+            tabpfn_client.set_access_token(_token)
+        except PermissionError as e:
+            # Streamlit Cloud: Read-only filesystem, can't cache token
+            # This is fine - the token is already loaded in memory
+            logger.debug(f"Cannot cache TabPFN token (read-only filesystem): {e}")
+            # Manually set the token in config without caching
+            try:
+                from tabpfn_client.config import UserAuthenticationClient
+                UserAuthenticationClient._access_token = _token
+                logger.info("TabPFN token set successfully (in-memory only)")
+            except Exception as fallback_error:
+                logger.warning(f"Failed to set TabPFN token: {fallback_error}")
     else:
         logger.warning(
             "No TabPFN token found. Configure in one of these ways:\n"
