@@ -1,6 +1,7 @@
 # Install the local package
 -e .
 
+streamlit_pdf_viewer
 neo4j>=5.0.0
 networkx
 pandas
