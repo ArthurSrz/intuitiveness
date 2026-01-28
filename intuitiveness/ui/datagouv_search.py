@@ -605,15 +605,20 @@ def _get_minimal_landing_css() -> str:
         display: flex !important;
         justify-content: center !important;
     }
-    /* Hide all children except button */
+    /* Hide ALL content after file selection (filename, upload button, etc) */
     [data-testid="stFileUploader"] section > div,
     [data-testid="stFileUploader"] section > ul,
     [data-testid="stFileUploader"] section > small,
-    [data-testid="stFileUploader"] section span[data-testid="stMarkdownContainer"] {
+    [data-testid="stFileUploader"] section span {
         display: none !important;
     }
-    [data-testid="stFileUploader"] section button {
+    /* Only show the initial browse button */
+    [data-testid="stFileUploader"] section > button:first-of-type {
         display: block !important;
+    }
+    /* Hide secondary upload button that appears after file selection */
+    [data-testid="stFileUploader"] section > button:not(:first-of-type) {
+        display: none !important;
     }
     [data-testid="stFileUploader"] button {
         font-size: 0.85rem !important;

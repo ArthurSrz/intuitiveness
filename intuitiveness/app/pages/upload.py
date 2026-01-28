@@ -73,6 +73,63 @@ def _render_uploaded_files(raw_data: Dict[str, pd.DataFrame]) -> None:
     ]
     render_l4_file_list(files_data, show_preview=True, max_preview_rows=5)
 
+    # Show option to upload more files
+    st.markdown("---")
+    from intuitiveness.streamlit_app import smart_load_csv
+
+    # Add styling for additional upload button
+    st.markdown("""
+    <style>
+    /* Style for additional file upload button */
+    [data-testid="stFileUploader"][key="additional_csv_upload"] section > div,
+    [data-testid="stFileUploader"][key="additional_csv_upload"] section > ul,
+    [data-testid="stFileUploader"][key="additional_csv_upload"] section > small,
+    [data-testid="stFileUploader"][key="additional_csv_upload"] section span {
+        display: none !important;
+    }
+    [data-testid="stFileUploader"][key="additional_csv_upload"] section > button:first-of-type {
+        display: block !important;
+    }
+    [data-testid="stFileUploader"][key="additional_csv_upload"] section > button:not(:first-of-type) {
+        display: none !important;
+    }
+    </style>
+    """, unsafe_allow_html=True)
+
+    col1, col2, col3 = st.columns([1, 1, 1])
+    with col2:
+        st.markdown("""
+            <div style="text-align: center; margin-bottom: 8px;">
+                <span style="font-size: 0.9rem; color: #64748b;">
+                    Want to connect multiple datasets?
+                </span>
+            </div>
+        """, unsafe_allow_html=True)
+
+        additional_file = st.file_uploader(
+            "Upload another CSV",
+            type=["csv"],
+            key="additional_csv_upload",
+            label_visibility="collapsed"
+        )
+
+        if additional_file is not None:
+            # Check if file already uploaded
+            if additional_file.name not in raw_data:
+                with st.spinner("Loading..."):
+                    try:
+                        df, info_msg = smart_load_csv(additional_file)
+                        if df is not None and not df.empty:
+                            st.session_state.raw_data[additional_file.name] = df
+                            st.success(f"✅ Added {additional_file.name}")
+                            st.rerun()
+                        else:
+                            st.error("Failed to load CSV file")
+                    except Exception as e:
+                        st.error(f"Error: {e}")
+            else:
+                st.warning("This file is already uploaded")
+
 
 def _render_connection_wizard(raw_data: Dict[str, pd.DataFrame]) -> None:
     """
