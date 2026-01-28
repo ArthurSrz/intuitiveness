@@ -588,22 +588,46 @@ def _get_minimal_landing_css() -> str:
         align-items: center !important;
         width: 100% !important;
     }
+    [data-testid="stFileUploader"] > div {
+        display: flex !important;
+        justify-content: center !important;
+        width: 100% !important;
+    }
     [data-testid="stFileUploader"] section {
         border: none !important;
         padding: 0 !important;
         background: transparent !important;
         display: flex !important;
         justify-content: center !important;
+        width: auto !important;
     }
-    /* Keep button visible, hide file info that appears after selection */
+    /* Hide ALL text, icons, and secondary elements */
+    [data-testid="stFileUploader"] section > div:not(:has(button)) {
+        display: none !important;
+    }
     [data-testid="stFileUploader"] section > ul,
-    [data-testid="stFileUploader"] section > small {
+    [data-testid="stFileUploader"] section > small,
+    [data-testid="stFileUploader"] section > div > span,
+    [data-testid="stFileUploader"] section > div > svg,
+    [data-testid="stFileUploader"] section p,
+    [data-testid="stFileUploader"] [data-testid="stFileUploaderDropzone"],
+    [data-testid="stFileUploaderDropzoneInput"] {
         display: none !important;
     }
-    /* Hide any text/filename display */
-    [data-testid="stFileUploader"] section > div > span {
+    /* Hide drag and drop text */
+    [data-testid="stFileUploader"] section > div:first-child {
         display: none !important;
     }
+    /* Show only the button container */
+    [data-testid="stFileUploader"] section > div:has(button) {
+        display: flex !important;
+        justify-content: center !important;
+    }
+    /* Show only first button (Browse), hide delete/other buttons */
+    [data-testid="stFileUploader"] button:not(:first-of-type) {
+        display: none !important;
+    }
+    /* Style the visible button */
     [data-testid="stFileUploader"] button {
         font-size: 0.85rem !important;
         padding: 8px 20px !important;
@@ -613,7 +637,7 @@ def _get_minimal_landing_css() -> str:
         color: transparent !important;
         font-weight: 500 !important;
         width: auto !important;
-        margin: 0 !important;
+        margin: 0 auto !important;
         display: inline-block !important;
         position: relative !important;
         box-shadow: 0 1px 3px rgba(0, 0, 0, 0.06) !important;
