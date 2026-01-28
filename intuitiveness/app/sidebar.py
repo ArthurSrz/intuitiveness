@@ -34,23 +34,122 @@ from intuitiveness.persistence import SessionStore
 
 def _get_sidebar_branding_html() -> str:
     """Generate animated gear cube logo HTML for sidebar."""
-    from pathlib import Path
-    
-    PROJECT_ROOT = Path(__file__).parent.parent.parent
-    ASSETS_DIR = PROJECT_ROOT / "assets"
-    
-    # Try to load SVG logo
-    logo_path = ASSETS_DIR / "gear_cube_logo.svg"
-    if logo_path.exists():
-        with open(logo_path, 'r') as f:
-            logo_svg = f.read()
-    else:
-        logo_svg = '<div style="width: 100px; height: 100px; background: #002fa7;"></div>'
-    
+
+    # Generate cube faces HTML (scaled down version)
+    def make_gear(level: str, spin: str) -> str:
+        return f'<div class="sb-gear sb-{level} sb-spin-{spin}"></div>'
+
+    patterns = {
+        'front':  [('l4','cw'), ('l3','ccw'), ('l4','cw'),
+                   ('l2','ccw'), ('l0','cw'), ('l2','ccw'),
+                   ('l4','cw'), ('l3','ccw'), ('l4','cw')],
+        'back':   [('l3','cw'), ('l2','ccw'), ('l3','cw'),
+                   ('l1','ccw'), ('l0','cw'), ('l1','ccw'),
+                   ('l3','cw'), ('l2','ccw'), ('l3','cw')],
+        'right':  [('l4','cw'), ('l2','ccw'), ('l3','cw'),
+                   ('l3','ccw'), ('l1','cw'), ('l2','ccw'),
+                   ('l4','cw'), ('l2','ccw'), ('l3','cw')],
+        'left':   [('l3','cw'), ('l2','ccw'), ('l4','cw'),
+                   ('l2','ccw'), ('l1','cw'), ('l3','ccw'),
+                   ('l3','cw'), ('l2','ccw'), ('l4','cw')],
+        'top':    [('l4','cw'), ('l4','ccw'), ('l4','cw'),
+                   ('l4','ccw'), ('l2','cw'), ('l4','ccw'),
+                   ('l4','cw'), ('l4','ccw'), ('l4','cw')],
+        'bottom': [('l3','cw'), ('l3','ccw'), ('l3','cw'),
+                   ('l3','ccw'), ('l1','cw'), ('l3','ccw'),
+                   ('l3','cw'), ('l3','ccw'), ('l3','cw')],
+    }
+
+    cube_faces = ''
+    for face, gears in patterns.items():
+        gears_html = ''.join(make_gear(g[0], g[1]) for g in gears)
+        cube_faces += f'<div class="sb-cube-face sb-{face}">{gears_html}</div>'
+
     return f"""
+    <style>
+    /* Sidebar animated cube - scaled down */
+    .sb-cube-container {{
+        width: 100px;
+        height: 100px;
+        perspective: 400px;
+        margin: 0 auto;
+    }}
+    .sb-cube {{
+        width: 100px;
+        height: 100px;
+        transform-style: preserve-3d;
+        animation: sb-shuffle 16s ease-in-out infinite;
+    }}
+    @keyframes sb-shuffle {{
+        0%   {{ transform: rotateX(-15deg) rotateY(0deg); }}
+        8%   {{ transform: rotateX(25deg) rotateY(45deg); }}
+        16%  {{ transform: rotateX(-30deg) rotateY(120deg); }}
+        24%  {{ transform: rotateX(20deg) rotateY(200deg); }}
+        32%  {{ transform: rotateX(-25deg) rotateY(280deg); }}
+        40%  {{ transform: rotateX(35deg) rotateY(340deg); }}
+        55%  {{ transform: rotateX(-10deg) rotateY(380deg); }}
+        70%  {{ transform: rotateX(-15deg) rotateY(360deg); }}
+        100% {{ transform: rotateX(-15deg) rotateY(360deg); }}
+    }}
+    .sb-cube-face {{
+        position: absolute;
+        width: 100px;
+        height: 100px;
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        gap: 1px;
+        padding: 4px;
+        background: rgba(0, 47, 167, 0.03);
+        border-radius: 6px;
+        backface-visibility: visible;
+    }}
+    .sb-cube-face.sb-front  {{ transform: translateZ(50px); }}
+    .sb-cube-face.sb-back   {{ transform: rotateY(180deg) translateZ(50px); }}
+    .sb-cube-face.sb-right  {{ transform: rotateY(90deg) translateZ(50px); }}
+    .sb-cube-face.sb-left   {{ transform: rotateY(-90deg) translateZ(50px); }}
+    .sb-cube-face.sb-top    {{ transform: rotateX(90deg) translateZ(50px); }}
+    .sb-cube-face.sb-bottom {{ transform: rotateX(-90deg) translateZ(50px); }}
+    .sb-gear {{
+        width: 28px;
+        height: 28px;
+        border-radius: 50%;
+        position: relative;
+    }}
+    .sb-gear::after {{
+        content: '';
+        position: absolute;
+        width: 100%;
+        height: 100%;
+        background: inherit;
+        border-radius: 50%;
+        clip-path: polygon(
+            50% 0%, 58% 8%, 65% 0%, 73% 8%,
+            80% 0%, 85% 12%, 100% 15%, 92% 27%,
+            100% 35%, 92% 42%, 100% 50%, 92% 58%,
+            100% 65%, 92% 73%, 100% 85%, 85% 88%,
+            80% 100%, 73% 92%, 65% 100%, 58% 92%,
+            50% 100%, 42% 92%, 35% 100%, 27% 92%,
+            20% 100%, 15% 88%, 0% 85%, 8% 73%,
+            0% 65%, 8% 58%, 0% 50%, 8% 42%,
+            0% 35%, 8% 27%, 0% 15%, 15% 12%,
+            20% 0%, 27% 8%, 35% 0%, 42% 8%
+        );
+    }}
+    .sb-gear.sb-l0 {{ background: #002fa7; }}
+    .sb-gear.sb-l1 {{ background: #0041d1; }}
+    .sb-gear.sb-l2 {{ background: #3b82f6; }}
+    .sb-gear.sb-l3 {{ background: #60a5fa; }}
+    .sb-gear.sb-l4 {{ background: #93c5fd; }}
+    .sb-gear.sb-spin-cw {{ animation: sb-spin-cw 6s linear infinite; }}
+    .sb-gear.sb-spin-ccw {{ animation: sb-spin-ccw 6s linear infinite; }}
+    @keyframes sb-spin-cw {{ to {{ transform: rotate(360deg); }} }}
+    @keyframes sb-spin-ccw {{ to {{ transform: rotate(-360deg); }} }}
+    </style>
     <div style="text-align: center; padding: 1rem 0;">
-        <div style="width: 100px; height: 100px; margin: 0 auto;">
-            {logo_svg}
+        <div class="sb-cube-container">
+            <div class="sb-cube">
+                {cube_faces}
+            </div>
         </div>
         <h3 style="margin: 0.5rem 0 0 0; font-size: 1.1rem; font-weight: 600;">
             Data Redesign Method
