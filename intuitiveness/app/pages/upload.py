@@ -238,9 +238,36 @@ def _render_search_interface() -> None:
         st.session_state.pop('datagouv_last_dataset_name', None)
         st.rerun()
 
-    # Discrete CSV upload - just a small icon
+    # Tiny CSV upload - minimal styling
+    st.markdown("""
+    <style>
+    div[data-testid="stFileUploader"] {
+        width: fit-content;
+    }
+    div[data-testid="stFileUploader"] > div {
+        display: none;
+    }
+    div[data-testid="stFileUploader"] > label {
+        font-size: 0.8rem;
+        color: #64748b;
+        cursor: pointer;
+    }
+    div[data-testid="stFileUploader"] section {
+        padding: 0;
+        border: none;
+    }
+    div[data-testid="stFileUploader"] button {
+        font-size: 0.75rem;
+        padding: 4px 12px;
+        background: transparent;
+        border: 1px solid #e2e8f0;
+        color: #64748b;
+    }
+    </style>
+    """, unsafe_allow_html=True)
+
     from intuitiveness.streamlit_app import smart_load_csv
-    uploaded_file = st.file_uploader("📁", type=["csv"], key="discrete_csv_upload")
+    uploaded_file = st.file_uploader("or upload CSV", type=["csv"], key="discrete_csv_upload", label_visibility="collapsed")
     if uploaded_file:
         with st.spinner("Loading..."):
             try:
