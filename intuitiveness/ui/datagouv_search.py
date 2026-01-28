@@ -377,10 +377,8 @@ def render_search_bar(show_hero: bool = True) -> Optional[str]:
 
         from intuitiveness.streamlit_app import smart_load_csv
 
-        # Absolutely centered upload button (hide if data already uploaded or being uploaded)
-        show_button = not st.session_state.get("raw_data") and not st.session_state.get("_uploading")
-
-        if show_button:
+        # Absolutely centered upload button (hide if data already uploaded)
+        if not st.session_state.get("raw_data"):
             st.markdown('<div style="display: flex; justify-content: center; width: 100%;">', unsafe_allow_html=True)
             uploaded_file = st.file_uploader(
                 "Upload your CSV data",
@@ -389,49 +387,50 @@ def render_search_bar(show_hero: bool = True) -> Optional[str]:
                 label_visibility="collapsed"
             )
             st.markdown('</div>', unsafe_allow_html=True)
+
+            if uploaded_file is not None:
+                # Immediately hide the uploader to prevent ugly UI
+                st.markdown("""
+                <style>
+                [key="search_bar_csv_upload"] {
+                    display: none !important;
+                }
+                </style>
+                """, unsafe_allow_html=True)
+
+                # Check if file is already loaded
+                raw_data = st.session_state.get("raw_data", {})
+                if not isinstance(raw_data, dict):
+                    st.session_state.raw_data = {}
+                    raw_data = {}
+
+                already_loaded = uploaded_file.name in raw_data
+
+                # Only process if this is a new file
+                if not already_loaded:
+                    with st.spinner("Loading..."):
+                        try:
+                            # Ensure file object is valid
+                            if uploaded_file is None:
+                                st.error("No file selected")
+                                return None
+
+                            df, info_msg = smart_load_csv(uploaded_file)
+
+                            if df is not None and not df.empty:
+                                # Store in raw_data
+                                st.session_state.raw_data[uploaded_file.name] = df
+
+                                # Success - stay on step 0 but wizard will show
+                                st.rerun()
+                            else:
+                                st.error(f"Failed to load CSV: {info_msg if info_msg else 'Unknown error'}")
+                        except Exception as e:
+                            import traceback
+                            st.error(f"Error loading file: {str(e)}")
+                            st.code(traceback.format_exc())
         else:
             uploaded_file = None
-
-        if uploaded_file is not None:
-            # Mark as uploading to hide button on next render
-            st.session_state._uploading = True
-            # Check if file is already loaded
-            raw_data = st.session_state.get("raw_data", {})
-            if not isinstance(raw_data, dict):
-                st.session_state.raw_data = {}
-                raw_data = {}
-
-            already_loaded = uploaded_file.name in raw_data
-
-            # Only process if this is a new file
-            if not already_loaded:
-                with st.spinner("Loading..."):
-                    try:
-                        # Ensure file object is valid
-                        if uploaded_file is None:
-                            st.error("No file selected")
-                            return None
-
-                        df, info_msg = smart_load_csv(uploaded_file)
-
-                        if df is not None and not df.empty:
-                            # Store in raw_data
-                            st.session_state.raw_data[uploaded_file.name] = df
-
-                            # Clear uploading flag (though rerun will reset it anyway)
-                            st.session_state._uploading = False
-
-                            # Success - stay on step 0 but wizard will show
-                            # (don't show success message to avoid clutter)
-                            st.rerun()
-                        else:
-                            st.session_state._uploading = False
-                            st.error(f"Failed to load CSV: {info_msg if info_msg else 'Unknown error'}")
-                    except Exception as e:
-                        import traceback
-                        st.session_state._uploading = False
-                        st.error(f"Error loading file: {str(e)}")
-                        st.code(traceback.format_exc())
 
     return None
 
@@ -605,19 +604,12 @@ def _get_minimal_landing_css() -> str:
         display: flex !important;
         justify-content: center !important;
     }
-    /* Hide ALL content after file selection (filename, upload button, etc) */
-    [data-testid="stFileUploader"] section > div,
+    /* Hide file details that appear after selection */
+    [data-testid="stFileUploader"] section > div:not(:has(button)),
     [data-testid="stFileUploader"] section > ul,
     [data-testid="stFileUploader"] section > small,
-    [data-testid="stFileUploader"] section span {
-        display: none !important;
-    }
-    /* Only show the initial browse button */
-    [data-testid="stFileUploader"] section > button:first-of-type {
-        display: block !important;
-    }
-    /* Hide secondary upload button that appears after file selection */
-    [data-testid="stFileUploader"] section > button:not(:first-of-type) {
+    [data-testid="stFileUploader"] section button[kind="secondary"],
+    [data-testid="stFileUploader"] [data-testid="stMarkdownContainer"] {
         display: none !important;
     }
     [data-testid="stFileUploader"] button {
