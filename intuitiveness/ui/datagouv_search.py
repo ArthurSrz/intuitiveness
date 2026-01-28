@@ -394,6 +394,8 @@ def render_search_bar(show_hero: bool = True) -> Optional[str]:
                         if "raw_data" not in st.session_state:
                             st.session_state.raw_data = {}
                         st.session_state.raw_data[uploaded_file.name] = df
+                        # Redirect to descent-ascent workflow (Step 1: Entities)
+                        st.session_state.current_step = 1
                         st.rerun()
                 except:
                     pass

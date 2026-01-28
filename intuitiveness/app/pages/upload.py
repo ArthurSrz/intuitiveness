@@ -235,5 +235,14 @@ def _render_search_interface() -> None:
             f"dataset_{len(st.session_state.datagouv_loaded_datasets) + 1}.csv"
         )
         st.session_state.datagouv_loaded_datasets[dataset_name] = loaded_df
+
+        # Also add to raw_data for descent-ascent workflow
+        if "raw_data" not in st.session_state:
+            st.session_state.raw_data = {}
+        st.session_state.raw_data[dataset_name] = loaded_df
+
         st.session_state.pop('datagouv_last_dataset_name', None)
+
+        # Redirect to descent-ascent workflow (Step 1: Entities)
+        st.session_state.current_step = 1
         st.rerun()
