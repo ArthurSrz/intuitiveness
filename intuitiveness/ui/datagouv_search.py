@@ -612,8 +612,18 @@ def _get_minimal_landing_css() -> str:
     [data-testid="stFileUploader"] section svg {
         display: none !important;
     }
-    /* Style the button */
-    [data-testid="stFileUploader"] button {
+    /* Hide the uploaded file info (filename + delete button row) */
+    [data-testid="stFileUploader"] [data-testid="stFileUploaderFile"],
+    [data-testid="stFileUploader"] section > div:has([data-testid="stFileUploaderFile"]) {
+        display: none !important;
+    }
+    /* Hide any secondary buttons (delete, etc.) */
+    [data-testid="stFileUploader"] button[kind="secondary"],
+    [data-testid="stFileUploader"] button:not(:first-of-type) {
+        display: none !important;
+    }
+    /* Style the browse button (first button only) */
+    [data-testid="stFileUploader"] button:first-of-type {
         font-size: 0 !important;  /* Hide native text */
         padding: 8px 20px !important;
         background: linear-gradient(135deg, #ffffff 0%, #f8fafc 100%) !important;
@@ -623,7 +633,7 @@ def _get_minimal_landing_css() -> str:
         transition: all 0.2s ease !important;
         cursor: pointer !important;
     }
-    [data-testid="stFileUploader"] button::before {
+    [data-testid="stFileUploader"] button:first-of-type::before {
         content: 'Upload your data (CSV)' !important;
         font-size: 0.85rem !important;
         color: #475569 !important;
@@ -631,13 +641,13 @@ def _get_minimal_landing_css() -> str:
         font-family: 'Outfit', -apple-system, BlinkMacSystemFont, sans-serif !important;
         letter-spacing: 0.01em !important;
     }
-    [data-testid="stFileUploader"] button:hover {
+    [data-testid="stFileUploader"] button:first-of-type:hover {
         background: linear-gradient(135deg, #002fa7 0%, #0041d1 100%) !important;
         border-color: #002fa7 !important;
         box-shadow: 0 4px 12px rgba(0, 47, 167, 0.2) !important;
         transform: translateY(-1px) !important;
     }
-    [data-testid="stFileUploader"] button:hover::before {
+    [data-testid="stFileUploader"] button:first-of-type:hover::before {
         color: white !important;
     }
 
