@@ -61,7 +61,6 @@ from intuitiveness.ui import (
     render_l2_domain_table,
     render_l1_vector,
     render_l0_datum,
-    render_navigation_direction_indicator,
     extract_entity_tabs,
     extract_relationship_tabs,
     render_entity_relationship_tabs,
