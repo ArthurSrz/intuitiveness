@@ -387,8 +387,12 @@ def render_search_bar(show_hero: bool = True) -> Optional[str]:
         )
         st.markdown('</div>', unsafe_allow_html=True)
         if uploaded_file:
-            # Only process if this is a new file (not already in raw_data)
-            if uploaded_file.name not in st.session_state.get("raw_data", {}):
+            # Check if file is already loaded
+            raw_data = st.session_state.get("raw_data", {})
+            already_loaded = isinstance(raw_data, dict) and uploaded_file.name in raw_data
+
+            # Only process if this is a new file
+            if not already_loaded:
                 with st.spinner("Loading..."):
                     try:
                         df, info_msg = smart_load_csv(uploaded_file)
