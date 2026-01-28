@@ -68,16 +68,67 @@ try:
     import tabpfn_client
     _TABPFN_CLIENT_AVAILABLE = True
 
-    # Auto-load token from stored file
+    # Auto-load token from Streamlit secrets, environment, or stored file
     from pathlib import Path
-    _token_file = Path.home() / ".tabpfn" / "token"
-    if _token_file.exists():
+
+    _token = None
+
+    # Priority 1: Check Streamlit secrets (for deployed apps)
+    try:
+        import streamlit as st
+        if hasattr(st, 'secrets') and 'TABPFN_ACCESS_TOKEN' in st.secrets:
+            _token = st.secrets['TABPFN_ACCESS_TOKEN']
+            logger.info("TabPFN token loaded from Streamlit secrets")
+        elif hasattr(st, 'secrets') and 'TABPFN_TOKEN' in st.secrets:
+            _token = st.secrets['TABPFN_TOKEN']
+            logger.info("TabPFN token loaded from Streamlit secrets")
+    except (ImportError, FileNotFoundError, KeyError):
+        # Streamlit not available or secrets not configured
+        pass
+
+    # Priority 2: Check .env file (for local development)
+    if not _token:
         try:
-            _token = _token_file.read_text().strip()
-            tabpfn_client.set_access_token(_token)
-            logger.info("TabPFN token loaded from ~/.tabpfn/token")
-        except Exception as e:
-            logger.warning(f"Failed to load TabPFN token: {e}")
+            from dotenv import load_dotenv
+            # Try to find .env in project root (up to 3 levels up from this file)
+            current_dir = Path(__file__).parent
+            for _ in range(4):  # Check current and up to 3 parent directories
+                env_file = current_dir / ".env"
+                if env_file.exists():
+                    load_dotenv(env_file)
+                    logger.info(f"Loaded .env file from {env_file}")
+                    break
+                current_dir = current_dir.parent
+        except ImportError:
+            logger.debug("python-dotenv not installed, skipping .env file loading")
+
+    # Priority 3: Check environment variable
+    if not _token:
+        _token = os.environ.get("TABPFN_ACCESS_TOKEN") or os.environ.get("TABPFN_TOKEN")
+        if _token:
+            logger.info("TabPFN token loaded from environment variable")
+
+    # Priority 4: Check stored token file
+    if not _token:
+        _token_file = Path.home() / ".tabpfn" / "token"
+        if _token_file.exists():
+            try:
+                _token = _token_file.read_text().strip()
+                logger.info("TabPFN token loaded from ~/.tabpfn/token")
+            except Exception as e:
+                logger.warning(f"Failed to load TabPFN token from file: {e}")
+
+    # Set the token if found
+    if _token:
+        tabpfn_client.set_access_token(_token)
+    else:
+        logger.warning(
+            "No TabPFN token found. Configure in one of these ways:\n"
+            "  1. Streamlit secrets: .streamlit/secrets.toml\n"
+            "  2. Environment file: .env\n"
+            "  3. Environment variable: TABPFN_ACCESS_TOKEN\n"
+            "  4. Token file: ~/.tabpfn/token"
+        )
 except ImportError:
     ClientClassifier = None
     ClientRegressor = None

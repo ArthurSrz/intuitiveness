@@ -1,5 +1,9 @@
 # Install the local package
 -e .
+
+# Environment variable management
+python-dotenv>=1.0.0
+
 streamlit_pdf_viewer
 neo4j>=5.0.0
 networkx
