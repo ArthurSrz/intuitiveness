@@ -376,12 +376,16 @@ def render_search_bar(show_hero: bool = True) -> Optional[str]:
         """, unsafe_allow_html=True)
 
         from intuitiveness.streamlit_app import smart_load_csv
-        uploaded_file = st.file_uploader(
-            "📁 upload CSV",
-            type=["csv"],
-            key="search_bar_csv_upload",
-            label_visibility="collapsed"
-        )
+
+        # Center container for upload button
+        col1, col2, col3 = st.columns([1, 1, 1])
+        with col2:
+            uploaded_file = st.file_uploader(
+                "Upload your CSV data",
+                type=["csv"],
+                key="search_bar_csv_upload",
+                label_visibility="collapsed"
+            )
         if uploaded_file:
             with st.spinner("Loading..."):
                 try:
@@ -555,8 +559,6 @@ def _get_minimal_landing_css() -> str:
     /* Hide everything except the browse button */
     [data-testid="stFileUploader"] {
         text-align: center !important;
-        max-width: 150px !important;
-        margin: 0 auto !important;
     }
     [data-testid="stFileUploader"] section {
         border: none !important;
@@ -570,8 +572,8 @@ def _get_minimal_landing_css() -> str:
         display: block !important;
     }
     [data-testid="stFileUploader"] button {
-        font-size: 0.75rem !important;
-        padding: 4px 12px !important;
+        font-size: 0.8rem !important;
+        padding: 6px 16px !important;
         background: white !important;
         border: 1px solid #cbd5e1 !important;
         border-radius: 6px !important;
@@ -579,6 +581,7 @@ def _get_minimal_landing_css() -> str:
         font-weight: 400 !important;
         width: 100% !important;
         margin: 0 auto !important;
+        display: block !important;
     }
     [data-testid="stFileUploader"] button:hover {
         background: #f8fafc !important;
