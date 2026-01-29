@@ -260,8 +260,8 @@ def _render_result(result: Any) -> None:
         if result.cleaning_actions:
             st.markdown(f"**{result.get_cleaning_summary()}**")
 
-        # Stats
-        col1, col2, col3 = st.columns(3)
+        # Stats (quality score is shown above in the readiness indicator)
+        col1, col2 = st.columns(2)
         with col1:
             st.metric(
                 "Rows",
@@ -276,20 +276,6 @@ def _render_result(result: Any) -> None:
                 delta=f"-{result.cols_removed}" if result.cols_removed > 0 else None,
                 delta_color="inverse" if result.cols_removed > 0 else "off",
             )
-        with col3:
-            if result.validation_score is not None:
-                st.metric("Quality Score", f"{result.validation_score:.0f}/100")
-                # Explain what the score means
-                if result.validation_score >= 80:
-                    st.caption("Excellent — very reliable data")
-                elif result.validation_score >= 60:
-                    st.caption("Good — usable with minor issues")
-                elif result.validation_score >= 50:
-                    st.caption("Fair — may need review")
-                else:
-                    st.caption("Low — significant issues found")
-            else:
-                st.metric("Check Time", f"{result.processing_time_seconds:.1f}s")
 
     spacer(16)
 
@@ -334,7 +320,7 @@ def _render_result(result: Any) -> None:
 
 
 def _render_readiness_indicator(result: Any) -> None:
-    """Render binary readiness indicator."""
+    """Render binary readiness indicator with quality score."""
     if result.is_ready:
         color = "#22c55e"  # Green
         bg_color = "#dcfce7"
@@ -347,6 +333,55 @@ def _render_readiness_indicator(result: Any) -> None:
         status = "NEEDS WORK"
         icon = "!"
         message = "Your data needs some attention"
+
+    # Build quality score display
+    if result.validation_score is not None:
+        score = result.validation_score
+        if score >= 80:
+            score_label = "Excellent"
+            score_color = "#22c55e"
+        elif score >= 60:
+            score_label = "Good"
+            score_color = "#22c55e"
+        elif score >= 50:
+            score_label = "Fair"
+            score_color = "#eab308"
+        else:
+            score_label = "Low"
+            score_color = "#ef4444"
+
+        score_html = f"""
+            <div style="
+                margin-top: 16px;
+                padding-top: 16px;
+                border-top: 1px solid {color}40;
+            ">
+                <div style="font-size: 14px; color: #64748b; margin-bottom: 4px;">
+                    Quality Score
+                </div>
+                <div style="font-size: 36px; font-weight: bold; color: {score_color};">
+                    {score:.0f}/100
+                </div>
+                <div style="font-size: 14px; color: #64748b;">
+                    {score_label} — {_get_score_explanation(score)}
+                </div>
+            </div>
+        """
+    else:
+        score_html = f"""
+            <div style="
+                margin-top: 16px;
+                padding-top: 16px;
+                border-top: 1px solid {color}40;
+            ">
+                <div style="font-size: 14px; color: #64748b;">
+                    ⚡ Quick check completed in {result.processing_time_seconds:.1f}s
+                </div>
+                <div style="font-size: 12px; color: #94a3b8; margin-top: 4px;">
+                    Quality score unavailable (AI validation skipped)
+                </div>
+            </div>
+        """
 
     st.markdown(
         f"""
@@ -387,10 +422,23 @@ def _render_readiness_indicator(result: Any) -> None:
             ">
                 {message}
             </div>
+            {score_html}
         </div>
         """,
         unsafe_allow_html=True,
     )
+
+
+def _get_score_explanation(score: float) -> str:
+    """Get plain-language explanation for a quality score."""
+    if score >= 80:
+        return "patterns are clear and reliable"
+    elif score >= 60:
+        return "good patterns with some noise"
+    elif score >= 50:
+        return "patterns found but borderline"
+    else:
+        return "weak patterns, may need more data"
 
 
 def _render_export_button(result: Any) -> None:
