@@ -183,13 +183,19 @@ def _render_check_and_export_section(df: pd.DataFrame, target_column: str) -> No
             st.markdown("### What happens when you check?")
             st.markdown(
                 """
-                When you click **Check & Export**, we'll automatically:
+                When you click **Check & Export**, two things happen:
 
-                1. **Clean your data** — Fill empty cells, fix formatting issues, remove unusable columns
-                2. **Test the quality** — Use an AI model to see if your data can reliably answer questions about your focus column
-                3. **Prepare for export** — Convert everything to a format ready for analysis tools
+                **1. Clean** — We prepare your data automatically
+                - Fill empty cells with typical values
+                - Convert text to numbers
+                - Remove columns that can't be used
 
-                This takes about 10-20 seconds. No technical knowledge needed.
+                **2. Check** — An AI tests if your data is useful
+                - It tries to find patterns related to your focus column
+                - Reports a Quality Score (0-100) based on how well it can make predictions
+                - Higher score = more reliable analysis results
+
+                This takes about 10-20 seconds.
                 """
             )
 
@@ -446,34 +452,48 @@ def _render_how_it_works(result: Any) -> None:
     with st.expander("ℹ️ How does this work?", expanded=False):
         st.markdown(
             """
-            ### The Technology Behind Your Quality Score
+            ### Two Steps: Clean, Then Check
 
-            We use **TabPFN**, an AI system developed by researchers and published in the
-            scientific journal *Nature*. Here's what it does in plain terms:
+            **Step 1: We clean your data** (standard data preparation)
 
-            **Think of it like a smart assistant that has seen millions of datasets.**
+            Before any analysis, we automatically fix common issues:
+            - **Empty cells** → filled with typical values from that column (median for numbers, most common for text)
+            - **Text columns** → converted to numbers so analysis tools can read them
+            - **Unusable columns** → removed (columns with only one value, or mostly empty)
+            - **Extreme values** (like infinity) → replaced with reasonable estimates
 
-            1. **It learned patterns from 100 million example datasets**
-               - Before ever seeing your data, it was trained to recognize what makes data useful
-               - It knows common problems: missing values, inconsistent formats, columns that don't help
+            This is standard data preparation — the same steps a data analyst would do manually.
 
-            2. **It checks if your data can answer questions**
-               - We ask: "Can this data reliably tell us about the focus column you selected?"
-               - It tries to find patterns and reports how confident it is
+            ---
 
-            3. **The Quality Score (0-100) means:**
-               - **80+**: Your data has clear patterns — analysis results will be reliable
-               - **60-79**: Good data with some noise — results will be useful but not perfect
-               - **50-59**: Borderline — the data might work, but consider adding more rows or cleaning up issues
-               - **Below 50**: The AI couldn't find reliable patterns — data needs work before analysis
+            **Step 2: We check quality with TabPFN** (AI-powered validation)
 
-            **What we cleaned automatically:**
-            - Empty cells → filled with typical values from that column
-            - Text columns → converted to numbers so analysis tools can read them
-            - Unusable columns → removed (columns with only one value, or mostly empty)
-            - Extreme values → replaced with reasonable estimates
+            After cleaning, we use **TabPFN** — an AI system published in the scientific journal *Nature* —
+            to test if your data is useful:
 
-            **Your data stays private** — we only send a small sample for the quality check,
+            1. We split your data: 80% for learning, 20% for testing
+            2. TabPFN learns patterns from the 80%
+            3. It tries to predict the focus column on the 20% it hasn't seen
+            4. The **Quality Score** is how accurate those predictions were
+
+            **Why TabPFN?** It was trained on 100 million synthetic datasets, so it can instantly
+            recognize patterns without needing hours of setup. It's like having an expert data scientist
+            glance at your data and say "yes, this looks usable" or "no, there's a problem here."
+
+            ---
+
+            ### What the Quality Score means
+
+            | Score | Meaning |
+            |-------|---------|
+            | **80+** | Excellent — clear patterns, reliable for analysis |
+            | **60-79** | Good — usable with some noise |
+            | **50-59** | Borderline — might work, consider more data |
+            | **Below 50** | Low — couldn't find reliable patterns |
+
+            ---
+
+            **Your data stays private** — only a small sample is used for the quality check,
             and nothing is stored after the check completes.
             """
         )
