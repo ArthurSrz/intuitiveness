@@ -823,3 +823,171 @@ class ExportPackage:
             column_count=data.get("column_count", 0),
             task_type=data.get("task_type", "classification"),
         )
+
+
+# ============================================================================
+# INSTANT EXPORT DATA MODELS (012-tabpfn-instant-export)
+# Simplified data export for non-technical domain experts
+# ============================================================================
+
+
+@dataclass
+class CleaningAction:
+    """
+    Single data cleaning action applied during instant export.
+
+    Used to build plain-language change log for user transparency.
+    """
+
+    action_type: str  # 'fill_missing' | 'encode_category' | 'remove_column' | 'convert_type'
+    column: str
+    description: str  # Plain language, no ML jargon
+    rows_affected: int = 0
+
+    def to_dict(self) -> Dict[str, Any]:
+        """Convert to dictionary for JSON serialization."""
+        return {
+            "action_type": self.action_type,
+            "column": self.column,
+            "description": self.description,
+            "rows_affected": self.rows_affected,
+        }
+
+    @classmethod
+    def from_dict(cls, data: Dict[str, Any]) -> "CleaningAction":
+        """Create from dictionary."""
+        return cls(**data)
+
+
+@dataclass
+class ExportResult:
+    """
+    Result of instant export workflow.
+
+    Spec: 012-tabpfn-instant-export
+
+    Designed for non-technical users:
+    - Binary readiness indicator (ready/needs_work)
+    - Plain language summary (no ML jargon)
+    - Cleaning log showing what was auto-fixed
+
+    Attributes:
+        is_ready: Binary readiness indicator (True = export immediately)
+        status: 'ready' or 'needs_work'
+        summary: Plain-language summary for domain expert
+        warnings: List of human-readable warnings (no technical terms)
+        cleaning_actions: Log of auto-applied cleaning operations
+        cleaned_df: The cleaned DataFrame (ready for export)
+        original_row_count: Rows before cleaning
+        cleaned_row_count: Rows after cleaning
+        original_col_count: Columns before cleaning
+        cleaned_col_count: Columns after cleaning
+        target_column: Column used for validation
+        task_type: Detected task type
+        validation_score: Optional quick validation score (0-100)
+        processing_time_seconds: Time taken for check & clean
+    """
+
+    # Core readiness
+    is_ready: bool = False
+    status: Literal["ready", "needs_work"] = "needs_work"
+    summary: str = ""
+
+    # User-facing info (no ML jargon)
+    warnings: List[str] = field(default_factory=list)
+    cleaning_actions: List[CleaningAction] = field(default_factory=list)
+
+    # Cleaned data reference (excluded from serialization due to size)
+    cleaned_df: Any = field(default=None, repr=False)
+
+    # Metadata
+    original_row_count: int = 0
+    cleaned_row_count: int = 0
+    original_col_count: int = 0
+    cleaned_col_count: int = 0
+    target_column: str = ""
+    task_type: Literal["classification", "regression"] = "classification"
+
+    # Optional validation
+    validation_score: Optional[float] = None  # 0-100 if TabPFN validation ran
+
+    # Performance
+    processing_time_seconds: float = 0.0
+    api_calls_used: int = 0  # Should be ≤5 per spec
+
+    def __post_init__(self):
+        """Auto-calculate status from is_ready."""
+        self.status = "ready" if self.is_ready else "needs_work"
+
+    @property
+    def rows_removed(self) -> int:
+        """Number of rows removed during cleaning."""
+        return self.original_row_count - self.cleaned_row_count
+
+    @property
+    def cols_removed(self) -> int:
+        """Number of columns removed during cleaning."""
+        return self.original_col_count - self.cleaned_col_count
+
+    def get_cleaning_summary(self) -> str:
+        """Get plain-language summary of cleaning actions."""
+        if not self.cleaning_actions:
+            return "No changes needed - your data was already clean!"
+
+        action_counts = {}
+        for action in self.cleaning_actions:
+            action_counts[action.action_type] = action_counts.get(action.action_type, 0) + 1
+
+        parts = []
+        if action_counts.get("fill_missing", 0):
+            parts.append(f"filled {action_counts['fill_missing']} columns with missing values")
+        if action_counts.get("encode_category", 0):
+            parts.append(f"converted {action_counts['encode_category']} text columns to numbers")
+        if action_counts.get("remove_column", 0):
+            parts.append(f"removed {action_counts['remove_column']} unusable columns")
+        if action_counts.get("convert_type", 0):
+            parts.append(f"fixed {action_counts['convert_type']} column types")
+
+        return "Auto-cleaned: " + ", ".join(parts) + "."
+
+    def to_dict(self) -> Dict[str, Any]:
+        """Convert to dictionary for JSON serialization."""
+        return {
+            "is_ready": self.is_ready,
+            "status": self.status,
+            "summary": self.summary,
+            "warnings": self.warnings,
+            "cleaning_actions": [a.to_dict() for a in self.cleaning_actions],
+            "original_row_count": self.original_row_count,
+            "cleaned_row_count": self.cleaned_row_count,
+            "original_col_count": self.original_col_count,
+            "cleaned_col_count": self.cleaned_col_count,
+            "target_column": self.target_column,
+            "task_type": self.task_type,
+            "validation_score": self.validation_score,
+            "processing_time_seconds": self.processing_time_seconds,
+            "api_calls_used": self.api_calls_used,
+            "cleaning_summary": self.get_cleaning_summary(),
+        }
+
+    @classmethod
+    def from_dict(cls, data: Dict[str, Any]) -> "ExportResult":
+        """Create from dictionary."""
+        return cls(
+            is_ready=data.get("is_ready", False),
+            status=data.get("status", "needs_work"),
+            summary=data.get("summary", ""),
+            warnings=data.get("warnings", []),
+            cleaning_actions=[
+                CleaningAction.from_dict(a) for a in data.get("cleaning_actions", [])
+            ],
+            original_row_count=data.get("original_row_count", 0),
+            cleaned_row_count=data.get("cleaned_row_count", 0),
+            original_col_count=data.get("original_col_count", 0),
+            cleaned_col_count=data.get("cleaned_col_count", 0),
+            target_column=data.get("target_column", ""),
+            task_type=data.get("task_type", "classification"),
+            validation_score=data.get("validation_score"),
+            processing_time_seconds=data.get("processing_time_seconds", 0.0),
+            api_calls_used=data.get("api_calls_used", 0),
+        )
