@@ -18,8 +18,98 @@ from typing import Optional, Literal, Tuple, Any, List
 from concurrent.futures import ThreadPoolExecutor, TimeoutError as FuturesTimeoutError
 import numpy as np
 import pandas as pd
+from pathlib import Path
 
 logger = logging.getLogger(__name__)
+
+# ============================================================================
+# FIX FOR STREAMLIT CLOUD: Redirect TabPFN cache to writable directory
+# The tabpfn_client package tries to write to its package directory by default,
+# which is read-only on Streamlit Cloud. We redirect to /tmp/.tabpfn instead.
+# This MUST be done BEFORE importing tabpfn_client.
+# ============================================================================
+def _setup_tabpfn_cache_dir():
+    """Configure TabPFN to use a writable cache directory."""
+    # Check if we're in a read-only environment (Streamlit Cloud)
+    # by testing if we can write to the default location
+    try:
+        import site
+        site_packages = site.getsitepackages()[0] if site.getsitepackages() else None
+        if site_packages:
+            test_file = Path(site_packages) / ".write_test"
+            try:
+                test_file.touch()
+                test_file.unlink()
+                # Writable, no need to redirect
+                return
+            except (PermissionError, OSError):
+                pass
+    except Exception:
+        pass
+
+    # Use /tmp for cache (always writable)
+    cache_dir = Path("/tmp/.tabpfn")
+    try:
+        cache_dir.mkdir(parents=True, exist_ok=True)
+        os.environ["TABPFN_CACHE_DIR"] = str(cache_dir)
+        # Also set HOME-like paths that tabpfn_client might use
+        os.environ["TABPFN_TOKEN_FILE"] = str(cache_dir / "token")
+        logger.info(f"TabPFN cache redirected to {cache_dir}")
+    except Exception as e:
+        logger.warning(f"Could not setup TabPFN cache directory: {e}")
+
+# Setup cache dir before any tabpfn imports
+_setup_tabpfn_cache_dir()
+
+
+def _ensure_tabpfn_cache_writable():
+    """
+    Patch tabpfn_client internals to use writable cache directory.
+
+    Called before each model initialization to handle cases where
+    the package tries to write to its installation directory.
+    """
+    try:
+        import tabpfn_client
+        # Get the package directory
+        pkg_dir = Path(tabpfn_client.__file__).parent
+        internal_cache = pkg_dir / ".tabpfn"
+
+        # If the internal cache exists and is not writable, redirect it
+        if internal_cache.exists():
+            try:
+                test_file = internal_cache / ".write_test"
+                test_file.touch()
+                test_file.unlink()
+                # Writable, no action needed
+                return
+            except (PermissionError, OSError):
+                pass
+
+        # Try to create a symlink from internal cache to /tmp
+        writable_cache = Path("/tmp/.tabpfn")
+        writable_cache.mkdir(parents=True, exist_ok=True)
+
+        # Try to patch the config module if it exists
+        try:
+            from tabpfn_client import config
+            if hasattr(config, 'CACHE_DIR'):
+                config.CACHE_DIR = str(writable_cache)
+            if hasattr(config, 'TOKEN_FILE'):
+                config.TOKEN_FILE = str(writable_cache / "token")
+        except (ImportError, AttributeError):
+            pass
+
+        # Try to patch the ServiceClient if it has cache settings
+        try:
+            from tabpfn_client.service_client import ServiceClient
+            if hasattr(ServiceClient, '_cache_dir'):
+                ServiceClient._cache_dir = str(writable_cache)
+        except (ImportError, AttributeError):
+            pass
+
+    except Exception as e:
+        logger.debug(f"Could not patch tabpfn_client cache: {e}")
 
 # Environment variable to control backend preference
 # Set TABPFN_PREFER_LOCAL=1 to prefer local inference
@@ -219,11 +309,17 @@ class TabPFNWrapper:
             return False
 
         try:
+            # Ensure cache directory is writable before creating model
+            _ensure_tabpfn_cache_writable()
+
             if self.task_type == "classification":
                 self.model = ClientClassifier()
             else:
                 self.model = ClientRegressor()
             return True
+        except PermissionError as e:
+            logger.warning(f"tabpfn-client permission error (read-only filesystem): {e}")
+            return False
         except Exception as e:
             logger.warning(f"tabpfn-client initialization failed: {e}")
             return False
