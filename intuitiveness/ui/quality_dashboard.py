@@ -81,6 +81,12 @@ from intuitiveness.ui.quality.anomaly_ui import (
     render_anomaly_results,
 )
 
+# Instant Export (012-tabpfn-instant-export)
+from intuitiveness.ui.quality.instant_export import (
+    render_instant_export_ui,
+    render_instant_export_tab,
+)
+
 # Backward compatibility aliases
 _clear_report_history = clear_report_history
 _score_color = get_score_color
@@ -95,7 +101,7 @@ def render_quality_dashboard() -> None:
     """
     render_page_header(
         "Dataset Quality Assessment",
-        "Analyze your dataset's ML-readiness with TabPFN-powered quality scoring",
+        "Analyze your dataset and get it ready for analysis",
     )
     
     spacer(16)
@@ -274,13 +280,14 @@ def _render_quality_report_tabs(report):
     spacer(16)
     
     # Main tabs
-    tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs([
+    tab1, tab2, tab3, tab4, tab5, tab6, tab7 = st.tabs([
         "📊 Overview",
         "✨ Suggestions",
         "🔬 ML Diagnostics",
         "🚀 60-Second Workflow",
         "🔍 Anomaly Detection",
-        "📖 Methodology"
+        "📖 Methodology",
+        "⚡ Quick Export"
     ])
     
     with tab1:
@@ -304,6 +311,30 @@ def _render_quality_report_tabs(report):
     
     with tab6:
         render_tabpfn_methodology(report)
+
+    with tab7:
+        _render_quick_export_tab(report)
+
+
+def _render_quick_export_tab(report):
+    """Render quick export tab (012-tabpfn-instant-export)."""
+    df = st.session_state.get(SESSION_KEY_QUALITY_DF)
+    if df is None:
+        info("Dataset not available. Upload data to use quick export.")
+        return
+
+    render_section_header(
+        "Quick Export",
+        "Check and export your data in seconds"
+    )
+
+    info(
+        "Quick Export automatically cleans your data and exports it ready for analysis. "
+        "No technical knowledge required!"
+    )
+
+    spacer(8)
+    render_instant_export_ui(df)
 
 
 def _render_overview_tab(report):

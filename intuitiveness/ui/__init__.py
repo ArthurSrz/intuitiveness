@@ -136,6 +136,12 @@ from .tutorial import (
 from .quality_dashboard import render_quality_dashboard
 from .catalog_browser import render_catalog_browser
 
+# Instant Export (012-tabpfn-instant-export)
+from .quality.instant_export import (
+    render_instant_export_ui,
+    render_instant_export_tab,
+)
+
 # Ascent UI forms (004-ascent-precision)
 # Updated for Spec 011: Extracted to ui/ascent/ package
 from .ascent import (
@@ -279,4 +285,7 @@ __all__ = [
     # Quality Data Platform (009-quality-data-platform)
     'render_quality_dashboard',
     'render_catalog_browser',
+    # Instant Export (012-tabpfn-instant-export)
+    'render_instant_export_ui',
+    'render_instant_export_tab',
 ]

@@ -65,16 +65,12 @@ def render_readiness_indicator(report: Any) -> None:
     color = colors.get(indicator.color, "#64748b")
     bg_color = bg_colors.get(indicator.color, "#f1f5f9")
 
-    # Emoji mapping
-    emojis = {
-        "ready": "G",  # Green circle
-        "fixable": "Y",  # Yellow circle
-        "needs_work": "R",  # Red circle
-    }
-    emoji = emojis.get(indicator.status, "?")
-
-    # Status emoji based on color
-    status_emoji = {"green": "[GREEN]", "yellow": "[YELLOW]", "red": "[RED]"}.get(indicator.color, "[?]")
+    # Visual indicator using colored circles
+    status_visual = {
+        "green": "●",  # Green filled circle
+        "yellow": "●",  # Yellow filled circle
+        "red": "●",  # Red filled circle
+    }.get(indicator.color, "○")
 
     st.markdown(
         f"""
@@ -86,7 +82,7 @@ def render_readiness_indicator(report: Any) -> None:
             text-align: center;
             margin: 16px 0;
         ">
-            <div style="font-size: 48px; margin-bottom: 8px;">{status_emoji}</div>
+            <div style="font-size: 64px; color: {color}; margin-bottom: 8px;">{status_visual}</div>
             <div style="
                 font-size: 24px;
                 font-weight: bold;

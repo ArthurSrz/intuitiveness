@@ -97,6 +97,18 @@ from intuitiveness.quality.workflow import (
     quick_export,
 )
 
+# Instant Export (Spec 012: tabpfn-instant-export)
+from intuitiveness.quality.instant_export import (
+    InstantExporter,
+    instant_check_and_export,
+    export_clean_csv,
+)
+
+from intuitiveness.quality.models import (
+    ExportResult,
+    CleaningAction,
+)
+
 __all__ = [
     # Models
     "QualityReport",
@@ -160,4 +172,10 @@ __all__ = [
     "WorkflowResult",
     "run_60_second_workflow",
     "quick_export",
+    # Instant Export (Spec 012)
+    "InstantExporter",
+    "instant_check_and_export",
+    "export_clean_csv",
+    "ExportResult",
+    "CleaningAction",
 ]
