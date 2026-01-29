@@ -200,19 +200,24 @@ try:
 
     # Set the token if found
     if _token:
+        # CRITICAL FIX: Use ServiceClient.authorize() directly to bypass file cache
+        # The standard set_access_token() calls UserAuthenticationClient.set_token() which:
+        #   1. Calls ServiceClient.authorize() (in-memory) ✓
+        #   2. Writes token to CACHED_TOKEN_FILE (fails on read-only filesystem) ✗
+        # By calling ServiceClient.authorize() directly, we skip the file write entirely.
         try:
-            tabpfn_client.set_access_token(_token)
-        except PermissionError as e:
-            # Streamlit Cloud: Read-only filesystem, can't cache token
-            # This is fine - the token is already loaded in memory
-            logger.debug(f"Cannot cache TabPFN token (read-only filesystem): {e}")
-            # Manually set the token in config without caching
+            from tabpfn_client.config import ServiceClient, Config
+            ServiceClient.authorize(_token)
+            Config.is_initialized = True
+            logger.info("TabPFN authenticated via ServiceClient.authorize() (no file cache)")
+        except Exception as e:
+            logger.warning(f"ServiceClient.authorize() failed: {e}")
+            # Fallback: try the standard method (works on writable filesystems)
             try:
-                from tabpfn_client.config import UserAuthenticationClient
-                UserAuthenticationClient._access_token = _token
-                logger.info("TabPFN token set successfully (in-memory only)")
-            except Exception as fallback_error:
-                logger.warning(f"Failed to set TabPFN token: {fallback_error}")
+                tabpfn_client.set_access_token(_token)
+                logger.info("TabPFN authenticated via set_access_token()")
+            except PermissionError as perm_e:
+                logger.warning(f"Cannot authenticate TabPFN (read-only filesystem): {perm_e}")
     else:
         logger.warning(
             "No TabPFN token found. Configure in one of these ways:\n"
