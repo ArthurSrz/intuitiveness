@@ -61,55 +61,42 @@ def _setup_tabpfn_cache_dir():
 # Setup cache dir before any tabpfn imports
 _setup_tabpfn_cache_dir()
 
+# Flag to track if we've patched tabpfn_client
+_TABPFN_PATCHED = False
 
-def _ensure_tabpfn_cache_writable():
-    """
-    Patch tabpfn_client internals to use writable cache directory.
 
-    Called before each model initialization to handle cases where
-    the package tries to write to its installation directory.
+def _patch_tabpfn_cache_dir():
     """
+    Patch tabpfn_client.config.CACHE_DIR to use a writable directory.
+
+    This MUST be called after importing tabpfn_client but before using it.
+    The patch redirects all cache writes to /tmp/.tabpfn which is always
+    writable on Streamlit Cloud and other containerized environments.
+    """
+    global _TABPFN_PATCHED
+    if _TABPFN_PATCHED:
+        return
+
     try:
-        import tabpfn_client
-        # Get the package directory
-        pkg_dir = Path(tabpfn_client.__file__).parent
-        internal_cache = pkg_dir / ".tabpfn"
+        from tabpfn_client import config
 
-        # If the internal cache exists and is not writable, redirect it
-        if internal_cache.exists():
-            try:
-                test_file = internal_cache / ".write_test"
-                test_file.touch()
-                test_file.unlink()
-                # Writable, no action needed
-                return
-            except (PermissionError, OSError):
-                pass
-
-        # Try to create a symlink from internal cache to /tmp
+        # Create writable cache directory
         writable_cache = Path("/tmp/.tabpfn")
         writable_cache.mkdir(parents=True, exist_ok=True)
 
-        # Try to patch the config module if it exists
-        try:
-            from tabpfn_client import config
-            if hasattr(config, 'CACHE_DIR'):
-                config.CACHE_DIR = str(writable_cache)
-            if hasattr(config, 'TOKEN_FILE'):
-                config.TOKEN_FILE = str(writable_cache / "token")
-        except (ImportError, AttributeError):
-            pass
+        # Patch the CACHE_DIR constant
+        original_cache = getattr(config, 'CACHE_DIR', None)
+        config.CACHE_DIR = writable_cache
 
-        # Try to patch the ServiceClient if it has cache settings
-        try:
-            from tabpfn_client.service_client import ServiceClient
-            if hasattr(ServiceClient, '_cache_dir'):
-                ServiceClient._cache_dir = str(writable_cache)
-        except (ImportError, AttributeError):
-            pass
+        # Also patch the Path object if it exists
+        if hasattr(config, 'CACHE_DIR') and isinstance(config.CACHE_DIR, str):
+            config.CACHE_DIR = writable_cache
+
+        logger.info(f"Patched TabPFN CACHE_DIR: {original_cache} -> {writable_cache}")
+        _TABPFN_PATCHED = True
 
     except Exception as e:
-        logger.debug(f"Could not patch tabpfn_client cache: {e}")
+        logger.warning(f"Could not patch tabpfn_client cache dir: {e}")
 
 # Environment variable to control backend preference
 # Set TABPFN_PREFER_LOCAL=1 to prefer local inference
@@ -158,8 +145,11 @@ try:
     import tabpfn_client
     _TABPFN_CLIENT_AVAILABLE = True
 
+    # CRITICAL: Patch cache directory IMMEDIATELY after import
+    # This must happen before any TabPFN operations
+    _patch_tabpfn_cache_dir()
+
     # Auto-load token from Streamlit secrets, environment, or stored file
-    from pathlib import Path
 
     _token = None
 
@@ -309,8 +299,8 @@ class TabPFNWrapper:
             return False
 
         try:
-            # Ensure cache directory is writable before creating model
-            _ensure_tabpfn_cache_writable()
+            # Ensure cache directory patch is applied
+            _patch_tabpfn_cache_dir()
 
             if self.task_type == "classification":
                 self.model = ClientClassifier()
