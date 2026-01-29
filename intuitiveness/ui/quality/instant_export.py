@@ -334,7 +334,7 @@ def _render_readiness_indicator(result: Any) -> None:
         icon = "!"
         message = "Your data needs some attention"
 
-    # Build quality score display
+    # Build quality score section
     if result.validation_score is not None:
         score = result.validation_score
         if score >= 80:
@@ -350,83 +350,27 @@ def _render_readiness_indicator(result: Any) -> None:
             score_label = "Low"
             score_color = "#ef4444"
 
-        score_html = f"""
-            <div style="
-                margin-top: 16px;
-                padding-top: 16px;
-                border-top: 1px solid {color}40;
-            ">
-                <div style="font-size: 14px; color: #64748b; margin-bottom: 4px;">
-                    Quality Score
-                </div>
-                <div style="font-size: 36px; font-weight: bold; color: {score_color};">
-                    {score:.0f}/100
-                </div>
-                <div style="font-size: 14px; color: #64748b;">
-                    {score_label} — {_get_score_explanation(score)}
-                </div>
-            </div>
-        """
+        score_explanation = _get_score_explanation(score)
+        score_section = f'''<div style="margin-top: 16px; padding-top: 16px; border-top: 1px solid {color}40;">
+            <div style="font-size: 14px; color: #64748b; margin-bottom: 4px;">Quality Score</div>
+            <div style="font-size: 36px; font-weight: bold; color: {score_color};">{score:.0f}/100</div>
+            <div style="font-size: 14px; color: #64748b;">{score_label} — {score_explanation}</div>
+        </div>'''
     else:
-        score_html = f"""
-            <div style="
-                margin-top: 16px;
-                padding-top: 16px;
-                border-top: 1px solid {color}40;
-            ">
-                <div style="font-size: 14px; color: #64748b;">
-                    ⚡ Quick check completed in {result.processing_time_seconds:.1f}s
-                </div>
-                <div style="font-size: 12px; color: #94a3b8; margin-top: 4px;">
-                    Quality score unavailable (AI validation skipped)
-                </div>
-            </div>
-        """
+        time_str = f"{result.processing_time_seconds:.1f}"
+        score_section = f'''<div style="margin-top: 16px; padding-top: 16px; border-top: 1px solid {color}40;">
+            <div style="font-size: 14px; color: #64748b;">⚡ Quick check completed in {time_str}s</div>
+            <div style="font-size: 12px; color: #94a3b8; margin-top: 4px;">Quality score unavailable (AI validation skipped)</div>
+        </div>'''
 
-    st.markdown(
-        f"""
-        <div style="
-            background: {bg_color};
-            border: 3px solid {color};
-            border-radius: 16px;
-            padding: 24px;
-            text-align: center;
-            margin: 16px 0;
-        ">
-            <div style="
-                width: 64px;
-                height: 64px;
-                background: {color};
-                border-radius: 50%;
-                margin: 0 auto 16px;
-                display: flex;
-                align-items: center;
-                justify-content: center;
-                font-size: 32px;
-                font-weight: bold;
-                color: white;
-            ">
-                {icon}
-            </div>
-            <div style="
-                font-size: 24px;
-                font-weight: bold;
-                color: {color};
-                margin-bottom: 8px;
-            ">
-                {status}
-            </div>
-            <div style="
-                font-size: 16px;
-                color: #475569;
-            ">
-                {message}
-            </div>
-            {score_html}
-        </div>
-        """,
-        unsafe_allow_html=True,
-    )
+    html = f'''<div style="background: {bg_color}; border: 3px solid {color}; border-radius: 16px; padding: 24px; text-align: center; margin: 16px 0;">
+        <div style="width: 64px; height: 64px; background: {color}; border-radius: 50%; margin: 0 auto 16px; display: flex; align-items: center; justify-content: center; font-size: 32px; font-weight: bold; color: white;">{icon}</div>
+        <div style="font-size: 24px; font-weight: bold; color: {color}; margin-bottom: 8px;">{status}</div>
+        <div style="font-size: 16px; color: #475569;">{message}</div>
+        {score_section}
+    </div>'''
+
+    st.markdown(html, unsafe_allow_html=True)
 
 
 def _get_score_explanation(score: float) -> str:
