@@ -177,6 +177,24 @@ def _render_check_and_export_section(df: pd.DataFrame, target_column: str) -> No
     # Check if we have a previous result
     result = st.session_state.get(SESSION_KEY_INSTANT_RESULT)
 
+    # Explain what the check does (before they click)
+    if result is None:
+        with card():
+            st.markdown("### What happens when you check?")
+            st.markdown(
+                """
+                When you click **Check & Export**, we'll automatically:
+
+                1. **Clean your data** — Fill empty cells, fix formatting issues, remove unusable columns
+                2. **Test the quality** — Use an AI model to see if your data can reliably answer questions about your focus column
+                3. **Prepare for export** — Convert everything to a format ready for analysis tools
+
+                This takes about 10-20 seconds. No technical knowledge needed.
+                """
+            )
+
+        spacer(16)
+
     # Main action button
     col1, col2, col3 = st.columns([1, 2, 1])
     with col2:
@@ -255,6 +273,15 @@ def _render_result(result: Any) -> None:
         with col3:
             if result.validation_score is not None:
                 st.metric("Quality Score", f"{result.validation_score:.0f}/100")
+                # Explain what the score means
+                if result.validation_score >= 80:
+                    st.caption("Excellent — very reliable data")
+                elif result.validation_score >= 60:
+                    st.caption("Good — usable with minor issues")
+                elif result.validation_score >= 50:
+                    st.caption("Fair — may need review")
+                else:
+                    st.caption("Low — significant issues found")
             else:
                 st.metric("Check Time", f"{result.processing_time_seconds:.1f}s")
 
@@ -293,6 +320,11 @@ def _render_result(result: Any) -> None:
         _render_export_button(result)
     else:
         _render_not_ready_guidance(result)
+
+    spacer(16)
+
+    # Explain how the quality check works
+    _render_how_it_works(result)
 
 
 def _render_readiness_indicator(result: Any) -> None:
@@ -404,8 +436,46 @@ def _render_not_ready_guidance(result: Any) -> None:
 
         st.markdown("")
         st.markdown(
-            "💡 **Tip:** You can still try the detailed analysis mode for "
-            "more insights into what needs fixing."
+            "💡 **Tip:** Check the 'How does this work?' section below "
+            "to understand what the quality check found."
+        )
+
+
+def _render_how_it_works(result: Any) -> None:
+    """Explain how the quality check works in plain language."""
+    with st.expander("ℹ️ How does this work?", expanded=False):
+        st.markdown(
+            """
+            ### The Technology Behind Your Quality Score
+
+            We use **TabPFN**, an AI system developed by researchers and published in the
+            scientific journal *Nature*. Here's what it does in plain terms:
+
+            **Think of it like a smart assistant that has seen millions of datasets.**
+
+            1. **It learned patterns from 100 million example datasets**
+               - Before ever seeing your data, it was trained to recognize what makes data useful
+               - It knows common problems: missing values, inconsistent formats, columns that don't help
+
+            2. **It checks if your data can answer questions**
+               - We ask: "Can this data reliably tell us about the focus column you selected?"
+               - It tries to find patterns and reports how confident it is
+
+            3. **The Quality Score (0-100) means:**
+               - **80+**: Your data has clear patterns — analysis results will be reliable
+               - **60-79**: Good data with some noise — results will be useful but not perfect
+               - **50-59**: Borderline — the data might work, but consider adding more rows or cleaning up issues
+               - **Below 50**: The AI couldn't find reliable patterns — data needs work before analysis
+
+            **What we cleaned automatically:**
+            - Empty cells → filled with typical values from that column
+            - Text columns → converted to numbers so analysis tools can read them
+            - Unusable columns → removed (columns with only one value, or mostly empty)
+            - Extreme values → replaced with reasonable estimates
+
+            **Your data stays private** — we only send a small sample for the quality check,
+            and nothing is stored after the check completes.
+            """
         )
 
 
