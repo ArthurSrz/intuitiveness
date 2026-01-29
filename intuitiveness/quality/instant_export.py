@@ -103,6 +103,7 @@ class InstantExporter:
         self.enable_tabpfn_validation = enable_tabpfn_validation
         self.max_api_calls = max_api_calls
         self._api_calls_used = 0
+        self._validation_error: Optional[str] = None  # Track why validation failed
 
     def check_and_export(
         self,
@@ -216,6 +217,7 @@ class InstantExporter:
             target_column=target_column,
             task_type=task_type,
             validation_score=validation_score,
+            validation_error=self._validation_error,
             processing_time_seconds=processing_time,
             api_calls_used=self._api_calls_used,
         )
@@ -444,10 +446,12 @@ class InstantExporter:
         Uses only 1-2 API calls (vs 50-100+ in full assessment).
 
         Returns validation score (0-100) or None if unavailable.
+        Sets self._validation_error if validation fails.
         """
-        available, _ = is_tabpfn_available()
+        available, backend = is_tabpfn_available()
         if not available:
-            logger.info("TabPFN not available, skipping validation")
+            self._validation_error = "TabPFN not installed. Run: pip install tabpfn-client"
+            logger.error(self._validation_error)
             return None
 
         try:
@@ -479,6 +483,7 @@ class InstantExporter:
                 )
 
             # Single TabPFN fit & score
+            logger.info(f"Initializing TabPFN with {backend} backend...")
             wrapper = TabPFNWrapper(task_type=task_type)
             wrapper.fit(X_train, y_train)
             self._api_calls_used += 1
@@ -492,7 +497,8 @@ class InstantExporter:
             return validation_score
 
         except Exception as e:
-            logger.warning(f"TabPFN validation failed: {e}")
+            self._validation_error = f"TabPFN validation failed: {str(e)}"
+            logger.error(self._validation_error)
             return None
 
     # ========================================================================

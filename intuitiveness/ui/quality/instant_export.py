@@ -358,9 +358,15 @@ def _render_readiness_indicator(result: Any) -> None:
         </div>'''
     else:
         time_str = f"{result.processing_time_seconds:.1f}"
+        # Show validation error if available, otherwise generic message
+        error_msg = getattr(result, 'validation_error', None)
+        if error_msg:
+            error_display = f'<div style="font-size: 12px; color: #ef4444; margin-top: 4px;">⚠️ {error_msg}</div>'
+        else:
+            error_display = '<div style="font-size: 12px; color: #94a3b8; margin-top: 4px;">Quality score unavailable (AI validation skipped)</div>'
         score_section = f'''<div style="margin-top: 16px; padding-top: 16px; border-top: 1px solid {color}40;">
             <div style="font-size: 14px; color: #64748b;">⚡ Quick check completed in {time_str}s</div>
-            <div style="font-size: 12px; color: #94a3b8; margin-top: 4px;">Quality score unavailable (AI validation skipped)</div>
+            {error_display}
         </div>'''
 
     html = f'''<div style="background: {bg_color}; border: 3px solid {color}; border-radius: 16px; padding: 24px; text-align: center; margin: 16px 0;">

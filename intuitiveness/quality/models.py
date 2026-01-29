@@ -910,6 +910,7 @@ class ExportResult:
 
     # Optional validation
     validation_score: Optional[float] = None  # 0-100 if TabPFN validation ran
+    validation_error: Optional[str] = None  # Why validation failed (if it did)
 
     # Performance
     processing_time_seconds: float = 0.0
