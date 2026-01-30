@@ -1044,3 +1044,73 @@ const endpoint = parent_type === "concept"
 **File Affected**: Grafo MCP Server at `/Users/arthursarazin/Documents/ontoKit/grafo-mcp-server/src/index.ts`
 
 **Lesson**: When MCP tools fail, investigate the underlying API directly with curl to identify endpoint mismatches.
+
+---
+
+## TabPFN Permission Denied on Streamlit Cloud (2026-01-29)
+
+**Problem**: TabPFN validation fails on Streamlit Cloud with:
+```
+ERROR:intuitiveness.quality.instant_export:TabPFN validation failed: [Errno 13] Permission denied: '/home/adminuser/venv/lib/python3.13/site-packages/tabpfn_client/.tabpfn'
+```
+
+**Root Cause**: Python's import system and module-level constant initialization order:
+
+1. `tabpfn_client/constants.py` defines: `CACHE_DIR = Path(__file__).parent.resolve() / ".tabpfn"`
+2. Other modules import and compute derived constants at **import time**:
+   ```python
+   # service_wrapper.py line 30
+   from tabpfn_client.constants import CACHE_DIR
+   CACHED_TOKEN_FILE = CACHE_DIR / "config"  # Computed at import!
+   ```
+3. If we patch `constants.CACHE_DIR` **after** these imports, the derived constant `CACHED_TOKEN_FILE` still points to the old (read-only) path
+4. Streamlit Cloud's filesystem is read-only in the package directory, causing permission errors
+
+**Key Insight**: Module-level constants in Python are computed **once** at import time. If module B imports `CACHE_DIR` from module A and computes `CONSTANT = CACHE_DIR / "file"`, patching A's CACHE_DIR later won't update B's CONSTANT.
+
+**Solution**: Patch `constants.CACHE_DIR` **BEFORE** importing any other tabpfn_client modules:
+
+```python
+# CRITICAL FIX: Patch constants FIRST
+import tempfile
+from pathlib import Path
+import tabpfn_client.constants
+
+cache_dir = Path(tempfile.gettempdir()) / "tabpfn_cache"
+cache_dir.mkdir(parents=True, exist_ok=True)
+tabpfn_client.constants.CACHE_DIR = cache_dir
+
+# NOW import everything else (they'll use the patched path)
+from tabpfn_client import TabPFNClassifier, TabPFNRegressor
+
+# Patch any remaining references in already-imported modules
+_patch_all_tabpfn_cache_dirs()  # Patches CACHED_TOKEN_FILE, etc.
+```
+
+**Implementation Details**:
+The `_patch_all_tabpfn_cache_dirs()` function must also patch derived constants:
+
+```python
+def _patch_all_tabpfn_cache_dirs():
+    # ... patch CACHE_DIR in all modules ...
+
+    # CRITICAL: Also patch module-level constants computed from CACHE_DIR
+    import tabpfn_client.service_wrapper
+    if hasattr(tabpfn_client.service_wrapper, 'CACHED_TOKEN_FILE'):
+        tabpfn_client.service_wrapper.CACHED_TOKEN_FILE = cache_dir / "config"
+```
+
+**Files Modified**:
+- `intuitiveness/quality/tabpfn_wrapper.py`: Import order fix (lines 133-158)
+- `intuitiveness/quality/tabpfn_wrapper.py`: Enhanced patching function (lines 32-91)
+
+**Verification on Streamlit Cloud**:
+```
+INFO:intuitiveness.quality.tabpfn_wrapper:TabPFN cache redirected to /tmp/tabpfn_cache
+INFO:intuitiveness.quality.tabpfn_wrapper:Patched CACHED_TOKEN_FILE to /tmp/tabpfn_cache/config
+INFO:intuitiveness.quality.tabpfn_wrapper:Patched TabPFN CACHE_DIR in modules [constants, client, service_wrapper, config] to /tmp/tabpfn_cache
+INFO:intuitiveness.quality.tabpfn_wrapper:TabPFN authenticated via ServiceClient.authorize() (no file cache)
+```
+✅ No more permission errors!
+
+**Lesson**: When monkey-patching third-party libraries, understand the import chain and initialization order. Patch the **source of truth** (constants.py) BEFORE any downstream modules import from it. Also patch any derived constants that were already computed.
