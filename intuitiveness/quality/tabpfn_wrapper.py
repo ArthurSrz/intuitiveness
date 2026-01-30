@@ -13,88 +13,59 @@ import logging
 import signal
 import functools
 import os
+import sys
+import tempfile
 from dataclasses import dataclass
 from typing import Optional, Literal, Tuple, Any, List
 from concurrent.futures import ThreadPoolExecutor, TimeoutError as FuturesTimeoutError
 import numpy as np
 import pandas as pd
 from pathlib import Path
+from types import ModuleType
 
 logger = logging.getLogger(__name__)
 
 # ============================================================================
-# FIX FOR STREAMLIT CLOUD: Patch CACHE_DIR in ALL tabpfn_client modules
+# CRITICAL FIX FOR STREAMLIT CLOUD: Inject fake constants BEFORE tabpfn imports
 # ============================================================================
-# Flag to track if we've patched tabpfn_client
-_TABPFN_PATCHED = False
+# Problem: tabpfn_client modules import CACHE_DIR and compute derived constants
+# (like CACHED_TOKEN_FILE) at module load time. Any post-import patching is too late.
+#
+# Solution: Use sys.modules to inject a fake constants module BEFORE any
+# tabpfn_client modules are imported. This guarantees all imports see the patched path.
+# ============================================================================
 
+_cache_dir = Path(tempfile.gettempdir()) / "tabpfn_cache"
+_cache_dir.mkdir(parents=True, exist_ok=True)
 
-def _patch_all_tabpfn_cache_dirs():
-    """
-    Patch CACHE_DIR in all tabpfn_client modules to use /tmp.
+# Check if tabpfn_client.constants is already loaded
+if "tabpfn_client.constants" in sys.modules:
+    # Already loaded - patch it directly
+    logger.warning(f"[INIT] tabpfn_client.constants already loaded - patching existing module")
+    sys.modules["tabpfn_client.constants"].CACHE_DIR = _cache_dir
+else:
+    # Not loaded yet - inject a fake module
+    logger.info(f"[INIT] Injecting fake tabpfn_client.constants module with CACHE_DIR={_cache_dir}")
 
-    CRITICAL: This must be called AFTER importing tabpfn_client modules
-    but BEFORE using any TabPFN classes.
+    # Create fake constants module
+    _fake_constants = ModuleType("tabpfn_client.constants")
+    _fake_constants.CACHE_DIR = _cache_dir
 
-    The tabpfn_client library writes to CACHE_DIR in two places:
-    1. service_wrapper.py: Token caching (CACHED_TOKEN_FILE)
-    2. client.py: Dataset UID caching (DatasetUIDCacheManager)
+    # Add ModelVersion enum (required by estimator.py)
+    from enum import Enum
+    class ModelVersion(str, Enum):
+        V2 = "v2"
+        V2_5 = "v2.5"
+    _fake_constants.ModelVersion = ModelVersion
 
-    Each module has its own local reference to CACHE_DIR imported from
-    constants.py, so we must patch ALL of them.
+    # Inject into sys.modules BEFORE any tabpfn imports
+    sys.modules["tabpfn_client.constants"] = _fake_constants
+    logger.info(f"[INIT] Fake constants module injected successfully")
 
-    CRITICAL FIX: We must also patch module-level constants that were
-    computed from CACHE_DIR at import time (e.g., CACHED_TOKEN_FILE).
-    """
-    global _TABPFN_PATCHED
-    if _TABPFN_PATCHED:
-        return
+# NOW when tabpfn_client modules import, they'll get our fake constants
+# No need to manually patch service_wrapper - it will import the patched CACHE_DIR
 
-    import tempfile
-
-    # Create writable cache directory
-    cache_dir = Path(tempfile.gettempdir()) / "tabpfn_cache"
-    cache_dir.mkdir(parents=True, exist_ok=True)
-
-    patched_modules = []
-
-    # Patch CACHE_DIR in ALL modules that reference it
-    try:
-        import tabpfn_client.constants
-        tabpfn_client.constants.CACHE_DIR = cache_dir
-        patched_modules.append("constants")
-    except (ImportError, AttributeError):
-        pass
-
-    try:
-        import tabpfn_client.client
-        tabpfn_client.client.CACHE_DIR = cache_dir
-        patched_modules.append("client")
-    except (ImportError, AttributeError):
-        pass
-
-    try:
-        import tabpfn_client.service_wrapper
-        tabpfn_client.service_wrapper.CACHE_DIR = cache_dir
-        # CRITICAL: Also patch CACHED_TOKEN_FILE which was computed from old CACHE_DIR
-        if hasattr(tabpfn_client.service_wrapper, 'CACHED_TOKEN_FILE'):
-            tabpfn_client.service_wrapper.CACHED_TOKEN_FILE = cache_dir / "config"
-            logger.info(f"Patched CACHED_TOKEN_FILE to {cache_dir / 'config'}")
-        patched_modules.append("service_wrapper")
-    except (ImportError, AttributeError):
-        pass
-
-    # Also patch config module (for completeness)
-    try:
-        import tabpfn_client.config
-        if hasattr(tabpfn_client.config, 'CACHE_DIR'):
-            tabpfn_client.config.CACHE_DIR = cache_dir
-            patched_modules.append("config")
-    except (ImportError, AttributeError):
-        pass
-
-    _TABPFN_PATCHED = True
-    logger.info(f"Patched TabPFN CACHE_DIR in modules [{', '.join(patched_modules)}] to {cache_dir}")
+# The patching is now done at module level (above) BEFORE any imports
 
 # Environment variable to control backend preference
 # Set TABPFN_PREFER_LOCAL=1 to prefer local inference
@@ -138,26 +109,12 @@ _TABPFN_CLIENT_AVAILABLE = False
 _TABPFN_LOCAL_AVAILABLE = False
 
 try:
-    # CRITICAL FIX: Patch constants.CACHE_DIR BEFORE importing anything else
-    # This ensures all derived constants (CACHED_TOKEN_FILE, etc.) use the patched path
-    import tempfile
-    import tabpfn_client.constants
-
-    _cache_dir = Path(tempfile.gettempdir()) / "tabpfn_cache"
-    _cache_dir.mkdir(parents=True, exist_ok=True)
-
-    # Patch the source of truth FIRST
-    tabpfn_client.constants.CACHE_DIR = _cache_dir
-    logger.info(f"TabPFN cache redirected to {_cache_dir}")
-
-    # NOW import TabPFN classes (they'll use the patched CACHE_DIR)
+    # Import TabPFN classes (CACHE_DIR already patched above at module level)
     from tabpfn_client import TabPFNClassifier as ClientClassifier
     from tabpfn_client import TabPFNRegressor as ClientRegressor
     import tabpfn_client
     _TABPFN_CLIENT_AVAILABLE = True
-
-    # Patch any remaining modules that imported CACHE_DIR before we patched it
-    _patch_all_tabpfn_cache_dirs()
+    logger.info(f"[INIT] TabPFN client available (cache at {_cache_dir})")
 
     # Auto-load token from Streamlit secrets, environment, or stored file
 
@@ -314,9 +271,6 @@ class TabPFNWrapper:
             return False
 
         try:
-            # Ensure cache directory patch is applied
-            _patch_all_tabpfn_cache_dirs()
-
             if self.task_type == "classification":
                 self.model = ClientClassifier()
             else:
