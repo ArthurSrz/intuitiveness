@@ -329,61 +329,137 @@ def render_step_header(step: dict):
 def inject_right_sidebar_css():
     """
     Inject CSS for the fixed right sidebar progress indicator.
-    
+
     This creates a persistent vertical progress bar showing the current
     navigation level (L0-L4) and phase (descent/ascent).
     """
     st.markdown("""
     <style>
-    /* Fixed right sidebar for progress indicator */
-    .right-sidebar {
+    /* Right sidebar container - fixed position, small and compact */
+    .right-progress-sidebar {
         position: fixed;
-        right: 0;
-        top: 0;
-        height: 100vh;
-        width: 60px;
-        background: white;
-        border-left: 1px solid #e5e7eb;
-        display: flex;
-        flex-direction: column;
-        align-items: center;
-        justify-content: center;
+        right: 5px;
+        top: 50%;
+        transform: translateY(-50%);
+        height: auto;
+        width: 50px;
+        background: linear-gradient(180deg, #fafaf9, #f5f5f4);
+        border: 1px solid #e7e5e4;
+        border-radius: 0.5rem;
         z-index: 999;
-        padding: 1rem 0;
-    }
-    
-    .progress-indicator {
         display: flex;
         flex-direction: column;
-        gap: 0.5rem;
+        justify-content: center;
+        align-items: center;
+        padding: 15px 10px;
+        box-shadow: 0 1px 3px rgba(0,0,0,0.05);
     }
-    
-    .level-dot {
-        width: 24px;
-        height: 24px;
-        border-radius: 50%;
-        border: 2px solid #e5e7eb;
-        background: white;
+
+    /* Progress track container */
+    .progress-track {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 0;
+    }
+
+    /* Level container with emoji */
+    .level-container {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 8px;
+    }
+
+    .level-emoji {
+        font-size: 18px;
+        line-height: 1;
+    }
+
+    /* Transition bars (horizontal thick lines) */
+    .transition-bar {
+        width: 30px;
+        height: 8px;
+        border-radius: 4px;
+        transition: all 0.3s ease;
+        position: relative;
         display: flex;
         align-items: center;
         justify-content: center;
-        font-size: 0.7rem;
+    }
+
+    .transition-bar.completed {
+        background: #22c55e;
+    }
+
+    .transition-bar.current-descent {
+        background: #2563eb;
+    }
+
+    .transition-bar.current-ascent {
+        background: #f59e0b;
+    }
+
+    .transition-bar.pending {
+        background: #a8a29e;
+    }
+
+    /* Vertical connectors between bars */
+    .connector {
+        width: 3px;
+        height: 80px;
+        background: #e7e5e4;
+    }
+
+    .connector.completed {
+        background: #22c55e;
+    }
+
+    /* Pulsing glow animation for current bar */
+    @keyframes glow-descent {
+        0%, 100% {
+            box-shadow: 0 0 4px #2563eb;
+        }
+        50% {
+            box-shadow: 0 0 12px #2563eb, 0 0 20px #2563eb;
+        }
+    }
+
+    @keyframes glow-ascent {
+        0%, 100% {
+            box-shadow: 0 0 4px #f59e0b;
+        }
+        50% {
+            box-shadow: 0 0 12px #f59e0b, 0 0 20px #f59e0b;
+        }
+    }
+
+    .transition-bar.current-descent {
+        animation: glow-descent 1.5s ease-in-out infinite;
+    }
+
+    .transition-bar.current-ascent {
+        animation: glow-ascent 1.5s ease-in-out infinite;
+    }
+
+    /* Mode label at top */
+    .progress-mode-label {
+        font-size: 0.75rem;
         font-weight: 600;
-        color: #9ca3af;
-        transition: all 0.3s ease;
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+        margin-bottom: 20px;
+        writing-mode: vertical-rl;
+        text-orientation: mixed;
+        transform: rotate(180deg);
     }
-    
-    .level-dot.active {
-        background: #002fa7;
-        border-color: #002fa7;
-        color: white;
-        transform: scale(1.2);
+
+    .progress-mode-label.descent {
+        color: #2563eb;
     }
-    
-    .level-dot.completed {
-        background: #10b981;
-        border-color: #10b981;
-        color: white;
+
+    .progress-mode-label.ascent {
+        color: #f59e0b;
     }
     </style>
     """, unsafe_allow_html=True)
