@@ -52,7 +52,8 @@ def render_upload_page(step: Dict, skip_header: bool = False) -> None:
         render_step_header(step)
 
     # Check if data is already loaded (from search)
-    raw_data = st.session_state.raw_data
+    # Defensive access: raw_data might be None, so use .get() with fallback
+    raw_data = st.session_state.get('raw_data') or {}
     if raw_data:
         _render_uploaded_files(raw_data)
         _render_connection_wizard(raw_data)
@@ -120,6 +121,9 @@ def _render_uploaded_files(raw_data: Dict[str, pd.DataFrame]) -> None:
                     try:
                         df, info_msg = smart_load_csv(additional_file)
                         if df is not None and not df.empty:
+                            # Defensive: ensure raw_data is still a dict before assignment
+                            if not isinstance(st.session_state.get('raw_data'), dict):
+                                st.session_state.raw_data = {}
                             st.session_state.raw_data[additional_file.name] = df
                             st.success(f"✅ Added {additional_file.name}")
                             st.rerun()
@@ -294,7 +298,9 @@ def _render_search_interface() -> None:
         st.session_state.datagouv_loaded_datasets[dataset_name] = loaded_df
 
         # Also add to raw_data for descent-ascent workflow
-        if "raw_data" not in st.session_state:
+        # Defensive: ensure raw_data is a dict before dict operations
+        raw_data = st.session_state.get("raw_data", {})
+        if not isinstance(raw_data, dict):
             st.session_state.raw_data = {}
         st.session_state.raw_data[dataset_name] = loaded_df
 

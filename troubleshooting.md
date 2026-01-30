@@ -1114,3 +1114,118 @@ INFO:intuitiveness.quality.tabpfn_wrapper:TabPFN authenticated via ServiceClient
 ✅ No more permission errors!
 
 **Lesson**: When monkey-patching third-party libraries, understand the import chain and initialization order. Patch the **source of truth** (constants.py) BEFORE any downstream modules import from it. Also patch any derived constants that were already computed.
+
+---
+
+## TypeError: NoneType Object Does Not Support Item Assignment - upload.py (2026-01-30)
+
+**Problem**: Loading CSV from data.gouv.fr crashes with:
+```
+TypeError at line 299: st.session_state.raw_data[dataset_name] = loaded_df
+                        ~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^
+TypeError: 'NoneType' object does not support item assignment
+```
+
+**Root Cause**: **Inconsistent initialization pattern** for `st.session_state.raw_data` across the codebase.
+
+The initialization chain:
+1. **App startup** (`session_manager.py` line 463): `SessionStateKeys.RAW_DATA: None` - initialized to `None`, not `{}`
+2. **Upload page** (`upload.py` line 55): `raw_data = st.session_state.raw_data` - gets `None`
+3. **CSV load handler** (`upload.py` line 297-299):
+   ```python
+   if "raw_data" not in st.session_state:  # WRONG CHECK
+       st.session_state.raw_data = {}
+   st.session_state.raw_data[dataset_name] = loaded_df  # CRASH!
+   ```
+
+The condition `"raw_data" not in st.session_state` checks for **key existence**, but:
+- The key **DOES exist** (initialized during app startup)
+- The value **is None** (not a dict)
+- Therefore, line 298 is **SKIPPED**
+- Line 299 tries `None[dataset_name] = loaded_df` → **TypeError**
+
+**Comparison of Patterns**:
+
+**Broken Pattern** (upload.py):
+```python
+if "raw_data" not in st.session_state:  # Only checks existence
+    st.session_state.raw_data = {}
+st.session_state.raw_data[dataset_name] = loaded_df  # Fails if None
+```
+
+**Correct Pattern** (datagouv_search.py):
+```python
+raw_data = st.session_state.get("raw_data", {})
+if not isinstance(raw_data, dict):  # TYPE CHECK!
+    st.session_state.raw_data = {}
+    raw_data = {}
+```
+
+**Solution**:
+
+**File**: `/Users/arthursarazin/Documents/data_redesign_method/intuitiveness/app/pages/upload.py`
+
+**Fix 1 - Line 55-56** (defensive access):
+```python
+# BEFORE (fragile - assumes raw_data exists and is truthy)
+raw_data = st.session_state.raw_data
+
+# AFTER (defensive - handles None value)
+raw_data = st.session_state.get('raw_data') or {}
+```
+
+**Fix 2 - Lines 297-302** (type-safe initialization):
+```python
+# BEFORE (wrong - only checks key existence)
+if "raw_data" not in st.session_state:
+    st.session_state.raw_data = {}
+st.session_state.raw_data[dataset_name] = loaded_df
+
+# AFTER (correct - checks type before dict operation)
+raw_data = st.session_state.get("raw_data", {})
+if not isinstance(raw_data, dict):
+    st.session_state.raw_data = {}
+st.session_state.raw_data[dataset_name] = loaded_df
+```
+
+**Fix 3 - Lines 123-127** (additional file upload):
+```python
+# BEFORE (assumed session_state.raw_data is always dict)
+st.session_state.raw_data[additional_file.name] = df
+
+# AFTER (defensive check before assignment)
+if not isinstance(st.session_state.get('raw_data'), dict):
+    st.session_state.raw_data = {}
+st.session_state.raw_data[additional_file.name] = df
+```
+
+**Why It Happened**:
+- `session_manager.py` initializes `RAW_DATA: None` to indicate "no data loaded yet"
+- Other code paths (like basket continue) assign `st.session_state.raw_data = {}` (a dict)
+- Upload page assumed "if the key exists, it must be a dict" (wrong!)
+- Missing type check allowed `None` to pass through to dict assignment
+
+**Prevention Pattern**:
+
+**Always use defensive access for session state**:
+```python
+# ✅ GOOD: Type-safe with fallback
+value = st.session_state.get('key') or default_value
+if not isinstance(value, expected_type):
+    st.session_state['key'] = default_value
+
+# ❌ BAD: Assumes key exists and has correct type
+value = st.session_state.key
+
+# ❌ BAD: Only checks existence, not type
+if 'key' not in st.session_state:
+    st.session_state['key'] = default_value
+```
+
+**Related Bugs in History**: Similar issues occurred with DataFrame truth checks (see "DataFrame Truthiness Check Error" and "ValueError: DataFrame Truth Value Ambiguous" entries above).
+
+**Lesson**: When accessing Streamlit session state:
+1. **Never assume** a key's value type matches initialization
+2. **Always use `.get()` with defaults** instead of direct access
+3. **Add type checks** (`isinstance()`) before type-specific operations (dict subscripting, `.empty`, etc.)
+4. **Consider initializing collections** to empty containers (`{}`, `[]`) instead of `None` in `session_manager.py`
