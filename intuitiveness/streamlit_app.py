@@ -580,15 +580,105 @@ def _render_free_mode():
         render_free_navigation_main()
 
 
+def get_descent_transition(current_step: int) -> int:
+    """Map 6 descent steps (0-5) to 5 transitions (0-4)."""
+    if current_step <= 1:
+        return 0  # L4 phase (Upload + Entities)
+    elif current_step == 2:
+        return 1  # L3 phase (Domains)
+    elif current_step == 3:
+        return 2  # L2 phase (Features)
+    elif current_step == 4:
+        return 3  # L1 phase (Aggregation)
+    else:
+        return 4  # L0 phase (Results/complete)
+
+
+def get_ascent_transition(ascent_level: int) -> int:
+    """Map ascent level (0-3) directly to transition index."""
+    return ascent_level
+
+
 def render_vertical_progress_sidebar():
     """
     Render the vertical progress indicator on the right side.
-    
+
     Shows current level (L0-L4) and phase (descent/ascent).
     """
-    # Implementation placeholder - kept from original
-    # This function renders the fixed progress bar on the right side
-    pass
+    # Determine mode and current position
+    nav_mode = st.session_state.get('nav_mode', 'guided')
+    loaded_session = st.session_state.get('loaded_session_graph', False)
+
+    # Ascent mode: free exploration OR loaded session graph
+    is_ascent = (nav_mode == 'free') or loaded_session
+
+    if is_ascent:
+        # Ascent: L0 → L3 (progress goes UP, so we render bottom-to-top visually)
+        ascent_level = st.session_state.get('ascent_level', 0)
+        current_transition = get_ascent_transition(ascent_level)
+        mode_class = "ascent"
+        mode_label = t("ascent_mode_label")
+        # In ascent, transitions are ordered from L0 (bottom) to L3 (top)
+        # Visually: index 0 = bottom, index 3 = top
+        # So we need to render in reverse order (3, 2, 1, 0) for top-to-bottom HTML
+        transitions = [(3, "🔗"), (2, "📋"), (1, "📐"), (0, "🎯")]  # L3, L2, L1, L0
+    else:
+        # Descent: L4 → L0 (progress goes DOWN)
+        current_step = st.session_state.get('current_step', 0)
+        current_transition = get_descent_transition(current_step)
+        mode_class = "descent"
+        mode_label = t("descent_mode_label")
+        # In descent, transitions are ordered from L4 (top) to L0/Datum (bottom)
+        # 🧶 L4, 🔗 L3, 📋 L2, 📐 L1, 🎯 L0
+        transitions = [(0, "🧶"), (1, "🔗"), (2, "📋"), (3, "📐"), (4, "🎯")]
+
+    # Build HTML
+    html_parts = [
+        f'<div class="right-progress-sidebar">',
+        f'<div class="progress-mode-label {mode_class}">{mode_label}</div>',
+        f'<div class="progress-track">'
+    ]
+
+    for i, (trans_idx, label) in enumerate(transitions):
+        # Determine state of this transition
+        if is_ascent:
+            # Ascent: completed if ascent_level > trans_idx
+            if ascent_level > trans_idx:
+                bar_class = "completed"
+                is_current = False
+            elif ascent_level == trans_idx:
+                bar_class = f"current-{mode_class}"
+                is_current = True
+            else:
+                bar_class = "pending"
+                is_current = False
+        else:
+            # Descent: completed if current_transition > trans_idx
+            if current_transition > trans_idx:
+                bar_class = "completed"
+                is_current = False
+            elif current_transition == trans_idx:
+                bar_class = f"current-{mode_class}"
+                is_current = True
+            else:
+                bar_class = "pending"
+                is_current = False
+
+        # Add level with emoji and transition bar
+        html_parts.append(f'<div class="level-container">')
+        html_parts.append(f'<div class="level-emoji">{label}</div>')
+        html_parts.append(f'<div class="transition-bar {bar_class}"></div>')
+        html_parts.append(f'</div>')
+
+        # Add connector (except after the last bar)
+        if i < len(transitions) - 1:
+            connector_class = "completed" if bar_class == "completed" else ""
+            html_parts.append(f'<div class="connector {connector_class}"></div>')
+
+    html_parts.append('</div>')  # Close progress-track
+    html_parts.append('</div>')  # Close right-progress-sidebar
+
+    st.markdown(''.join(html_parts), unsafe_allow_html=True)
 
 
 # Placeholder functions for features still in original file
