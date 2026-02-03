@@ -53,10 +53,46 @@ cd src [ONLY COMMANDS FOR ACTIVE TECHNOLOGIES][ONLY COMMANDS FOR ACTIVE TECHNOLO
 
 ## Code Style
 
-- I do spec-driven development, everything you code should comply with the constitution (/Users/arthursarazin/Documents/data_redesign_method/.specify/memory/constitution.md). 
+- I do spec-driven development, everything you code should comply with the constitution (/Users/arthursarazin/Documents/data_redesign_method/.specify/memory/constitution.md).
 - All tests should be run with playwright MCP as I pay attention to interactions with the user interface.
 - I am a non-programmer and I like code that is easy to read and understand. Please use clear and descriptive names for variables, functions, and classes.
 - When I meet a bug and find the solution, I like to have a troubleshooting.md with the problem and the solution documented for future reference.
+
+## Lessons Learned
+
+### PyPI Token Authentication (Feb 2024)
+
+**Problem:** Getting `403 Forbidden` error when uploading to Test PyPI with "Invalid or non-existent authentication information"
+
+**Root Cause:** Using a **production PyPI token** in the `[testpypi]` section of `~/.pypirc`
+
+**Token Format Identification:**
+- Production PyPI tokens: `pypi-AgEIcHlwaS5vcmcC...` (contains base64 for "pypi.org")
+- Test PyPI tokens: `pypi-AgENdGVzdC5weXBp...` (contains base64 for "test.pypi")
+
+**Solution:**
+1. Test PyPI and production PyPI are **separate systems** with separate authentication
+2. Generate tokens from the correct server:
+   - Test PyPI: https://test.pypi.org/manage/account/token/
+   - Production: https://pypi.org/manage/account/token/
+3. Each `[testpypi]` and `[pypi]` section in `~/.pypirc` needs its corresponding token
+4. Token scope must be "Entire account" for first upload
+
+**Best Practice:**
+- For well-tested packages (passing `twine check`, local tests, examples), **skip Test PyPI** and publish directly to production
+- Test PyPI is mainly useful for experimental packages or testing upload mechanics
+- Always verify token format matches the target server
+
+**~/.pypirc structure:**
+```ini
+[testpypi]
+username = __token__
+password = pypi-AgENdGVzdC5weXBp...  # ← Must be from test.pypi.org
+
+[pypi]
+username = __token__
+password = pypi-AgEIcHlwaS5vcmcC...  # ← Must be from pypi.org
+```
 
 
 ## Recent Changes
