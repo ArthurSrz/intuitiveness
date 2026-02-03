@@ -35,12 +35,11 @@ from intuitiveness.interactive import Neo4jDataModel, DataModelNode
 
 def render_upload_page(step: Dict, skip_header: bool = False) -> None:
     """
-    Render Step 0: Search and load data from data.gouv.fr.
+    Render Step 0: Cart-based dataset selection workflow.
 
-    This page handles:
-    1. Display uploaded files with L4 file list (Spec 003: FR-001, FR-002)
-    2. Run AI-powered connection wizard
-    3. Show data.gouv.fr search interface (Spec 008)
+    This page handles two modes:
+    1. Selection Mode: Search/upload/demo data + cart building
+    2. Processing Mode: Connection wizard and analysis preparation
 
     Args:
         step: Step configuration dictionary
@@ -51,14 +50,53 @@ def render_upload_page(step: Dict, skip_header: bool = False) -> None:
     if not skip_header:
         render_step_header(step)
 
-    # Check if data is already loaded (from search)
-    # Defensive access: raw_data might be None, so use .get() with fallback
-    raw_data = st.session_state.get('raw_data') or {}
-    if raw_data:
-        _render_uploaded_files(raw_data)
-        _render_connection_wizard(raw_data)
+    # Determine mode: selection (cart building) or processing (wizard)
+    cart_mode = st.session_state.get('cart_mode', 'selection')
+
+    if cart_mode == 'selection':
+        _render_selection_mode()
     else:
-        _render_search_interface()
+        _render_processing_mode()
+
+
+def _render_selection_mode() -> None:
+    """
+    Render selection mode: upload/search/demo interfaces + cart preview.
+
+    Users can add multiple datasets to cart before starting analysis.
+    """
+    from intuitiveness.ui.cart import render_cart_preview_grid, render_cart_state_indicator
+
+    # State indicator
+    render_cart_state_indicator()
+
+    # Cart preview (if not empty)
+    from intuitiveness.app.models.cart import CartManager
+    cart = CartManager()
+
+    if not cart.is_empty():
+        render_cart_preview_grid()
+        st.markdown("---")
+
+    # Data source options
+    _render_search_interface()
+
+
+def _render_processing_mode() -> None:
+    """
+    Render processing mode: wizard and connection configuration.
+
+    Shows uploaded files and runs the connection wizard.
+    """
+    # Get raw data from session state (populated by cart)
+    raw_data = st.session_state.get('raw_data') or {}
+
+    if not raw_data:
+        st.error("No data loaded. Please restart the workflow.")
+        return
+
+    _render_uploaded_files(raw_data)
+    _render_connection_wizard(raw_data)
 
 
 def _render_uploaded_files(raw_data: Dict[str, pd.DataFrame]) -> None:
@@ -249,8 +287,18 @@ def _finalize_wizard(joined_df: pd.DataFrame) -> None:
     )
     
     st.success(t("configuration_complete"))
-    st.session_state.current_step = 2  # Skip to step 2 (graph building)
-    st.rerun()
+
+    # Show explicit "Continue to Descent" button
+    col1, col2, col3 = st.columns([1, 2, 1])
+    with col2:
+        if st.button(
+            f"✅ {t('continue_to_descent')}",
+            type="primary",
+            use_container_width=True,
+            key="wizard_complete_continue"
+        ):
+            st.session_state.current_step = 2
+            st.rerun()
 
 
 def _render_wizard_reset() -> None:
@@ -278,33 +326,163 @@ def _render_fallback_continue() -> None:
 
 def _render_search_interface() -> None:
     """
-    Render data.gouv.fr search interface when no files are uploaded.
+    Render data source selection: search, upload, or demo data.
 
-    Implements Spec 008: DataGouv Search Integration
+    Implements Spec 008: DataGouv Search Integration + Cart workflow
     """
-    # Initialize loaded datasets tracking
+    from intuitiveness.app.models.cart import CartManager
+    from intuitiveness.ui.cart import add_to_cart_button
+
+    # Tabs for different sources
+    tab1, tab2, tab3 = st.tabs([
+        "🌐 Data.gouv.fr Search",
+        "📁 Upload Files",
+        "🎯 Demo Data"
+    ])
+
+    with tab1:
+        _render_datagouv_tab()
+
+    with tab2:
+        _render_upload_tab()
+
+    with tab3:
+        _render_demo_tab()
+
+
+def _render_datagouv_tab() -> None:
+    """Render data.gouv.fr search tab with cart integration."""
+    # Initialize loaded datasets tracking (backward compatibility)
     if 'datagouv_loaded_datasets' not in st.session_state:
         st.session_state.datagouv_loaded_datasets = {}
 
-    # Clean search interface only - basket is in sidebar
+    # Clean search interface - cart integration handled in datagouv_search.py
     loaded_df = render_search_interface()
 
     if loaded_df is not None:
-        # Get the dataset name from session state or generate one
+        # This path is for backward compatibility with old search interface
+        # New integration happens in datagouv_search.py via add_to_cart_button
+        from intuitiveness.app.models.cart import CartManager
+
         dataset_name = st.session_state.get(
             'datagouv_last_dataset_name',
             f"dataset_{len(st.session_state.datagouv_loaded_datasets) + 1}.csv"
         )
-        st.session_state.datagouv_loaded_datasets[dataset_name] = loaded_df
 
-        # Also add to raw_data for descent-ascent workflow
-        # Defensive: ensure raw_data is a dict before dict operations
-        raw_data = st.session_state.get("raw_data", {})
-        if not isinstance(raw_data, dict):
-            st.session_state.raw_data = {}
-        st.session_state.raw_data[dataset_name] = loaded_df
+        cart = CartManager()
+        cart.add_item(
+            name=dataset_name,
+            source="datagouv",
+            df=loaded_df
+        )
 
         st.session_state.pop('datagouv_last_dataset_name', None)
-
-        # Stay on step 0 - wizard will automatically show
+        st.success(f"✅ {t('added_to_cart')}")
         st.rerun()
+
+
+def _render_upload_tab() -> None:
+    """Render file upload tab with cart integration."""
+    from intuitiveness.streamlit_app import smart_load_csv
+    from intuitiveness.app.models.cart import CartManager
+
+    st.markdown("### Upload CSV Files")
+    st.markdown("Upload one or more CSV files to your cart")
+
+    uploaded_files = st.file_uploader(
+        "Choose CSV files",
+        type=["csv"],
+        accept_multiple_files=True,
+        key="cart_csv_upload"
+    )
+
+    if uploaded_files:
+        cart = CartManager()
+
+        for file in uploaded_files:
+            # Check if already in cart
+            if cart.get_item(file.name):
+                st.info(f"✓ {file.name} already in cart")
+                continue
+
+            with st.spinner(f"Loading {file.name}..."):
+                try:
+                    df, info_msg = smart_load_csv(file)
+                    if df is not None and not df.empty:
+                        cart.add_item(
+                            name=file.name,
+                            source="upload",
+                            df=df,
+                            metadata={"original_name": file.name}
+                        )
+                        st.success(f"✅ Added {file.name} ({df.shape[0]} rows × {df.shape[1]} cols)")
+                    else:
+                        st.error(f"Failed to load {file.name}")
+                except Exception as e:
+                    st.error(f"Error loading {file.name}: {e}")
+
+        # Rerun to update cart display
+        if uploaded_files:
+            st.rerun()
+
+
+def _render_demo_tab() -> None:
+    """Render demo data selector with cart integration."""
+    from intuitiveness.app.models.cart import CartManager
+
+    st.markdown(f"### {t('demo_data')}")
+    st.markdown(t('choose_demo'))
+
+    # Demo datasets (would load from actual files in production)
+    demo_datasets = {
+        "School Scores": {
+            "description": "Middle school performance scores",
+            "file": "demo_school_scores.csv"
+        },
+        "ADEME Funding": {
+            "description": "Energy transition funding records",
+            "file": "demo_ademe_funding.csv"
+        },
+        "Energy Prices": {
+            "description": "Energy consumption and pricing data",
+            "file": "demo_energy_prices.csv"
+        }
+    }
+
+    cart = CartManager()
+
+    for demo_name, demo_info in demo_datasets.items():
+        with st.container():
+            col1, col2 = st.columns([3, 1])
+
+            with col1:
+                st.markdown(f"**{demo_name}**")
+                st.caption(demo_info["description"])
+
+            with col2:
+                # Check if already in cart
+                if cart.get_item(demo_name):
+                    st.success("✓ In cart")
+                else:
+                    if st.button(
+                        "Add",
+                        key=f"demo_add_{demo_name}",
+                        type="secondary",
+                        use_container_width=True
+                    ):
+                        # In production, load actual demo CSV files
+                        # For now, create placeholder DataFrame
+                        demo_df = pd.DataFrame({
+                            "id": range(1, 11),
+                            "value": [i * 10 for i in range(1, 11)]
+                        })
+
+                        cart.add_item(
+                            name=demo_name,
+                            source="demo",
+                            df=demo_df,
+                            metadata={"file": demo_info["file"]}
+                        )
+                        st.rerun()
+
+            st.markdown("---")

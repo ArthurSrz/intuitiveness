@@ -22,13 +22,13 @@ from typing import Optional
 from intuitiveness.complexity import Level4Dataset
 from intuitiveness.ui import (
     render_language_toggle_compact,
-    render_basket_sidebar,
     _set_wizard_step,
     t,
     render_tutorial_replay_button,
     is_tutorial_completed,
     reset_tutorial,
 )
+from intuitiveness.ui.cart import render_cart_sidebar
 from intuitiveness.persistence import SessionStore
 
 
@@ -176,9 +176,9 @@ def render_sidebar(store: SessionStore) -> None:
     render_language_toggle_compact()
     st.divider()
     
-    # Dataset basket in sidebar (008-datagouv-search)
-    if render_basket_sidebar():
-        _handle_basket_continue()
+    # Dataset cart in sidebar (cart workflow)
+    if render_cart_sidebar():
+        _handle_cart_start_analysis()
     
     # Mode toggle - Constitution v1.2.0: Use domain-friendly labels
     _render_mode_selector()
@@ -210,20 +210,27 @@ def render_sidebar(store: SessionStore) -> None:
     _render_persistence_buttons(store)
 
 
-def _handle_basket_continue() -> None:
-    """Handle user clicking 'Continue' in dataset basket."""
-    # User clicked "Continue" - proceed with loaded datasets
-    raw_data = st.session_state.datagouv_loaded_datasets.copy()
-    st.session_state.raw_data = raw_data
-    st.session_state.datasets['l4'] = Level4Dataset(raw_data)
-    st.session_state.datagouv_loaded_datasets = {}
-    
-    # Go to upload step to show column selection wizard
+def _handle_cart_start_analysis() -> None:
+    """Handle user clicking 'Start Analysis' from cart."""
+    from intuitiveness.app.models.cart import CartManager
+
+    cart = CartManager()
+
+    # Populate raw_data from cart
+    st.session_state.raw_data = cart.to_raw_data()
+    st.session_state.datasets['l4'] = Level4Dataset(st.session_state.raw_data)
+
+    # Switch to processing mode
+    st.session_state.cart_mode = 'processing'
+    st.session_state.analysis_started = True
+
+    # Stay on Step 0 to run wizard
     st.session_state.current_step = 0
-    # Initialize wizard to step 1 (column selection)
     _set_wizard_step(1)
+
     # Reset and show tutorial for new data session
     reset_tutorial()
+
     st.rerun()
 
 

@@ -453,5 +453,14 @@
   "whats_happening_desc": "I'm looking at your selected columns to find **matching items** between your files. For example, if both files have a school code, I'll use that to connect related information together.",
   "yes_start_fresh": "Yes, start fresh",
   "yesterday": "yesterday",
-  "your_files_to_connect": "Your Files to Connect"
+  "your_files_to_connect": "Your Files to Connect",
+  "cart_title": "Selection Cart",
+  "start_analysis": "Start Analysis",
+  "continue_to_descent": "Continue to Descent",
+  "cart_empty": "Your cart is empty. Add datasets to begin.",
+  "cart_item_remove": "Remove from cart",
+  "clear_cart": "Clear All",
+  "demo_data": "Demo Data",
+  "choose_demo": "Choose a demo dataset",
+  "added_to_cart": "Added to cart"
 }

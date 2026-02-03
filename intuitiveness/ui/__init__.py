@@ -142,6 +142,15 @@ from .quality.instant_export import (
     render_instant_export_tab,
 )
 
+# Cart UI components (cart workflow)
+from .cart import (
+    render_cart_sidebar,
+    render_cart_badge,
+    render_cart_preview_grid,
+    render_cart_state_indicator,
+    add_to_cart_button,
+)
+
 # Ascent UI forms (004-ascent-precision)
 # Updated for Spec 011: Extracted to ui/ascent/ package
 from .ascent import (
@@ -288,4 +297,10 @@ __all__ = [
     # Instant Export (012-tabpfn-instant-export)
     'render_instant_export_ui',
     'render_instant_export_tab',
+    # Cart UI components (cart workflow)
+    'render_cart_sidebar',
+    'render_cart_badge',
+    'render_cart_preview_grid',
+    'render_cart_state_indicator',
+    'add_to_cart_button',
 ]
