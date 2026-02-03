@@ -453,5 +453,14 @@
   "whats_happening_desc": "J'examine vos colonnes sélectionnées pour trouver des **éléments correspondants** entre vos fichiers. Par exemple, si les deux fichiers ont un code d'école, je l'utiliserai pour connecter les informations liées.",
   "yes_start_fresh": "Oui, recommencer",
   "yesterday": "hier",
-  "your_files_to_connect": "Vos fichiers à connecter"
+  "your_files_to_connect": "Vos fichiers à connecter",
+  "cart_title": "Panier de sélection",
+  "start_analysis": "Démarrer l'analyse",
+  "continue_to_descent": "Continuer vers la descente",
+  "cart_empty": "Votre panier est vide. Ajoutez des jeux de données pour commencer.",
+  "cart_item_remove": "Retirer du panier",
+  "clear_cart": "Tout effacer",
+  "demo_data": "Données de démonstration",
+  "choose_demo": "Choisir un jeu de données de démonstration",
+  "added_to_cart": "Ajouté au panier"
 }

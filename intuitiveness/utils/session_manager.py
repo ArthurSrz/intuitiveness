@@ -197,6 +197,19 @@ class SessionStateKeys:
     # Discovery results from auto-discovery (001)
     DISCOVERY_RESULTS = "discovery_results"
 
+    # =========================================================================
+    # CART-BASED DATASET SELECTION (Cart Workflow)
+    # =========================================================================
+
+    # Cart holding selected datasets (cart workflow)
+    DATASET_CART = "dataset_cart"
+
+    # Cart mode: 'selection' or 'processing' (cart workflow)
+    CART_MODE = "cart_mode"
+
+    # Analysis started flag (cart workflow)
+    ANALYSIS_STARTED = "analysis_started"
+
 
 # =============================================================================
 # SESSION STATE MANAGER - Type-Safe Access
@@ -479,6 +492,11 @@ def init_session_state() -> None:
         # Quality dashboard (009-010)
         SessionStateKeys.QUALITY_REPORTS_HISTORY: [],
         SessionStateKeys.APPLIED_SUGGESTIONS: set(),
+
+        # Cart-based dataset selection
+        SessionStateKeys.DATASET_CART: {},
+        SessionStateKeys.CART_MODE: 'selection',
+        SessionStateKeys.ANALYSIS_STARTED: False,
     }
 
     for key, default_value in defaults.items():
