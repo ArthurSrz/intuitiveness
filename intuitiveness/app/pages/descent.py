@@ -32,6 +32,38 @@ from intuitiveness.ui import (
     t,
 )
 from intuitiveness.utils import SessionStateKeys
+from intuitiveness.persistence.session_graph import SessionGraph
+
+
+def _ensure_datasets_dict():
+    """Ensure datasets dict exists in session state before writing to it."""
+    if 'datasets' not in st.session_state:
+        st.session_state['datasets'] = {}
+
+
+def _track_descent_step(level: int, data_artifact, output_value=None,
+                         description: str = "", params: dict = None):
+    """
+    Record a descent step in the SessionGraph for ascent recovery.
+
+    Creates or updates the session graph stored in session state,
+    adding the level state node and transition edge from the previous level.
+    """
+    graph_key = SessionStateKeys.LOADED_SESSION_GRAPH
+    sg = st.session_state.get(graph_key)
+    if sg is None:
+        sg = SessionGraph()
+        st.session_state[graph_key] = sg
+
+    prev_id = sg.current_id
+    node_id = sg.add_level_state(
+        level=level,
+        output_value=output_value,
+        data_artifact=data_artifact,
+        metadata={"decision_description": description},
+    )
+    if prev_id is not None:
+        sg.add_transition(prev_id, node_id, action="descend", params=params)
 
 
 def render_descent_page():
@@ -118,7 +150,13 @@ def render_domain_categorization_step(l3_dataset: Level3Dataset):
                 threshold=threshold
             )
 
+            _ensure_datasets_dict()
             st.session_state['datasets']['l2'] = l2_dataset
+            _track_descent_step(
+                level=2, data_artifact=l2_dataset.get_data(),
+                description=f"Categorized into domains: {domains}",
+                params={"domains": domains, "threshold": threshold},
+            )
             st.success(t('categorization_complete'))
             st.rerun()
 
@@ -154,7 +192,13 @@ def render_feature_extraction_step(l2_dataset: Level2Dataset):
                 column=column
             )
 
+            _ensure_datasets_dict()
             st.session_state['datasets']['l1'] = l1_dataset
+            _track_descent_step(
+                level=1, data_artifact=l1_dataset.get_data(),
+                description=f"Extracted column: {column}",
+                params={"column": column},
+            )
             st.success(t('extraction_complete'))
             st.rerun()
 
@@ -190,7 +234,15 @@ def render_aggregation_step(l1_dataset: Level1Dataset):
                 aggregation=aggregation
             )
 
+            _ensure_datasets_dict()
             st.session_state['datasets']['l0'] = l0_dataset
+            _track_descent_step(
+                level=0,
+                data_artifact=l0_dataset.value if hasattr(l0_dataset, 'value') else l0_dataset,
+                output_value=l0_dataset.value if hasattr(l0_dataset, 'value') else l0_dataset,
+                description=f"Aggregated with: {aggregation}",
+                params={"aggregation": aggregation},
+            )
             st.success(t('metric_computed'))
             st.rerun()
 
@@ -221,11 +273,14 @@ def render_results_view(l0_dataset: Level0Dataset):
     col1, col2 = st.columns(2)
     with col1:
         if st.button(t('start_ascent'), type="primary"):
-            st.session_state['mode'] = 'ascent'
+            # Use SWITCH_TO_ASCENT flag so _handle_ascent_mode_switch() processes
+            # the transition before sidebar widgets render (avoids widget conflicts)
+            st.session_state[SessionStateKeys.SWITCH_TO_ASCENT] = True
             st.rerun()
     with col2:
         if st.button(t('export_session')):
-            st.session_state[SessionStateKeys.CURRENT_STEP] = 99  # Export step
+            # Set out-of-bounds step to trigger export page rendering
+            st.session_state[SessionStateKeys.CURRENT_STEP] = 99
             st.rerun()
 
 

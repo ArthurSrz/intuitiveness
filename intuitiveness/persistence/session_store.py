@@ -316,6 +316,34 @@ class SessionStore:
 
         logger.info("Session cleared")
 
+    def export_session(self) -> Dict[str, Any]:
+        """
+        Export current session state as a serializable dictionary.
+
+        Returns a dict containing all persisted session data, suitable for
+        JSON serialization and download.
+
+        Returns:
+            Dictionary with version, timestamp, and serialized session data.
+        """
+        export_data = {
+            'version': SCHEMA_VERSION,
+            'timestamp': datetime.now().isoformat(),
+            'data': {},
+        }
+
+        for key in PERSIST_KEYS:
+            if key in st.session_state:
+                try:
+                    value = st.session_state[key]
+                    serialized = self._serialize_value(key, value)
+                    if serialized is not None:
+                        export_data['data'][key] = serialized
+                except Exception as e:
+                    logger.warning(f"Failed to export {key}: {e}")
+
+        return export_data
+
     def get_session_info(self) -> Optional[SessionInfo]:
         """
         Get metadata about saved session without loading it.

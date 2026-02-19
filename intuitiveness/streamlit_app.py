@@ -318,6 +318,9 @@ ASCENT_STEPS = [
     }
 ]
 
+# Combine descent + ascent into a single STEPS array for unified dispatch
+ALL_STEPS = STEPS + ASCENT_STEPS
+
 
 def render_step_header(step: dict):
     """Render step header with title and description."""
@@ -574,12 +577,39 @@ def _is_pure_landing_page() -> bool:
     )
 
 
+def _bridge_raw_data_to_quality_df():
+    """Bridge cart/upload raw_data to quality_df if not already set.
+
+    The quality tool reads from session_state['quality_df'] but cart/upload
+    stores data in session_state['raw_data'] (a dict of DataFrames).
+    This bridge auto-populates quality_df from raw_data when available.
+    """
+    quality_df_key = SessionStateKeys.QUALITY_DF
+    if st.session_state.get(quality_df_key) is not None:
+        return  # Already set, don't override
+
+    raw_data = st.session_state.get(SessionStateKeys.RAW_DATA)
+    if raw_data is None:
+        return
+
+    if isinstance(raw_data, dict):
+        dataframes = [v for v in raw_data.values() if isinstance(v, pd.DataFrame)]
+        if len(dataframes) == 1:
+            st.session_state[quality_df_key] = dataframes[0]
+        elif len(dataframes) > 1:
+            st.session_state[quality_df_key] = pd.concat(dataframes, ignore_index=True)
+    elif isinstance(raw_data, pd.DataFrame):
+        st.session_state[quality_df_key] = raw_data
+
+
 def _route_to_active_page():
     """Route to the active page based on mode and state."""
     
     # Check for Quality Tools first (009-quality-data-platform)
     active_quality_tool = st.session_state.get('active_quality_tool', 'none')
     if active_quality_tool == 'quality':
+        # Bridge cart/upload data to quality tool if quality_df not yet set
+        _bridge_raw_data_to_quality_df()
         render_quality_dashboard()
         return
     elif active_quality_tool == 'catalog':
@@ -611,14 +641,114 @@ def _render_guided_mode():
     if should_show_tutorial:
         render_tutorial()
     
+    # Validate current_step is within ALL_STEPS bounds (descent + ascent)
+    current_step = st.session_state.current_step
+    if current_step < 0 or current_step >= len(ALL_STEPS):
+        # Handle export step (was set to 99) or other out-of-bounds values
+        from intuitiveness.app.pages.export import render_export_page
+        render_export_page()
+        return
+
     # Dispatch to appropriate step
-    step_id = STEPS[st.session_state.current_step]['id']
-    step = STEPS[st.session_state.current_step]
-    
+    step_id = ALL_STEPS[current_step]['id']
+    step = ALL_STEPS[current_step]
+
     if step_id == "upload":
         render_upload_page(step, skip_header=is_search_landing)
     elif step_id in ("entities", "domains", "features", "aggregation", "results"):
         render_descent_page()
+    elif step_id in ("l0_to_l1", "l1_to_l2", "l2_to_l3"):
+        _render_ascent_step(step_id, step)
+
+
+def _render_ascent_step(step_id: str, step: dict):
+    """
+    Render an ascent step (L0->L1, L1->L2, L2->L3).
+
+    Uses the dedicated ascent form renderers from ui.ascent and
+    the AscentController for execution logic.
+    """
+    from intuitiveness.app.ascent_controller import get_ascent_controller, AscentResult
+    from intuitiveness.ui import (
+        render_l0_to_l1_unfold_form,
+        render_l1_to_l2_domain_form,
+        render_l2_to_l3_entity_form,
+        render_page_header,
+    )
+
+    render_step_header(step)
+
+    datasets = st.session_state.get('datasets', {})
+    controller = get_ascent_controller()
+
+    if step_id == "l0_to_l1":
+        l0_data = datasets.get('l0')
+        if l0_data is None:
+            st.warning("No L0 datum available. Complete the descent first.")
+            return
+
+        params = render_l0_to_l1_unfold_form(l0_data, key_prefix="guided_l0_l1")
+        if params is not None:
+            with st.spinner("Recovering source values..."):
+                outcome = controller.execute_l0_to_l1(params)
+            if outcome.result == AscentResult.SUCCESS:
+                datasets['l1_ascent'] = outcome.data
+                st.session_state['datasets'] = datasets
+                st.success(outcome.message)
+                st.session_state.current_step += 1
+                st.rerun()
+            else:
+                st.error(outcome.message)
+
+    elif step_id == "l1_to_l2":
+        # Use ascent L1 if available, otherwise descent L1
+        l1_data = datasets.get('l1_ascent', datasets.get('l1'))
+        if l1_data is None:
+            st.warning("No L1 data available. Complete the previous step first.")
+            return
+
+        params = render_l1_to_l2_domain_form(l1_data, key_prefix="guided_l1_l2")
+        if params is not None:
+            with st.spinner("Categorizing into domains..."):
+                outcome = controller.execute_l1_to_l2(
+                    categories=params.get('dimensions', []),
+                    column=params.get('column_name'),
+                    use_semantic=params.get('use_semantic', True),
+                    threshold=params.get('threshold', 0.5),
+                )
+            if outcome.result == AscentResult.SUCCESS:
+                datasets['l2_ascent'] = outcome.data
+                st.session_state['datasets'] = datasets
+                st.success(outcome.message)
+                st.session_state.current_step += 1
+                st.rerun()
+            else:
+                st.error(outcome.message)
+
+    elif step_id == "l2_to_l3":
+        # Use ascent L2 if available, otherwise descent L2
+        l2_data = datasets.get('l2_ascent', datasets.get('l2'))
+        if l2_data is None:
+            st.warning("No L2 data available. Complete the previous step first.")
+            return
+
+        params = render_l2_to_l3_entity_form(l2_data, key_prefix="guided_l2_l3")
+        if params is not None:
+            with st.spinner("Building knowledge graph..."):
+                outcome = controller.execute_l2_to_l3(
+                    entity_column=params['entity_column'],
+                    entity_type_name=params.get('entity_type_name'),
+                    relationship_type=params.get('relationship_type'),
+                )
+            if outcome.result == AscentResult.SUCCESS:
+                datasets['l3_ascent'] = outcome.data
+                st.session_state['datasets'] = datasets
+                st.success(outcome.message)
+                # After L3 ascent, go to export
+                st.session_state.current_step = len(ALL_STEPS)
+                st.rerun()
+            else:
+                st.error(outcome.message)
 
 
 def _render_free_mode():

@@ -260,7 +260,20 @@ def _finalize_wizard(joined_df: pd.DataFrame) -> None:
         st.session_state.joined_l3_dataset = joined_df
 
         # Create L3 dataset for descent
+        if 'datasets' not in st.session_state:
+            st.session_state['datasets'] = {}
         st.session_state.datasets['l3'] = Level3Dataset(joined_df)
+
+        # Initialize SessionGraph for descent tracking
+        from intuitiveness.persistence.session_graph import SessionGraph
+        from intuitiveness.utils import SessionStateKeys
+        sg = SessionGraph()
+        sg.add_level_state(
+            level=3, output_value=f"{len(joined_df)} rows",
+            data_artifact=joined_df,
+            metadata={"decision_description": "Joined datasets from wizard"},
+        )
+        st.session_state[SessionStateKeys.LOADED_SESSION_GRAPH] = sg
 
         # Create entity/relationship mappings from the joined table
         st.session_state.entity_mapping = {}

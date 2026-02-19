@@ -218,6 +218,8 @@ def _handle_cart_start_analysis() -> None:
 
     # Populate raw_data from cart
     st.session_state.raw_data = cart.to_raw_data()
+    if 'datasets' not in st.session_state:
+        st.session_state.datasets = {}
     st.session_state.datasets['l4'] = Level4Dataset(st.session_state.raw_data)
 
     # Switch to processing mode

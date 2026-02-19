@@ -75,6 +75,7 @@ class AscentController:
         self,
         session_graph: Optional[Any] = None,
         nav_session: Optional[Any] = None,
+        datasets: Optional[Dict[str, Any]] = None,
     ):
         """
         Initialize controller with data source.
@@ -82,9 +83,11 @@ class AscentController:
         Args:
             session_graph: SessionGraph for guided mode
             nav_session: NavigationSession for free mode
+            datasets: Datasets dict from session state (fallback)
         """
         self._session_graph = session_graph
         self._nav_session = nav_session
+        self._datasets = datasets or {}
 
     @classmethod
     def from_session_graph(cls) -> "AscentController":
@@ -134,6 +137,25 @@ class AscentController:
                 return AscentOutcome(
                     result=AscentResult.SUCCESS,
                     message=f"Recovered {len(l1_df)} source values",
+                    data=l1_df
+                )
+            elif 'l1' in self._datasets:
+                # Fallback: datasets dict from descent workflow
+                l1_obj = self._datasets['l1']
+                l1_df = l1_obj.get_data() if hasattr(l1_obj, 'get_data') else l1_obj
+                return AscentOutcome(
+                    result=AscentResult.SUCCESS,
+                    message=f"Recovered {len(l1_df)} source values from descent",
+                    data=l1_df
+                )
+            elif 'l0' in self._datasets:
+                # Have L0 but no L1: unfold L0 datum into a single-row DataFrame
+                l0_obj = self._datasets['l0']
+                value = l0_obj.value if hasattr(l0_obj, 'value') else l0_obj
+                l1_df = pd.DataFrame({'value': [value]})
+                return AscentOutcome(
+                    result=AscentResult.SUCCESS,
+                    message="Unfolded L0 datum into L1 vector",
                     data=l1_df
                 )
             else:
@@ -233,6 +255,18 @@ class AscentController:
                 # Guided mode - apply categorization to L1 data
                 l2_df = self._apply_categorization(
                     l1_data, column, parsed_categories, use_semantic, threshold
+                )
+                return AscentOutcome(
+                    result=AscentResult.SUCCESS,
+                    message=f"Created L2 with {len(parsed_categories)} categories",
+                    data=l2_df
+                )
+            elif 'l1' in self._datasets:
+                # Fallback: use L1 from datasets dict
+                l1_obj = self._datasets['l1']
+                df = l1_obj.get_data() if hasattr(l1_obj, 'get_data') else l1_obj
+                l2_df = self._apply_categorization(
+                    df, column, parsed_categories, use_semantic, threshold
                 )
                 return AscentOutcome(
                     result=AscentResult.SUCCESS,
@@ -383,6 +417,16 @@ class AscentController:
                     message=f"Created L3 with entity linkage",
                     data=l3_data
                 )
+            elif 'l2' in self._datasets:
+                # Fallback: use L2 from datasets dict
+                l2_obj = self._datasets['l2']
+                df = l2_obj.get_data() if hasattr(l2_obj, 'get_data') else l2_obj
+                l3_data = self._apply_linkage(df, entity_column)
+                return AscentOutcome(
+                    result=AscentResult.SUCCESS,
+                    message=f"Created L3 with entity linkage",
+                    data=l3_data
+                )
             else:
                 return AscentOutcome(
                     result=AscentResult.NO_DATA,
@@ -430,12 +474,16 @@ def get_ascent_controller() -> AscentController:
     """
     Get appropriate AscentController based on current mode.
 
+    Priority: nav_session > session_graph > datasets dict.
+
     Returns:
         AscentController configured for current mode
     """
     nav_session = st.session_state.get(SessionStateKeys.NAV_SESSION)
+    datasets = st.session_state.get(SessionStateKeys.DATASETS, {})
 
     if nav_session is not None:
         return AscentController.from_nav_session(nav_session)
     else:
-        return AscentController.from_session_graph()
+        graph = st.session_state.get(SessionStateKeys.LOADED_SESSION_GRAPH)
+        return AscentController(session_graph=graph, datasets=datasets)
