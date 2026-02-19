@@ -286,19 +286,9 @@ def _finalize_wizard(joined_df: pd.DataFrame) -> None:
         relationships=relationships
     )
     
-    st.success(t("configuration_complete"))
-
-    # Show explicit "Continue to Descent" button
-    col1, col2, col3 = st.columns([1, 2, 1])
-    with col2:
-        if st.button(
-            f"✅ {t('continue_to_descent')}",
-            type="primary",
-            use_container_width=True,
-            key="wizard_complete_continue"
-        ):
-            st.session_state.current_step = 2
-            st.rerun()
+    # Auto-advance to descent step after storing L3 dataset
+    st.session_state.current_step = 2
+    st.rerun()
 
 
 def _render_wizard_reset() -> None:
