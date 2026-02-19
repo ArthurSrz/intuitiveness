@@ -319,9 +319,14 @@ def render_wizard_step_2_connections(
     # Check we have columns from at least 2 files
     if len(columns_by_file) < 2:
         st.info(t("select_from_2_files"))
-        if st.button(t("back_to_step_1"), key=f"{key_prefix}_back_same_file"):
-            _set_wizard_step(1)
-            st.rerun()
+        col1, col2 = st.columns(2)
+        with col1:
+            if st.button(t("back_to_step_1"), key=f"{key_prefix}_back_same_file"):
+                _set_wizard_step(1)
+                st.rerun()
+        with col2:
+            if st.button(t("continue_arrow"), key=f"{key_prefix}_skip_connections", type="primary"):
+                return True
         return False
 
     # Domain-friendly "What's happening" explainer (006-playwright-mcp-e2e UI improvement)
