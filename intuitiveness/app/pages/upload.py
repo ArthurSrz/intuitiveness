@@ -279,8 +279,8 @@ def _finalize_wizard(joined_df: pd.DataFrame) -> None:
             relationships=[]
         )
 
-        # Auto-advance to descent step
-        st.session_state.current_step = 2
+        # Auto-advance to first descent step (entities)
+        st.session_state.current_step = 1
         st.rerun()
     except Exception as e:
         st.error(f"Error finalizing wizard: {e}")
