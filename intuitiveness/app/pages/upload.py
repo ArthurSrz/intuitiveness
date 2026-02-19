@@ -17,7 +17,7 @@ import streamlit as st
 from typing import Dict, Optional
 import pandas as pd
 
-from intuitiveness.complexity import Level4Dataset
+from intuitiveness.complexity import Level4Dataset, Level3Dataset
 from intuitiveness.ui import (
     render_l4_file_list,
     render_search_interface,
@@ -260,7 +260,7 @@ def _finalize_wizard(joined_df: pd.DataFrame) -> None:
     
     # Create L3 dataset for Step 3 (Define Categories)
     # L3 accepts DataFrame directly - no need to convert to graph
-    st.session_state.datasets['l3'] = Level4Dataset.L3(joined_df)
+    st.session_state.datasets['l3'] = Level3Dataset(joined_df)
     
     # Create entity/relationship mappings from the joined table
     entity_mapping = {}
