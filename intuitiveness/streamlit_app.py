@@ -561,13 +561,16 @@ def _handle_session_recovery(store: SessionStore):
 
 
 def _is_pure_landing_page() -> bool:
-    """Check if we're on the pure landing page (no data, no search)."""
+    """Check if we're on the pure landing page (no data, no search, empty cart)."""
+    from intuitiveness.app.models.cart import CartManager
+    cart = CartManager()
     return (
         st.session_state.get(SessionStateKeys.NAV_MODE) == 'guided' and
         st.session_state.get(SessionStateKeys.CURRENT_STEP) == 0 and
         st.session_state.get(SessionStateKeys.RAW_DATA) is None and
         not st.session_state.get('datagouv_loaded_datasets') and
-        not st.session_state.get('datagouv_results')
+        not st.session_state.get('datagouv_results') and
+        cart.is_empty()
     )
 
 
