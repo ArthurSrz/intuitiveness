@@ -129,7 +129,7 @@ from intuitiveness.utils import (
 # Page modules (Spec 011: Code Simplification)
 from intuitiveness.app.sidebar import render_sidebar
 from intuitiveness.app.pages.upload import render_upload_page
-# Note: Other page imports will be added as we integrate them
+from intuitiveness.app.pages.descent import render_descent_page
 
 # ============================================================================
 # ESSENTIAL UTILITIES (kept from original)
@@ -617,16 +617,8 @@ def _render_guided_mode():
     
     if step_id == "upload":
         render_upload_page(step, skip_header=is_search_landing)
-    elif step_id == "entities":
-        render_entities_step()
-    elif step_id == "domains":
-        render_domains_step()
-    elif step_id == "features":
-        render_features_step()
-    elif step_id == "aggregation":
-        render_aggregation_step()
-    elif step_id == "results":
-        render_results_step()
+    elif step_id in ("entities", "domains", "features", "aggregation", "results"):
+        render_descent_page()
 
 
 def _render_free_mode():
