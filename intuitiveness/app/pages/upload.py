@@ -255,40 +255,37 @@ def _render_wizard_steps(
 
 def _finalize_wizard(joined_df: pd.DataFrame) -> None:
     """Finalize wizard by storing joined dataset and advancing to next step."""
-    # Store the joined L3 dataset
-    st.session_state.joined_l3_dataset = joined_df
-    
-    # Create L3 dataset for Step 3 (Define Categories)
-    # L3 accepts DataFrame directly - no need to convert to graph
-    st.session_state.datasets['l3'] = Level3Dataset(joined_df)
-    
-    # Create entity/relationship mappings from the joined table
-    entity_mapping = {}
-    relationship_mapping = {}
-    
-    # Create a single entity from the joined table
-    nodes = []
-    relationships = []
-    
-    # The joined table becomes a single unified entity
-    nodes.append(DataModelNode(
-        label="JoinedData",
-        key_property=joined_df.columns[0],
-        properties=list(joined_df.columns)
-    ))
-    
-    st.session_state.entity_mapping = entity_mapping
-    st.session_state.relationship_mapping = relationship_mapping
-    
-    # Store the data model
-    st.session_state.data_model = Neo4jDataModel(
-        nodes=nodes,
-        relationships=relationships
-    )
-    
-    # Auto-advance to descent step after storing L3 dataset
-    st.session_state.current_step = 2
-    st.rerun()
+    try:
+        # Store the joined L3 dataset
+        st.session_state.joined_l3_dataset = joined_df
+
+        # Create L3 dataset for descent
+        st.session_state.datasets['l3'] = Level3Dataset(joined_df)
+
+        # Create entity/relationship mappings from the joined table
+        st.session_state.entity_mapping = {}
+        st.session_state.relationship_mapping = {}
+
+        # Create a single entity from the joined table
+        nodes = [DataModelNode(
+            label="JoinedData",
+            key_property=joined_df.columns[0],
+            properties=[{"name": col, "type": str(joined_df[col].dtype)} for col in joined_df.columns]
+        )]
+
+        # Store the data model
+        st.session_state.data_model = Neo4jDataModel(
+            nodes=nodes,
+            relationships=[]
+        )
+
+        # Auto-advance to descent step
+        st.session_state.current_step = 2
+        st.rerun()
+    except Exception as e:
+        st.error(f"Error finalizing wizard: {e}")
+        import traceback
+        st.code(traceback.format_exc())
 
 
 def _render_wizard_reset() -> None:
