@@ -1,6 +1,7 @@
 """
 Streamlit App for Interactive Data Redesign - REFACTORED
 
+Version: b0aa53d+1 (deploy trigger)
 Implements Spec 011: Code Simplification (4,900 → ~800 lines)
 
 This module provides the main entry point for the Streamlit app, delegating
