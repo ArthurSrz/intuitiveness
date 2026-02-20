@@ -202,7 +202,7 @@ def export_l1_vector(l1_dataset):
 def export_l0_datum(l0_dataset):
     """Export L0 datum to JSON."""
     datum_data = {
-        'value': l0_dataset.value,
+        'value': l0_dataset.get_data(),
         'description': l0_dataset.description,
         'aggregation_method': l0_dataset.aggregation_method,
         'has_parent': l0_dataset.has_parent
