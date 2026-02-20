@@ -19,8 +19,15 @@ from typing import Dict, List, Any, Optional, Tuple
 from dataclasses import dataclass
 
 # HuggingFace model for NL understanding (OpenAI-compatible API)
-HF_MODEL = "HuggingFaceTB/SmolLM3-3B:hf-inference"
+# 3-stage fallback: hf-inference first, then novita, then sambanova.
+# All routed through HF — no extra API key needed beyond HF_TOKEN.
 HF_BASE_URL = "https://router.huggingface.co/v1"
+HF_PROVIDERS = [
+    "HuggingFaceTB/SmolLM3-3B:hf-inference",  # Stage 1: native HF inference
+    "HuggingFaceTB/SmolLM3-3B:novita",         # Stage 2: novita fallback
+    "HuggingFaceTB/SmolLM3-3B:sambanova",      # Stage 3: sambanova fallback
+]
+HF_MODEL = HF_PROVIDERS[0]  # default for backward compat
 
 
 @dataclass
@@ -68,24 +75,37 @@ class NLQueryEngine:
             )
 
     def _call_hf_api(self, prompt: str, max_tokens: int = 256) -> str:
-        """Call HuggingFace via OpenAI-compatible API."""
+        """Call HuggingFace via OpenAI-compatible API with 3-stage provider fallback."""
+        import logging
         from openai import OpenAI
+
+        logger = logging.getLogger(__name__)
 
         client = OpenAI(
             base_url=HF_BASE_URL,
             api_key=self.hf_token,
         )
 
-        completion = client.chat.completions.create(
-            model=HF_MODEL,
-            messages=[
-                {"role": "user", "content": prompt}
-            ],
-            max_tokens=max_tokens,
-            temperature=0.1,  # Low for structured output
-        )
+        # 3-stage fallback: hf-inference → novita → sambanova
+        last_error = None
 
-        return completion.choices[0].message.content or ""
+        for model_id in HF_PROVIDERS:
+            try:
+                completion = client.chat.completions.create(
+                    model=model_id,
+                    messages=[
+                        {"role": "user", "content": prompt}
+                    ],
+                    max_tokens=max_tokens,
+                    temperature=0.1,  # Low for structured output
+                )
+                return completion.choices[0].message.content or ""
+            except Exception as e:
+                logger.info(f"Provider {model_id.split(':')[-1]} failed: {e}")
+                last_error = e
+                continue
+
+        raise last_error
 
     def parse_query(self, user_query: str, schema: Optional[Dict] = None) -> NLQueryResult:
         """
@@ -277,4 +297,5 @@ __all__ = [
     'NLQueryResult',
     'parse_french_query',
     'HF_MODEL',
+    'HF_PROVIDERS',
 ]

@@ -918,8 +918,15 @@ def render_search_interface() -> Optional[pd.DataFrame]:
                 nl_result = getattr(service, 'last_nl_result', None)
                 if nl_result:
                     st.session_state["datagouv_nl_keywords"] = nl_result.keywords
+                    st.session_state["datagouv_nl_fallback"] = False
                 else:
                     st.session_state["datagouv_nl_keywords"] = None
+                    # Check if NL was expected but unavailable
+                    nl_engine = service._get_nl_engine()
+                    if nl_engine is None and service._is_natural_language(submitted_query):
+                        st.session_state["datagouv_nl_fallback"] = True
+                    else:
+                        st.session_state["datagouv_nl_fallback"] = False
 
             except DataGouvAPIError:
                 st.session_state[SESSION_KEYS["error"]] = t("search_failed")
@@ -941,6 +948,15 @@ def render_search_interface() -> Optional[pd.DataFrame]:
             nl_keywords = st.session_state.get("datagouv_nl_keywords")
             csv_count = len(csv_datasets)
             total_count = results.total
+
+            # Warn if NL engine was expected but unavailable
+            if st.session_state.get("datagouv_nl_fallback"):
+                st.warning(
+                    "Semantic search (SmolLM3-3B) is unavailable — "
+                    "using basic keyword search instead. "
+                    "Set `HF_TOKEN` in your `.env` or `.streamlit/secrets.toml` "
+                    "to enable natural language understanding."
+                )
 
             if nl_keywords:
                 keywords_display = ", ".join(nl_keywords[:4])
