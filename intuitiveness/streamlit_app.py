@@ -864,11 +864,14 @@ def render_vertical_progress_sidebar():
     """
     # Determine mode and current position
     nav_mode = st.session_state.get('nav_mode', 'guided')
-    loaded_session = st.session_state.get('loaded_session_graph', False)
     current_step = st.session_state.get('current_step', 0)
 
-    # Ascent mode: guided ascent (step >= 6), free exploration, or loaded session graph
-    is_ascent = (current_step >= len(STEPS)) or (nav_mode == 'free') or loaded_session
+    # Ascent mode: guided ascent (step >= 6), or free mode with ascent in progress.
+    # Note: loaded_session_graph is also set during descent (for tracking), so
+    # it must NOT be used alone to signal ascent — that caused L4→L0 jump bug.
+    is_ascent = (current_step >= len(STEPS)) or (
+        nav_mode == 'free' and 'ascent_level' in st.session_state
+    )
 
     if is_ascent:
         # Ascent: L0 → L3 (progress goes UP, so we render bottom-to-top visually)
