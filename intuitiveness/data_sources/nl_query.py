@@ -19,10 +19,15 @@ from typing import Dict, List, Any, Optional, Tuple
 from dataclasses import dataclass
 
 # HuggingFace model for NL understanding (OpenAI-compatible API)
-# Note: :hf-inference provider deprecated models (404/410 errors since mid-2025).
-# Using :novita provider instead — routed through HF, no extra API key needed.
-HF_MODEL = "HuggingFaceTB/SmolLM3-3B:novita"
+# 3-stage fallback: hf-inference first, then novita, then sambanova.
+# All routed through HF — no extra API key needed beyond HF_TOKEN.
 HF_BASE_URL = "https://router.huggingface.co/v1"
+HF_PROVIDERS = [
+    "HuggingFaceTB/SmolLM3-3B:hf-inference",  # Stage 1: native HF inference
+    "HuggingFaceTB/SmolLM3-3B:novita",         # Stage 2: novita fallback
+    "HuggingFaceTB/SmolLM3-3B:sambanova",      # Stage 3: sambanova fallback
+]
+HF_MODEL = HF_PROVIDERS[0]  # default for backward compat
 
 
 @dataclass
@@ -70,19 +75,21 @@ class NLQueryEngine:
             )
 
     def _call_hf_api(self, prompt: str, max_tokens: int = 256) -> str:
-        """Call HuggingFace via OpenAI-compatible API with provider fallback."""
+        """Call HuggingFace via OpenAI-compatible API with 3-stage provider fallback."""
+        import logging
         from openai import OpenAI
+
+        logger = logging.getLogger(__name__)
 
         client = OpenAI(
             base_url=HF_BASE_URL,
             api_key=self.hf_token,
         )
 
-        # Try primary provider, fall back to sambanova if it fails
-        providers = [HF_MODEL, "HuggingFaceTB/SmolLM3-3B:sambanova"]
+        # 3-stage fallback: hf-inference → novita → sambanova
         last_error = None
 
-        for model_id in providers:
+        for model_id in HF_PROVIDERS:
             try:
                 completion = client.chat.completions.create(
                     model=model_id,
@@ -94,6 +101,7 @@ class NLQueryEngine:
                 )
                 return completion.choices[0].message.content or ""
             except Exception as e:
+                logger.info(f"Provider {model_id.split(':')[-1]} failed: {e}")
                 last_error = e
                 continue
 
@@ -289,4 +297,5 @@ __all__ = [
     'NLQueryResult',
     'parse_french_query',
     'HF_MODEL',
+    'HF_PROVIDERS',
 ]
