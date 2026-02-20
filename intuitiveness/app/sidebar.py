@@ -271,6 +271,7 @@ def _render_quality_tools_selector() -> None:
 def _render_persistence_buttons(store: SessionStore) -> None:
     """Render session save/load/clear buttons."""
     st.markdown(f"### {t('sidebar_session')}")
+    st.caption("v2-sidebar-deploy-check")
     col1, col2, col3 = st.columns(3)
 
     with col1:
