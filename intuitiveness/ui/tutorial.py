@@ -80,7 +80,7 @@ def should_show_tutorial() -> bool:
     """Check if paper should be displayed."""
     if is_tutorial_completed():
         return False
-    return st.session_state.get(SESSION_KEY_SHOW_TUTORIAL, True)
+    return st.session_state.get(SESSION_KEY_SHOW_TUTORIAL, False)
 
 
 # =============================================================================

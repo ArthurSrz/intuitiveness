@@ -230,8 +230,10 @@ def _handle_cart_start_analysis() -> None:
     st.session_state.current_step = 0
     _set_wizard_step(1)
 
-    # Reset and show tutorial for new data session
-    reset_tutorial()
+    # Show tutorial only if user hasn't seen it yet in this session
+    if not is_tutorial_completed():
+        from intuitiveness.ui.tutorial import SESSION_KEY_SHOW_TUTORIAL
+        st.session_state[SESSION_KEY_SHOW_TUTORIAL] = True
 
     st.rerun()
 
