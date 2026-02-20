@@ -630,15 +630,6 @@ def _render_guided_mode():
         st.session_state.raw_data is None
     )
     
-    # Show tutorial dialog if appropriate
-    should_show_tutorial = (
-        st.session_state.get('show_tutorial', False) and
-        not is_tutorial_completed()
-    )
-    
-    if should_show_tutorial:
-        render_tutorial()
-    
     # Validate current_step is within ALL_STEPS bounds (descent + ascent)
     current_step = st.session_state.current_step
     if current_step < 0 or current_step >= len(ALL_STEPS):

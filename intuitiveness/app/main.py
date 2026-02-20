@@ -291,14 +291,6 @@ def _render_guided_mode(
         st.session_state.raw_data is None
     )
 
-    # Tutorial dialog (007)
-    should_show_tutorial = (
-        st.session_state.get('show_tutorial', False) and
-        not is_tutorial_completed()
-    )
-    if should_show_tutorial:
-        render_tutorial()
-
     # Route to current step
     step_id = STEPS[st.session_state.current_step]['id']
 

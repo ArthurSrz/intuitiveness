@@ -153,14 +153,6 @@ def render_guided_content():
         st.session_state.get(SessionStateKeys.RAW_DATA) is None
     )
 
-    # Tutorial dialog (007)
-    should_show_tutorial = (
-        st.session_state.get('show_tutorial', False) and
-        not is_tutorial_completed()
-    )
-    if should_show_tutorial:
-        render_tutorial()
-
     # Route to current step
     current_step = st.session_state.get(SessionStateKeys.CURRENT_STEP, 0)
     step_id = DESCENT_STEPS[current_step]['id']

@@ -202,10 +202,6 @@ def render_sidebar(store: SessionStore) -> None:
         reset_workflow()
         st.rerun()
     
-    # Tutorial replay button (007-streamlit-design-makeup, Phase 9)
-    if is_tutorial_completed() and st.session_state.raw_data is not None:
-        render_tutorial_replay_button()
-    
     # Session persistence buttons (005-session-persistence)
     _render_persistence_buttons(store)
 
@@ -229,11 +225,6 @@ def _handle_cart_start_analysis() -> None:
     # Stay on Step 0 to run wizard
     st.session_state.current_step = 0
     _set_wizard_step(1)
-
-    # Show tutorial only if user hasn't seen it yet in this session
-    if not is_tutorial_completed():
-        from intuitiveness.ui.tutorial import SESSION_KEY_SHOW_TUTORIAL
-        st.session_state[SESSION_KEY_SHOW_TUTORIAL] = True
 
     st.rerun()
 
