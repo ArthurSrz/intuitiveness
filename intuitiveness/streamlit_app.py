@@ -707,12 +707,17 @@ def _render_ascent_step(step_id: str, step: dict):
 
         params = render_l1_to_l2_domain_form(l1_data, key_prefix="guided_l1_l2")
         if params is not None:
+            # Extract raw DataFrame for the controller
+            l1_df = l1_data.get_data() if hasattr(l1_data, 'get_data') else l1_data
+            if isinstance(l1_df, pd.Series):
+                l1_df = l1_df.to_frame(name=params.get('column_name', 'value'))
             with st.spinner("Categorizing into domains..."):
                 outcome = controller.execute_l1_to_l2(
                     categories=params.get('dimensions', []),
                     column=params.get('column_name'),
                     use_semantic=params.get('use_semantic', True),
                     threshold=params.get('threshold', 0.5),
+                    l1_data=l1_df,
                 )
             if outcome.result == AscentResult.SUCCESS:
                 datasets['l2_ascent'] = outcome.data
@@ -732,11 +737,14 @@ def _render_ascent_step(step_id: str, step: dict):
 
         params = render_l2_to_l3_entity_form(l2_data, key_prefix="guided_l2_l3")
         if params is not None:
+            # Extract raw DataFrame for the controller
+            l2_df = l2_data.get_data() if hasattr(l2_data, 'get_data') else l2_data
             with st.spinner("Building knowledge graph..."):
                 outcome = controller.execute_l2_to_l3(
                     entity_column=params['entity_column'],
                     entity_type_name=params.get('entity_type_name'),
                     relationship_type=params.get('relationship_type'),
+                    l2_data=l2_df,
                 )
             if outcome.result == AscentResult.SUCCESS:
                 datasets['l3_ascent'] = outcome.data

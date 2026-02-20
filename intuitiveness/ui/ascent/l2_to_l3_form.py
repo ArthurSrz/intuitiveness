@@ -59,7 +59,7 @@ def render_l2_to_l3_entity_form(
     st.markdown(t("create_connections_desc"))
 
     # Get available columns
-    data = dataset.get_data() if hasattr(dataset, 'get_data') else dataset.data
+    data = dataset.get_data() if hasattr(dataset, 'get_data') else dataset
     if not isinstance(data, pd.DataFrame):
         st.error(t("no_table_data"))
         return None

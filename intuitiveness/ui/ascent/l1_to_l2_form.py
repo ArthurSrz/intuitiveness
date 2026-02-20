@@ -81,7 +81,7 @@ def render_l1_to_l2_domain_form(
     st.divider()
 
     # Show preview of categorization effect
-    data = dataset.get_data() if hasattr(dataset, 'get_data') else dataset.data
+    data = dataset.get_data() if hasattr(dataset, 'get_data') else dataset
     column_name = getattr(dataset, 'name', None) or 'value'
 
     with st.expander(t("preview_categorization")):
