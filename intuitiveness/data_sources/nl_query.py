@@ -19,7 +19,9 @@ from typing import Dict, List, Any, Optional, Tuple
 from dataclasses import dataclass
 
 # HuggingFace model for NL understanding (OpenAI-compatible API)
-HF_MODEL = "HuggingFaceTB/SmolLM3-3B:hf-inference"
+# Note: :hf-inference provider deprecated models (404/410 errors since mid-2025).
+# Using :novita provider instead — routed through HF, no extra API key needed.
+HF_MODEL = "HuggingFaceTB/SmolLM3-3B:novita"
 HF_BASE_URL = "https://router.huggingface.co/v1"
 
 
@@ -68,7 +70,7 @@ class NLQueryEngine:
             )
 
     def _call_hf_api(self, prompt: str, max_tokens: int = 256) -> str:
-        """Call HuggingFace via OpenAI-compatible API."""
+        """Call HuggingFace via OpenAI-compatible API with provider fallback."""
         from openai import OpenAI
 
         client = OpenAI(
@@ -76,16 +78,26 @@ class NLQueryEngine:
             api_key=self.hf_token,
         )
 
-        completion = client.chat.completions.create(
-            model=HF_MODEL,
-            messages=[
-                {"role": "user", "content": prompt}
-            ],
-            max_tokens=max_tokens,
-            temperature=0.1,  # Low for structured output
-        )
+        # Try primary provider, fall back to sambanova if it fails
+        providers = [HF_MODEL, "HuggingFaceTB/SmolLM3-3B:sambanova"]
+        last_error = None
 
-        return completion.choices[0].message.content or ""
+        for model_id in providers:
+            try:
+                completion = client.chat.completions.create(
+                    model=model_id,
+                    messages=[
+                        {"role": "user", "content": prompt}
+                    ],
+                    max_tokens=max_tokens,
+                    temperature=0.1,  # Low for structured output
+                )
+                return completion.choices[0].message.content or ""
+            except Exception as e:
+                last_error = e
+                continue
+
+        raise last_error
 
     def parse_query(self, user_query: str, schema: Optional[Dict] = None) -> NLQueryResult:
         """
