@@ -712,8 +712,20 @@ def render_dataset_card(
                 with st.spinner(t("loading")):
                     result = _load_dataset_csv(service, dataset)
                     if result:
-                        _add_to_basket(dataset.title, result[1], len(result[0]))
-                        return result
+                        df, filename, dataset_id = result
+                        # Add directly to CartManager with dataset_id metadata
+                        # (avoids relying on fragile multi-level return chain)
+                        from intuitiveness.app.models.cart import CartManager
+                        cart = CartManager()
+                        if not cart.get_item(filename):
+                            cart.add_item(
+                                name=filename,
+                                source="datagouv",
+                                df=df,
+                                metadata={'dataset_id': dataset_id}
+                            )
+                        _add_to_basket(dataset.title, filename, len(df))
+                        st.rerun()
                     else:
                         st.error(t("failed_to_load"))
         else:
