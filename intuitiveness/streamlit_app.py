@@ -239,11 +239,12 @@ def init_session_state():
 
 
 def reset_workflow():
-    """Reset the workflow to start over."""
+    """Reset the workflow to start over — clears all state comprehensively."""
     st.session_state.current_step = 0
     st.session_state.answers = {}
     st.session_state.datasets = {}
     st.session_state.data_model = None
+    st.session_state.raw_data = None
     # Reset free navigation state
     st.session_state.nav_mode = 'guided'
     st.session_state.nav_session = None
@@ -251,6 +252,21 @@ def reset_workflow():
     st.session_state.nav_target = None
     st.session_state.nav_export = None
     st.session_state.relationship_builder = None
+    # Reset ascent state
+    st.session_state.pop('ascent_level', None)
+    st.session_state.pop('loaded_session_graph', None)
+    st.session_state.pop('loaded_graph_decisions', None)
+    # Reset cart state
+    st.session_state.pop('dataset_cart', None)
+    st.session_state.cart_mode = 'selection'
+    st.session_state.analysis_started = False
+    # Reset quality tools
+    st.session_state.pop('active_quality_tool', None)
+    st.session_state.pop('quality_df', None)
+    st.session_state.pop('quality_report', None)
+    # Reset wizard state
+    st.session_state.pop('wizard_step', None)
+    st.session_state.pop('discovery_results', None)
 
 
 # ============================================================================
@@ -323,8 +339,14 @@ ALL_STEPS = STEPS + ASCENT_STEPS
 
 
 def render_step_header(step: dict):
-    """Render step header with title and description."""
-    st.markdown(f"## {step['title']}")
+    """Render step header with title and description, split by language."""
+    title = step['title']
+    # Split bilingual titles (e.g., "English // Français") by active language
+    if ' // ' in title:
+        en_title, fr_title = title.split(' // ', 1)
+        lang = st.session_state.get('ui_language', 'en')
+        title = fr_title if lang == 'fr' else en_title
+    st.markdown(f"## {title}")
     if step.get('description'):
         st.markdown(f"*{step['description']}*")
 
@@ -377,6 +399,15 @@ def inject_right_sidebar_css():
     .level-emoji {
         font-size: 18px;
         line-height: 1;
+    }
+
+    .level-label {
+        font-size: 0.55rem;
+        font-weight: 500;
+        color: #78716c;
+        text-transform: uppercase;
+        letter-spacing: 0.02em;
+        white-space: nowrap;
     }
 
     /* Transition bars (horizontal thick lines) */
@@ -576,28 +607,54 @@ def _is_pure_landing_page() -> bool:
 
 
 def _bridge_raw_data_to_quality_df():
-    """Bridge cart/upload raw_data to quality_df if not already set.
+    """Bridge cart/upload/datasets data to quality_df if not already set.
 
-    The quality tool reads from session_state['quality_df'] but cart/upload
-    stores data in session_state['raw_data'] (a dict of DataFrames).
-    This bridge auto-populates quality_df from raw_data when available.
+    The quality tool reads from session_state['quality_df'] but data may live
+    in raw_data, datasets dict, or the cart. This bridge auto-populates
+    quality_df from whichever source is available.
     """
     quality_df_key = SessionStateKeys.QUALITY_DF
     if st.session_state.get(quality_df_key) is not None:
         return  # Already set, don't override
 
+    # Source 1: raw_data (from uploads or cart.to_raw_data())
     raw_data = st.session_state.get(SessionStateKeys.RAW_DATA)
-    if raw_data is None:
-        return
+    if raw_data is not None:
+        if isinstance(raw_data, dict):
+            dataframes = [v for v in raw_data.values() if isinstance(v, pd.DataFrame)]
+            if len(dataframes) == 1:
+                st.session_state[quality_df_key] = dataframes[0]
+                return
+            elif len(dataframes) > 1:
+                st.session_state[quality_df_key] = pd.concat(dataframes, ignore_index=True)
+                return
+        elif isinstance(raw_data, pd.DataFrame):
+            st.session_state[quality_df_key] = raw_data
+            return
 
-    if isinstance(raw_data, dict):
-        dataframes = [v for v in raw_data.values() if isinstance(v, pd.DataFrame)]
-        if len(dataframes) == 1:
-            st.session_state[quality_df_key] = dataframes[0]
-        elif len(dataframes) > 1:
-            st.session_state[quality_df_key] = pd.concat(dataframes, ignore_index=True)
-    elif isinstance(raw_data, pd.DataFrame):
-        st.session_state[quality_df_key] = raw_data
+    # Source 2: datasets dict (L3 DataFrame from descent)
+    datasets = st.session_state.get('datasets', {})
+    for level_key in ('l3', 'l2', 'l4'):
+        ds = datasets.get(level_key)
+        if ds is not None:
+            df = ds.get_data() if hasattr(ds, 'get_data') else ds
+            if isinstance(df, pd.DataFrame) and not df.empty:
+                st.session_state[quality_df_key] = df
+                return
+
+    # Source 3: cart datasets (not yet started analysis)
+    from intuitiveness.app.models.cart import CartManager
+    cart = CartManager()
+    if not cart.is_empty():
+        cart_raw = cart.to_raw_data()
+        if isinstance(cart_raw, dict):
+            dataframes = [v for v in cart_raw.values() if isinstance(v, pd.DataFrame)]
+            if dataframes:
+                st.session_state[quality_df_key] = (
+                    dataframes[0] if len(dataframes) == 1
+                    else pd.concat(dataframes, ignore_index=True)
+                )
+                return
 
 
 def _route_to_active_page():
@@ -819,7 +876,7 @@ def render_vertical_progress_sidebar():
         # In ascent, transitions are ordered from L0 (bottom) to L3 (top)
         # Visually: index 0 = bottom, index 3 = top
         # So we need to render in reverse order (3, 2, 1, 0) for top-to-bottom HTML
-        transitions = [(3, "🔗"), (2, "📋"), (1, "📐"), (0, "🎯")]  # L3, L2, L1, L0
+        transitions = [(3, "🔗", "L3"), (2, "📋", "L2"), (1, "📐", "L1"), (0, "🎯", "L0")]
     else:
         # Descent: L4 → L0 (progress goes DOWN)
         current_step = st.session_state.get('current_step', 0)
@@ -828,7 +885,7 @@ def render_vertical_progress_sidebar():
         mode_label = t("descent_mode_label")
         # In descent, transitions are ordered from L4 (top) to L0/Datum (bottom)
         # 🧶 L4, 🔗 L3, 📋 L2, 📐 L1, 🎯 L0
-        transitions = [(0, "🧶"), (1, "🔗"), (2, "📋"), (3, "📐"), (4, "🎯")]
+        transitions = [(0, "🧶", "L4"), (1, "🔗", "L3"), (2, "📋", "L2"), (3, "📐", "L1"), (4, "🎯", "L0")]
 
     # Build HTML
     html_parts = [
@@ -837,7 +894,7 @@ def render_vertical_progress_sidebar():
         f'<div class="progress-track">'
     ]
 
-    for i, (trans_idx, label) in enumerate(transitions):
+    for i, (trans_idx, label, level_name) in enumerate(transitions):
         # Determine state of this transition
         if is_ascent:
             # Ascent: completed if ascent_level > trans_idx
@@ -862,9 +919,10 @@ def render_vertical_progress_sidebar():
                 bar_class = "pending"
                 is_current = False
 
-        # Add level with emoji and transition bar
+        # Add level with emoji, label, and transition bar
         html_parts.append(f'<div class="level-container">')
         html_parts.append(f'<div class="level-emoji">{label}</div>')
+        html_parts.append(f'<div class="level-label">{level_name}</div>')
         html_parts.append(f'<div class="transition-bar {bar_class}"></div>')
         html_parts.append(f'</div>')
 
@@ -903,20 +961,324 @@ def render_results_step():
     st.info("Results step - under migration")
 
 def render_export_view():
-    """Placeholder - needs migration to app/pages/export.py"""
-    st.info("Export view - under migration")
+    """Render export page in free exploration mode."""
+    from intuitiveness.app.pages.export import render_export_page
+    render_export_page()
+
 
 def render_session_graph_loader():
-    """Placeholder - session graph loading UI"""
-    st.info("Session graph loader - under migration")
+    """Render the session graph file uploader for Free Exploration mode."""
+    st.subheader(t("load_session"))
+    st.info(
+        "Upload a session graph file to continue from a previous descent. "
+        "This restores your L0 results for the ascent phase."
+    )
+
+    uploaded_file = st.file_uploader(
+        t("upload_session_graph"),
+        type=['json'],
+        key='session_graph_upload'
+    )
+
+    if uploaded_file is not None:
+        import tempfile
+        import os
+
+        try:
+            with tempfile.NamedTemporaryFile(mode='wb', suffix='.json', delete=False) as f:
+                f.write(uploaded_file.getvalue())
+                temp_path = f.name
+
+            session_data = NavigationSession.load_graph(temp_path)
+            os.unlink(temp_path)
+
+            st.session_state['loaded_session_graph'] = session_data
+            st.session_state['loaded_graph_decisions'] = session_data.get('decisions', [])
+
+            st.success(t("session_loaded_success"))
+
+            st.markdown(f"**{t('loaded_session_summary')}**")
+            accumulated = session_data.get('accumulated_outputs', {})
+            for level in sorted(accumulated.keys(), reverse=True):
+                level_data = accumulated[level]
+                st.markdown(
+                    f"- **L{level}**: {level_data.get('row_count', '?')} items - "
+                    f"{level_data.get('decision_description', '')[:50]}"
+                )
+
+            st.markdown(f"**{t('navigation_path')}**")
+            for decision in session_data.get('decisions', []):
+                action = decision.get('action', 'entry')
+                desc = decision.get('decision_description', '')
+                st.markdown(
+                    f"  {decision['step']}. L{decision['level']} ({action}): {desc[:40]}..."
+                )
+
+            st.divider()
+            if st.button(t("continue_free_exploration"), type="primary"):
+                st.rerun()
+
+            return True
+
+        except Exception as e:
+            st.error(t("session_load_failed", error=str(e)))
+            return False
+
+    return False
+
 
 def render_free_navigation_main():
-    """Placeholder - free navigation main view"""
-    st.info("Free navigation - under migration")
+    """Render the main content area for free navigation mode."""
+    # Check for loaded session graph first (ascent)
+    if st.session_state.get('loaded_session_graph'):
+        _render_loaded_graph_view()
+        return
+
+    nav_session = st.session_state.nav_session
+    if nav_session is None:
+        # Try to initialize from raw_data
+        if st.session_state.raw_data is None:
+            st.error(t("upload_data_first"))
+            return
+        l4_dataset = Level4Dataset(st.session_state.raw_data)
+        st.session_state.nav_session = NavigationSession(l4_dataset, use_tree=True)
+        st.session_state.relationship_builder = DragDropRelationshipBuilder()
+        nav_session = st.session_state.nav_session
+
+    current_level = nav_session.current_level
+    level_names = {
+        0: "Your Computed Result",
+        1: "Your Selected Values",
+        2: "Items by Category",
+        3: "Connected Information",
+        4: "Your Uploaded Files"
+    }
+
+    st.subheader(f"Current View: {level_names.get(current_level.value, current_level.name)}")
+
+    # Display available options
+    st.divider()
+    st.subheader(t("what_would_you_like"))
+    options = nav_session.get_available_options()
+
+    if options:
+        cols = st.columns(min(len(options), 3))
+        for i, option in enumerate(options):
+            with cols[i % 3]:
+                action = option["action"]
+                description = option["description"]
+                target = option.get("target_level", "")
+
+                if action == "descend":
+                    if st.button(
+                        f"{t('explore_deeper', level=target)}",
+                        key=f"nav_descend_{i}"
+                    ):
+                        st.session_state.nav_action = 'descend'
+                        st.session_state.nav_target = target
+                        st.rerun()
+                elif action == "ascend":
+                    if st.button(
+                        f"{t('build_up_to', level=target)}",
+                        key=f"nav_ascend_{i}",
+                        type="primary"
+                    ):
+                        st.session_state.nav_action = 'ascend'
+                        st.session_state.nav_target = target
+                        st.rerun()
+                elif action == "exit":
+                    if st.button(
+                        f"Exit: {description}",
+                        key=f"nav_exit_{i}",
+                        type="secondary"
+                    ):
+                        st.session_state.nav_export = True
+                        st.rerun()
+    else:
+        st.info(t("start_exploring"))
+
+
+def _render_loaded_graph_view():
+    """Render the view for a loaded session graph (ascent phase ready)."""
+    session_data = st.session_state.get('loaded_session_graph')
+    if not session_data:
+        return
+
+    accumulated = session_data.get('accumulated_outputs', {})
+    decisions = session_data.get('decisions', [])
+    graph = session_data.get('graph')
+
+    if 'ascent_level' not in st.session_state:
+        st.session_state.ascent_level = 0
+
+    level_names = {
+        0: "Computed Result",
+        1: "Selected Values",
+        2: "Items by Category",
+        3: "Connected Information"
+    }
+
+    st.subheader(
+        f"Ascent Phase - {level_names.get(st.session_state.ascent_level, f'Level {st.session_state.ascent_level}')}"
+    )
+
+    # Show L0 result
+    if 0 in accumulated:
+        l0_data = accumulated[0]
+        l0_formatted = format_l0_value_for_display(l0_data.get('output_value'))
+        st.success(f"**{t('ground_truth_l0')}** {l0_formatted}")
+        st.caption(f"{t('calculation_method')}: {l0_data.get('decision_description', '')}")
+
+    st.divider()
+
+    # Navigation history
+    with st.expander(t("navigation_path"), expanded=False):
+        for decision in decisions:
+            action = decision.get('action', 'entry')
+            level = decision.get('level', '?')
+            desc = decision.get('decision_description', '')
+            st.markdown(f"- **L{level}** ({action}): {desc[:60]}...")
+
+    st.divider()
+
+    # Ascent steps using the same guided ascent forms
+    datasets = st.session_state.get('datasets', {})
+    from intuitiveness.app.ascent_controller import get_ascent_controller, AscentResult
+
+    controller = get_ascent_controller()
+
+    if st.session_state.ascent_level == 0:
+        st.subheader(t("step_7_recover"))
+        if graph:
+            l1_df = graph.get_level_data(1)
+            if l1_df is not None and not l1_df.empty:
+                st.metric(t("source_values_available"), f"{len(l1_df)} {t('rows_label')}")
+                with st.expander(t("preview_l1_data"), expanded=False):
+                    st.dataframe(l1_df.head(10))
+                if st.button(t("recover_source_values_btn"), type="primary", key="free_ascent_l0_l1"):
+                    datasets['l1_ascent'] = l1_df
+                    st.session_state['datasets'] = datasets
+                    st.session_state.ascent_level = 1
+                    st.rerun()
+            else:
+                st.warning(t("l1_not_found_warning"))
+        else:
+            # Fallback: use datasets from guided descent
+            l1_data = datasets.get('l1')
+            if l1_data is not None:
+                params = render_l0_to_l1_unfold_form(
+                    datasets.get('l0'), key_prefix="free_l0_l1"
+                )
+                if params is not None:
+                    outcome = controller.execute_l0_to_l1(params)
+                    if outcome.result == AscentResult.SUCCESS:
+                        datasets['l1_ascent'] = outcome.data
+                        st.session_state['datasets'] = datasets
+                        st.session_state.ascent_level = 1
+                        st.rerun()
+            else:
+                st.warning(t("l1_not_found_warning"))
+
+    elif st.session_state.ascent_level == 1:
+        if st.button(t("back_to_step_9"), key="free_back_9"):
+            st.session_state.ascent_level = 0
+            st.rerun()
+
+        st.subheader(t("step_8_add_dimension"))
+        l1_data = datasets.get('l1_ascent', datasets.get('l1'))
+        if l1_data is not None:
+            params = render_l1_to_l2_domain_form(l1_data, key_prefix="free_l1_l2")
+            if params is not None:
+                l1_df = l1_data.get_data() if hasattr(l1_data, 'get_data') else l1_data
+                if isinstance(l1_df, pd.Series):
+                    l1_df = l1_df.to_frame(name=params.get('column_name', 'value'))
+                outcome = controller.execute_l1_to_l2(
+                    categories=params.get('dimensions', []),
+                    column=params.get('column_name'),
+                    use_semantic=params.get('use_semantic', True),
+                    threshold=params.get('threshold', 0.5),
+                    l1_data=l1_df,
+                )
+                if outcome.result == AscentResult.SUCCESS:
+                    datasets['l2_ascent'] = outcome.data
+                    st.session_state['datasets'] = datasets
+                    st.session_state.ascent_level = 2
+                    st.rerun()
+                else:
+                    st.error(outcome.message)
+
+    elif st.session_state.ascent_level == 2:
+        if st.button(t("back_to_step_10"), key="free_back_10"):
+            st.session_state.ascent_level = 1
+            st.rerun()
+
+        st.subheader(t("step_9_linkage"))
+        l2_data = datasets.get('l2_ascent', datasets.get('l2'))
+        if l2_data is not None:
+            params = render_l2_to_l3_entity_form(l2_data, key_prefix="free_l2_l3")
+            if params is not None:
+                l2_df = l2_data.get_data() if hasattr(l2_data, 'get_data') else l2_data
+                outcome = controller.execute_l2_to_l3(
+                    entity_column=params['entity_column'],
+                    entity_type_name=params.get('entity_type_name'),
+                    relationship_type=params.get('relationship_type'),
+                    l2_data=l2_df,
+                )
+                if outcome.result == AscentResult.SUCCESS:
+                    datasets['l3_ascent'] = outcome.data
+                    st.session_state['datasets'] = datasets
+                    st.session_state.ascent_level = 3
+                    st.rerun()
+                else:
+                    st.error(outcome.message)
+
+    elif st.session_state.ascent_level >= 3:
+        st.success(t("ascent_completed"))
+        st.divider()
+
+        col1, col2, col3 = st.columns(3)
+        with col1:
+            if st.button(t("try_different_dimension"), key="free_try_dim"):
+                st.session_state.ascent_level = 1
+                datasets.pop('l2_ascent', None)
+                datasets.pop('l3_ascent', None)
+                st.session_state['datasets'] = datasets
+                st.rerun()
+        with col2:
+            if st.button(t("try_different_linkage"), key="free_try_link"):
+                st.session_state.ascent_level = 2
+                datasets.pop('l3_ascent', None)
+                st.session_state['datasets'] = datasets
+                st.rerun()
+        with col3:
+            if st.button(t("export_session"), key="free_export"):
+                st.session_state.nav_export = True
+                st.rerun()
+
 
 def render_free_navigation_sidebar():
-    """Placeholder - free navigation sidebar"""
-    pass
+    """Render the decision-tree sidebar for free navigation mode."""
+    nav_session = st.session_state.nav_session
+    if nav_session is None:
+        return
+
+    st.markdown(f"### {t('navigation_tree')}")
+
+    tree_viz = nav_session.get_tree_visualization()
+    decision_tree = DecisionTreeComponent()
+
+    def on_node_click(node_id: str):
+        try:
+            nav_session.restore(node_id)
+            st.session_state.nav_action = 'restored'
+        except NavigationError as e:
+            st.error(str(e))
+
+    decision_tree.render(
+        tree_viz,
+        on_node_click=on_node_click,
+        available_options=nav_session.get_available_options()
+    )
 
 
 if __name__ == "__main__":

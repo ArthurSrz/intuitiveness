@@ -269,10 +269,10 @@ def _render_quality_tools_selector() -> None:
 
 
 def _render_persistence_buttons(store: SessionStore) -> None:
-    """Render session save/clear buttons."""
+    """Render session save/load/clear buttons."""
     st.markdown(f"### {t('sidebar_session')}")
-    col1, col2 = st.columns(2)
-    
+    col1, col2, col3 = st.columns(3)
+
     with col1:
         if st.button(f"💾 {t('save_button')}", help=t('save_help')):
             try:
@@ -283,11 +283,36 @@ def _render_persistence_buttons(store: SessionStore) -> None:
                     st.warning(t('save_too_large'))
             except Exception as e:
                 st.error(t('save_failed', error=str(e)))
-    
+
     with col2:
+        if st.button(f"📂 {t('load_button')}", help=t('load_help')):
+            st.session_state['_show_load_uploader'] = True
+
+    with col3:
         if st.button(f"🗑️ {t('clear_button')}", help=t('clear_help')):
             from intuitiveness.streamlit_app import reset_workflow
             store.clear()
             reset_workflow()
             st.session_state.session_recovery_handled = True
             st.rerun()
+
+    # Show load uploader when requested
+    if st.session_state.get('_show_load_uploader'):
+        uploaded = st.file_uploader(
+            t('upload_session_graph'),
+            type=['json'],
+            key='sidebar_session_upload'
+        )
+        if uploaded is not None:
+            try:
+                import json
+                session_data = json.loads(uploaded.getvalue().decode('utf-8'))
+                # Store as loaded session graph for free exploration
+                st.session_state['loaded_session_graph'] = session_data
+                st.session_state['loaded_graph_decisions'] = session_data.get('decisions', [])
+                st.session_state['nav_mode'] = 'free'
+                st.session_state.pop('_show_load_uploader', None)
+                st.success(t('session_loaded_success'))
+                st.rerun()
+            except Exception as e:
+                st.error(t('session_load_failed', error=str(e)))
