@@ -156,7 +156,11 @@ class DataGouvSearchService:
                 self._nl_engine = NLQueryEngine(self._hf_token)
             except ValueError:
                 # No HF token available - NL disabled
-                logger.warning("No HF token - NL query enhancement disabled")
+                logger.warning("No HF_TOKEN found - NL query enhancement disabled. "
+                               "Set HF_TOKEN in .env or .streamlit/secrets.toml")
+                return None
+            except Exception as e:
+                logger.warning(f"NL engine init failed: {e}")
                 return None
         return self._nl_engine
 
