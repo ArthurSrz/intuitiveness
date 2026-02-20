@@ -20,7 +20,7 @@ import pandas as pd
 from typing import Any, Dict, Optional
 
 from intuitiveness.complexity import (
-    Level3Dataset, Level2Dataset, Level1Dataset, Level0Dataset
+    ComplexityLevel, Level3Dataset, Level2Dataset, Level1Dataset, Level0Dataset
 )
 from intuitiveness.redesign import Redesigner
 from intuitiveness.ui import (
@@ -188,7 +188,7 @@ def render_feature_extraction_step(l2_dataset: Level2Dataset):
             redesigner = Redesigner()
             l1_dataset = redesigner.reduce_complexity(
                 l2_dataset,
-                target_level=1,
+                target_level=ComplexityLevel.LEVEL_1,
                 column=column
             )
 
@@ -230,7 +230,7 @@ def render_aggregation_step(l1_dataset: Level1Dataset):
             redesigner = Redesigner()
             l0_dataset = redesigner.reduce_complexity(
                 l1_dataset,
-                target_level=0,
+                target_level=ComplexityLevel.LEVEL_0,
                 aggregation=aggregation
             )
 
