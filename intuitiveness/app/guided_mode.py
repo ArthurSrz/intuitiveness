@@ -24,10 +24,9 @@ DESCENT (L4→L0):
   Step 6 (results): L0 - View computed results
 
 ASCENT (L0→L3):
-  Step 7: L0→L1 - Recover source values
-  Step 8: L1→L2 - Define new categories
-  Step 9: L2→L3 - Enrich with linkage keys
-  Step 10: L3 - Final verification
+  Step 7 (l0_to_l1): L0→L1 - Recover source values
+  Step 8 (l1_to_l2): L1→L2 - Define new categories
+  Step 9 (l2_to_l3): L2→L3 - Enrich with linkage keys
 """
 
 import streamlit as st
@@ -86,36 +85,30 @@ DESCENT_STEPS = [
     }
 ]
 
-# Ascent phase steps (Steps 7-12) - Bilingual: English // Français
+# Ascent phase steps (Steps 7-9) - Bilingual: English // Français
+# IDs must match streamlit_app.py ASCENT_STEPS for unified dispatch
 ASCENT_STEPS = [
     {
-        "id": "recover_sources",
-        "title": "Datum // Datum",
+        "id": "l0_to_l1",
+        "title": "Datum → Vector // Datum → Vecteur",
         "level": "Step 7",
         "level_num": 0,
         "description": "L0 → L1: Recover source values // Récupérer les valeurs sources"
     },
     {
-        "id": "new_dimension",
-        "title": "Vector // Vecteur de données",
+        "id": "l1_to_l2",
+        "title": "Vector → Table // Vecteur → Tableau",
         "level": "Step 8",
         "level_num": 1,
         "description": "L1 → L2: Define new categories // Définir de nouvelles catégories"
     },
     {
-        "id": "linkage",
-        "title": "Table // Tableau de données",
+        "id": "l2_to_l3",
+        "title": "Table → Graph // Tableau → Graphe",
         "level": "Step 9",
         "level_num": 2,
         "description": "L2 → L3: Enrich with linkage keys // Enrichir avec des clés de liaison"
     },
-    {
-        "id": "final",
-        "title": "Linkable data // Données liables",
-        "level": "Step 10",
-        "level_num": 3,
-        "description": "Final verification // Vérification finale"
-    }
 ]
 
 # Combined for backward compatibility

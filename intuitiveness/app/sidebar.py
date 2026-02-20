@@ -249,15 +249,14 @@ def _render_mode_selector() -> None:
 
 
 def _render_quality_tools_selector() -> None:
-    """Render quality tools selector (assessment/catalog)."""
-    st.markdown("### Data modeling Tools")
+    """Render data tools selector (synthetic data generation)."""
+    st.markdown(f"### {t('data_tools')}")
     quality_tool = st.radio(
-        "Select tool",
-        options=['none', 'quality', 'catalog'],
+        t('select_tool'),
+        options=['none', 'synthetic'],
         format_func=lambda x: {
-            'none': 'None',
-            'quality': '📊 Quality Assessment',
-            'catalog': '📁 Dataset Catalog'
+            'none': t('none_tool'),
+            'synthetic': t('synthetic_data_tool'),
         }.get(x, x),
         index=0,
         key='quality_tool_selector',

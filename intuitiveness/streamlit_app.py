@@ -87,8 +87,6 @@ from intuitiveness.ui import (
     render_page_header,
     render_section_header,
     card,
-    render_quality_dashboard,
-    render_catalog_browser,
     separator,
     spacer,
     render_search_interface,
@@ -261,10 +259,12 @@ def reset_workflow():
     st.session_state.pop('dataset_cart', None)
     st.session_state.cart_mode = 'selection'
     st.session_state.analysis_started = False
-    # Reset quality tools
+    # Reset quality/synthetic tools
     st.session_state.pop('active_quality_tool', None)
     st.session_state.pop('quality_df', None)
     st.session_state.pop('quality_report', None)
+    st.session_state.pop('synthetic_result', None)
+    st.session_state.pop('synthetic_metrics', None)
     # Reset wizard state
     st.session_state.pop('wizard_step', None)
     st.session_state.pop('discovery_results', None)
@@ -562,6 +562,7 @@ def _handle_ascent_mode_switch():
         del st.session_state[SessionStateKeys.SWITCH_TO_ASCENT]
         # Stay in guided mode — ascent steps are ALL_STEPS[6..8]
         st.session_state[SessionStateKeys.CURRENT_STEP] = len(STEPS)  # First ascent step
+        st.session_state.ascent_level = 0  # Initialize ascent tracking for sidebar
 
 
 def _handle_session_recovery(store: SessionStore):
@@ -661,15 +662,12 @@ def _bridge_raw_data_to_quality_df():
 def _route_to_active_page():
     """Route to the active page based on mode and state."""
     
-    # Check for Quality Tools first (009-quality-data-platform)
+    # Check for data tools first
     active_quality_tool = st.session_state.get('active_quality_tool', 'none')
-    if active_quality_tool == 'quality':
-        # Bridge cart/upload data to quality tool if quality_df not yet set
+    if active_quality_tool == 'synthetic':
+        from intuitiveness.app.pages.synthetic import render_synthetic_page
         _bridge_raw_data_to_quality_df()
-        render_quality_dashboard()
-        return
-    elif active_quality_tool == 'catalog':
-        render_catalog_browser()
+        render_synthetic_page()
         return
     
     # Route based on navigation mode
@@ -741,6 +739,7 @@ def _render_ascent_step(step_id: str, step: dict):
             if outcome.result == AscentResult.SUCCESS:
                 datasets['l1_ascent'] = outcome.data
                 st.session_state['datasets'] = datasets
+                st.session_state.ascent_level = 1
                 st.success(outcome.message)
                 st.session_state.current_step += 1
                 st.rerun()
@@ -771,6 +770,7 @@ def _render_ascent_step(step_id: str, step: dict):
             if outcome.result == AscentResult.SUCCESS:
                 datasets['l2_ascent'] = outcome.data
                 st.session_state['datasets'] = datasets
+                st.session_state.ascent_level = 2
                 st.success(outcome.message)
                 st.session_state.current_step += 1
                 st.rerun()
@@ -798,6 +798,7 @@ def _render_ascent_step(step_id: str, step: dict):
             if outcome.result == AscentResult.SUCCESS:
                 datasets['l3_ascent'] = outcome.data
                 st.session_state['datasets'] = datasets
+                st.session_state.ascent_level = 3
                 st.success(outcome.message)
                 # After L3 ascent, go to export
                 st.session_state.current_step = len(ALL_STEPS)
@@ -864,9 +865,10 @@ def render_vertical_progress_sidebar():
     # Determine mode and current position
     nav_mode = st.session_state.get('nav_mode', 'guided')
     loaded_session = st.session_state.get('loaded_session_graph', False)
+    current_step = st.session_state.get('current_step', 0)
 
-    # Ascent mode: free exploration OR loaded session graph
-    is_ascent = (nav_mode == 'free') or loaded_session
+    # Ascent mode: guided ascent (step >= 6), free exploration, or loaded session graph
+    is_ascent = (current_step >= len(STEPS)) or (nav_mode == 'free') or loaded_session
 
     if is_ascent:
         # Ascent: L0 → L3 (progress goes UP, so we render bottom-to-top visually)
