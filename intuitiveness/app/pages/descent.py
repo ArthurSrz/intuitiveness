@@ -85,6 +85,17 @@ def render_descent_page():
     4. User selects aggregation method
     5. L0 datum computed and displayed
     """
+    # Sync current_step with dataset state so progress bar tracks the right level
+    datasets = st.session_state.get('datasets', {})
+    if 'l0' in datasets:
+        st.session_state.current_step = 5   # Results — L0
+    elif 'l1' in datasets:
+        st.session_state.current_step = 4   # Aggregation — L1
+    elif 'l2' in datasets:
+        st.session_state.current_step = 3   # Features — L2
+    elif 'l3' in datasets:
+        st.session_state.current_step = 2   # Domains — L3
+
     render_page_header(
         title=t('descent_title'),
         subtitle=t('descent_subtitle')
