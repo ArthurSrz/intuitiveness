@@ -90,6 +90,11 @@ class SessionGraph:
             serialized_artifact = serialize_dataframe(data_artifact)
             row_count = len(data_artifact)
             column_names = list(data_artifact.columns)
+        elif isinstance(data_artifact, pd.Series):
+            # Convert Series to DataFrame for consistent serialization
+            serialized_artifact = serialize_dataframe(data_artifact.to_frame(name=data_artifact.name or 'value'))
+            row_count = len(data_artifact)
+            column_names = [data_artifact.name or 'value']
         else:
             serialized_artifact = serialize_value(data_artifact)
             row_count = 1 if data_artifact is not None else 0

@@ -214,7 +214,9 @@ def render_aggregation_step(l1_dataset: Level1Dataset):
     st.write(t('aggregation_prompt'))
 
     # Display L1 vector
-    render_l1_vector(l1_dataset)
+    vector_data = l1_dataset.get_data()
+    column_name = getattr(l1_dataset, 'name', 'value') or 'value'
+    render_l1_vector(vector_data, column_name)
 
     # Aggregation method selection
     aggregation = st.selectbox(
@@ -238,8 +240,8 @@ def render_aggregation_step(l1_dataset: Level1Dataset):
             st.session_state['datasets']['l0'] = l0_dataset
             _track_descent_step(
                 level=0,
-                data_artifact=l0_dataset.value if hasattr(l0_dataset, 'value') else l0_dataset,
-                output_value=l0_dataset.value if hasattr(l0_dataset, 'value') else l0_dataset,
+                data_artifact=l0_dataset.get_data(),
+                output_value=l0_dataset.get_data(),
                 description=f"Aggregated with: {aggregation}",
                 params={"aggregation": aggregation},
             )
@@ -258,12 +260,16 @@ def render_results_view(l0_dataset: Level0Dataset):
     st.write(t('results_prompt'))
 
     # Display L0 datum
-    render_l0_datum(l0_dataset)
+    render_l0_datum(
+        value=l0_dataset.get_data(),
+        aggregation_method=getattr(l0_dataset, 'aggregation_method', 'computed'),
+        source_info=getattr(l0_dataset, 'description', None),
+    )
 
     # Show metadata
     with st.expander(t('show_metadata')):
         st.json({
-            'value': l0_dataset.value,
+            'value': l0_dataset.get_data(),
             'aggregation_method': l0_dataset.aggregation_method,
             'has_parent': l0_dataset.has_parent,
             'description': l0_dataset.description
