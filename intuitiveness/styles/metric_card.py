@@ -70,50 +70,34 @@ def render_metric_card(
     else:
         container_style = ""
 
-    # Render the metric card
-    st.markdown(
-        f"""
-        <div style="
-            {container_style}
-            padding: 2rem;
-            background: {COLORS["bg_elevated"]};
-            border-radius: 0.5rem;
-            border: 1px solid {COLORS["border"]};
-            box-shadow: 0 1px 3px rgba(0,0,0,0.05);
-            margin: 1.5rem 0;
-        ">
-            <div style="
-                font-size: 0.75rem;
-                font-weight: 600;
-                text-transform: uppercase;
-                letter-spacing: 0.05em;
-                color: {COLORS["text_secondary"]};
-                margin-bottom: 0.5rem;
-            ">
-                {full_label}
-            </div>
-            <div style="
-                font-size: 3rem;
-                font-weight: 600;
-                color: {COLORS["accent"]};
-                line-height: 1.2;
-            ">
-                {formatted_value}
-            </div>
-            {f'''
-            <div style="
-                font-size: 0.875rem;
-                color: {COLORS["text_secondary"]};
-                margin-top: 0.75rem;
-                line-height: 1.5;
-            ">
-                {description}
-            </div>
-            ''' if description else ''}
-        </div>
-        """,
-        unsafe_allow_html=True
+    # Build description HTML if present
+    desc_html = ""
+    if description:
+        desc_html = (
+            f'<div style="font-size: 0.875rem; color: {COLORS["text_secondary"]};'
+            f' margin-top: 0.75rem; line-height: 1.5;">'
+            f'{description}</div>'
+        )
+
+    # Render the metric card — single-line HTML to avoid markdown code-block
+    html = (
+        f'<div style="{container_style} padding: 2rem;'
+        f' background: {COLORS["bg_elevated"]};'
+        f' border-radius: 0.5rem;'
+        f' border: 1px solid {COLORS["border"]};'
+        f' box-shadow: 0 1px 3px rgba(0,0,0,0.05);'
+        f' margin: 1.5rem 0;">'
+        f'<div style="font-size: 0.75rem; font-weight: 600;'
+        f' text-transform: uppercase; letter-spacing: 0.05em;'
+        f' color: {COLORS["text_secondary"]}; margin-bottom: 0.5rem;">'
+        f'{full_label}</div>'
+        f'<div style="font-size: 3rem; font-weight: 600;'
+        f' color: {COLORS["accent"]}; line-height: 1.2;">'
+        f'{formatted_value}</div>'
+        f'{desc_html}'
+        f'</div>'
     )
+    st.markdown(html, unsafe_allow_html=True)
 
 
 def render_metric_row(metrics: list) -> None:
