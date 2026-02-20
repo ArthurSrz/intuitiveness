@@ -1137,11 +1137,13 @@ def render_wizard_step_3_confirm(
     st.markdown(f"**{t('preview_joined_l3')}**")
 
     # Show preview with pagination
+    max_preview = min(100, len(joined_df))
+    min_preview = min(5, max_preview)
     preview_rows = st.slider(
         t("rows_to_preview"),
-        min_value=5,
-        max_value=min(100, len(joined_df)),
-        value=min(20, len(joined_df)),
+        min_value=min_preview,
+        max_value=max_preview,
+        value=min(20, max_preview),
         key=f"{key_prefix}_preview_rows"
     )
 
