@@ -309,24 +309,24 @@ def categorize_l3_to_l2(
     Level2Dataset
         Categorized table
     """
-    G = l3_dataset.get_data()
+    data = l3_dataset.get_data()
 
-    # Extract nodes as rows
-    rows = []
-    for node in G.nodes():
-        node_data = G.nodes[node]
-        row = {
-            'node_id': node,
-            'node_type': node_data.get('node_type', 'unknown'),
-            'category': 'uncategorized'  # Placeholder for domain
-        }
-        rows.append(row)
-
-    df = pd.DataFrame(rows)
-
-    # Apply domain categorization (simplified for now)
-    # In full implementation, use semantic matching
-    if domains:
-        df['category'] = domains[0]  # Assign first domain as default
+    # Handle both DataFrame and Graph inputs
+    if isinstance(data, pd.DataFrame):
+        # DataFrame path: add category column directly
+        df = data.copy()
+        df['category'] = domains[0] if domains else 'uncategorized'
+    else:
+        # Graph path: extract nodes as rows
+        rows = []
+        for node in data.nodes():
+            node_data = data.nodes[node]
+            row = {
+                'node_id': node,
+                'node_type': node_data.get('node_type', 'unknown'),
+                'category': domains[0] if domains else 'uncategorized'
+            }
+            rows.append(row)
+        df = pd.DataFrame(rows)
 
     return Level2Dataset(df)
