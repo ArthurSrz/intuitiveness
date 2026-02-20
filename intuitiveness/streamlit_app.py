@@ -520,18 +520,16 @@ def main():
 
 
 def _handle_ascent_mode_switch():
-    """Handle switch from descent to ascent mode."""
+    """Handle switch from descent to ascent mode.
+
+    Stays in guided mode and advances to the first ascent step (index 6
+    in ALL_STEPS = STEPS + ASCENT_STEPS). The ascent steps are dispatched
+    by _render_guided_mode() → _render_ascent_step().
+    """
     if st.session_state.get(SessionStateKeys.SWITCH_TO_ASCENT):
         del st.session_state[SessionStateKeys.SWITCH_TO_ASCENT]
-        st.session_state[SessionStateKeys.NAV_MODE] = 'free'
-        # Delete widget key so it reinitializes with new nav_mode value
-        if SessionStateKeys.MODE_SELECTOR in st.session_state:
-            del st.session_state[SessionStateKeys.MODE_SELECTOR]
-    
-    # Keep free mode when in ascent workflow (has loaded_session_graph)
-    if st.session_state.get(SessionStateKeys.LOADED_SESSION_GRAPH) and \
-       st.session_state.get(SessionStateKeys.NAV_MODE) != 'free':
-        st.session_state[SessionStateKeys.NAV_MODE] = 'free'
+        # Stay in guided mode — ascent steps are ALL_STEPS[6..8]
+        st.session_state[SessionStateKeys.CURRENT_STEP] = len(STEPS)  # First ascent step
 
 
 def _handle_session_recovery(store: SessionStore):
