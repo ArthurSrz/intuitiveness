@@ -262,6 +262,123 @@ class DataGouvAPI:
         logger.error("Failed to parse CSV with all attempted encodings/separators")
         return None
     
+    def upload_community_resource(
+        self,
+        dataset_id: str,
+        file_content: bytes,
+        filename: str,
+        api_key: str,
+    ) -> Dict[str, Any]:
+        """
+        Upload a file as a community resource on a dataset.
+
+        Uses POST /api/1/datasets/{dataset_id}/upload/community/ (multipart).
+
+        Args:
+            dataset_id: Target dataset ID on data.gouv.fr
+            file_content: File content as bytes
+            filename: Name for the uploaded file
+            api_key: User's data.gouv.fr API key
+
+        Returns:
+            API response dict containing the created resource (with 'id' field)
+
+        Raises:
+            requests.exceptions.HTTPError: On 401, 403, 404, etc.
+        """
+        url = f"{self.BASE_URL}/datasets/{dataset_id}/upload/community/"
+        headers = {"X-API-KEY": api_key}
+        files = {"file": (filename, file_content, "text/csv")}
+
+        response = self.session.post(url, headers=headers, files=files, timeout=60)
+        response.raise_for_status()
+        return response.json()
+
+    def update_community_resource(
+        self,
+        resource_id: str,
+        dataset_id: str,
+        api_key: str,
+        title: Optional[str] = None,
+        description: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        """
+        Update metadata on an existing community resource.
+
+        Uses PUT /api/1/datasets/community_resources/{resource_id}/
+
+        Args:
+            resource_id: ID of the community resource to update
+            dataset_id: Parent dataset ID
+            api_key: User's data.gouv.fr API key
+            title: New title for the resource
+            description: New description for the resource
+
+        Returns:
+            Updated resource dict
+
+        Raises:
+            requests.exceptions.HTTPError: On API errors
+        """
+        url = f"{self.BASE_URL}/datasets/community_resources/{resource_id}/"
+        headers = {
+            "X-API-KEY": api_key,
+            "Content-Type": "application/json",
+        }
+        payload: Dict[str, Any] = {"dataset": {"id": dataset_id}}
+        if title:
+            payload["title"] = title
+        if description:
+            payload["description"] = description
+
+        response = self.session.put(url, headers=headers, json=payload, timeout=30)
+        response.raise_for_status()
+        return response.json()
+
+    def publish_community_resource(
+        self,
+        dataset_id: str,
+        file_content: bytes,
+        filename: str,
+        api_key: str,
+        title: Optional[str] = None,
+        description: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        """
+        Upload a community resource and set its metadata in one call.
+
+        Chains upload_community_resource + update_community_resource.
+        If metadata update fails, returns partial result with 'metadata_error' key.
+
+        Args:
+            dataset_id: Target dataset ID on data.gouv.fr
+            file_content: File content as bytes
+            filename: Name for the uploaded file
+            api_key: User's data.gouv.fr API key
+            title: Display title for the resource
+            description: Description for the resource
+
+        Returns:
+            Resource dict. Contains 'metadata_error' key if metadata update failed.
+        """
+        # Step 1: Upload the file
+        resource = self.upload_community_resource(
+            dataset_id, file_content, filename, api_key
+        )
+        resource_id = resource.get("id")
+
+        # Step 2: Update metadata (best-effort)
+        if resource_id and (title or description):
+            try:
+                resource = self.update_community_resource(
+                    resource_id, dataset_id, api_key, title, description
+                )
+            except Exception as e:
+                logger.warning(f"Metadata update failed for resource {resource_id}: {e}")
+                resource["metadata_error"] = str(e)
+
+        return resource
+
     def _clean_dataframe(self, df: pd.DataFrame) -> pd.DataFrame:
         """
         Clean a DataFrame (parse dates, fix decimal formats, etc.)

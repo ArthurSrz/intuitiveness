@@ -83,12 +83,12 @@ def _get_service() -> DataGouvSearchService:
 # Direct Loading Functions
 # =============================================================================
 
-def _load_dataset_csv(service: DataGouvSearchService, dataset: DatasetInfo) -> Optional[Tuple[pd.DataFrame, str]]:
+def _load_dataset_csv(service: DataGouvSearchService, dataset: DatasetInfo) -> Optional[Tuple[pd.DataFrame, str, str]]:
     """
     Directly load the first CSV from a dataset.
 
     Returns:
-        Tuple of (DataFrame, filename) if successful, None otherwise
+        Tuple of (DataFrame, filename, dataset_id) if successful, None otherwise
     """
     try:
         resources = service.get_dataset_resources(dataset.id, format_filter="csv")
@@ -98,7 +98,7 @@ def _load_dataset_csv(service: DataGouvSearchService, dataset: DatasetInfo) -> O
         # Load the first available CSV
         resource = resources[0]
         df = service.load_resource(resource.url, resource.title)
-        return (df, resource.title)
+        return (df, resource.title, dataset.id)
     except (DataGouvAPIError, DataGouvLoadError):
         return None
 
@@ -667,12 +667,12 @@ def render_dataset_card(
     dataset: DatasetInfo,
     service: DataGouvSearchService,
     card_idx: int
-) -> Optional[Tuple[pd.DataFrame, str]]:
+) -> Optional[Tuple[pd.DataFrame, str, str]]:
     """
     Render an expandable dataset card with full title/description.
 
     Returns:
-        Tuple of (DataFrame, filename) if user clicked load and it succeeded
+        Tuple of (DataFrame, filename, dataset_id) if user clicked load and it succeeded
     """
     # Format date (short)
     date_str = dataset.last_modified.strftime("%b %Y") if dataset.last_modified else ""
@@ -818,7 +818,7 @@ def render_dataset_grid(
     datasets: List[DatasetInfo],
     service: DataGouvSearchService,
     columns: int = 3
-) -> Optional[Tuple[pd.DataFrame, str]]:
+) -> Optional[Tuple[pd.DataFrame, str, str]]:
     """
     Render datasets in a side-by-side card grid layout.
 
@@ -828,7 +828,7 @@ def render_dataset_grid(
         columns: Number of columns in the grid (default: 2)
 
     Returns:
-        Tuple of (DataFrame, filename) if user loaded a dataset
+        Tuple of (DataFrame, filename, dataset_id) if user loaded a dataset
     """
     if not datasets:
         return None
@@ -971,9 +971,10 @@ def render_search_interface() -> Optional[pd.DataFrame]:
             result = render_dataset_grid(csv_datasets, service)
 
             if result:
-                df, filename = result
-                # Store the loaded filename for the main app (no success message - basket shows selection)
+                df, filename, dataset_id = result
+                # Store the loaded filename and dataset_id for cart metadata
                 st.session_state['datagouv_last_dataset_name'] = filename
+                st.session_state['datagouv_last_dataset_id'] = dataset_id
                 return df
 
             # Load more button

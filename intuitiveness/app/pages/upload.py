@@ -370,10 +370,12 @@ def _render_datagouv_tab() -> None:
         )
 
         cart = CartManager()
+        dataset_id = st.session_state.pop('datagouv_last_dataset_id', None)
         cart.add_item(
             name=dataset_name,
             source="datagouv",
-            df=loaded_df
+            df=loaded_df,
+            metadata={'dataset_id': dataset_id} if dataset_id else {}
         )
 
         st.session_state.pop('datagouv_last_dataset_name', None)

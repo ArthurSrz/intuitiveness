@@ -585,5 +585,22 @@
   "synthetic_config": "Configuration",
   "synthetic_generating": "Génération des données synthétiques...",
   "synthetic_error": "Échec de la génération",
-  "synthetic_preview": "Aperçu des données synthétiques"
+  "synthetic_preview": "Aperçu des données synthétiques",
+  "publish_datagouv_title": "Publier sur data.gouv.fr",
+  "publish_datagouv_description": "Contribuez vos données synthétiques au jeu de données original en tant que ressource communautaire.",
+  "publish_api_key_label": "Clé API data.gouv.fr",
+  "publish_api_key_help": "Obtenez votre clé API depuis votre [profil data.gouv.fr](https://www.data.gouv.fr/fr/admin/me/)",
+  "publish_title_label": "Titre de la ressource",
+  "publish_description_label": "Description de la ressource",
+  "publish_button": "Publier sur data.gouv.fr",
+  "publish_uploading": "Publication sur data.gouv.fr...",
+  "publish_success": "Publication réussie ! Votre ressource communautaire est maintenant disponible.",
+  "publish_partial_success": "Fichier importé mais la mise à jour des métadonnées a échoué. La ressource est disponible mais peut manquer de titre/description.",
+  "publish_error_401": "Clé API invalide. Vérifiez votre clé sur data.gouv.fr.",
+  "publish_error_403": "Permission refusée. Votre compte n'a peut-être pas accès à ce jeu de données.",
+  "publish_error_404": "Jeu de données introuvable sur data.gouv.fr. Il a peut-être été supprimé.",
+  "publish_error_generic": "Échec de la publication : {error}",
+  "publish_missing_api_key": "Veuillez entrer votre clé API pour publier.",
+  "publish_view_resource": "Voir sur data.gouv.fr",
+  "publish_synthetic_prefix": "[Synthétique]"
 }

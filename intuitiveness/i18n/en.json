@@ -585,5 +585,22 @@
   "synthetic_config": "Configuration",
   "synthetic_generating": "Generating synthetic data...",
   "synthetic_error": "Generation failed",
-  "synthetic_preview": "Synthetic Data Preview"
+  "synthetic_preview": "Synthetic Data Preview",
+  "publish_datagouv_title": "Publish to data.gouv.fr",
+  "publish_datagouv_description": "Contribute your synthetic data back to the original dataset as a community resource.",
+  "publish_api_key_label": "data.gouv.fr API Key",
+  "publish_api_key_help": "Get your API key from your [data.gouv.fr profile](https://www.data.gouv.fr/fr/admin/me/)",
+  "publish_title_label": "Resource title",
+  "publish_description_label": "Resource description",
+  "publish_button": "Publish to data.gouv.fr",
+  "publish_uploading": "Publishing to data.gouv.fr...",
+  "publish_success": "Published successfully! Your community resource is now available.",
+  "publish_partial_success": "File uploaded but metadata update failed. The resource is available but may lack title/description.",
+  "publish_error_401": "Invalid API key. Please check your key on data.gouv.fr.",
+  "publish_error_403": "Permission denied. Your account may not have access to this dataset.",
+  "publish_error_404": "Dataset not found on data.gouv.fr. It may have been removed.",
+  "publish_error_generic": "Publication failed: {error}",
+  "publish_missing_api_key": "Please enter your API key to publish.",
+  "publish_view_resource": "View on data.gouv.fr",
+  "publish_synthetic_prefix": "[Synthetic]"
 }

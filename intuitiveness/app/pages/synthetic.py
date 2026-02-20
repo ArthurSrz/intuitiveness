@@ -3,13 +3,148 @@ Synthetic Data Generation Page
 
 Renders the UI for generating synthetic data using TabPFN (with Gaussian copula fallback).
 Uses the existing quality/synthetic_generator.py backend.
+Includes publish-to-data.gouv.fr as community resource (Phase C).
 """
 
 import streamlit as st
 import pandas as pd
 from typing import Optional
+import requests
 
 from intuitiveness.ui import t, render_page_header
+
+
+def _get_source_dataset_id() -> Optional[str]:
+    """
+    Find the data.gouv.fr dataset_id from the cart, if the source data came from there.
+
+    Walks cart items looking for one with source='datagouv' and a dataset_id in metadata.
+    Returns None if no data.gouv.fr source is found.
+    """
+    try:
+        from intuitiveness.app.models.cart import CartManager
+        cart = CartManager()
+        for item in cart.get_all_items().values():
+            if item.source == 'datagouv' and item.source_metadata.get('dataset_id'):
+                return item.source_metadata['dataset_id']
+    except Exception:
+        pass
+    return None
+
+
+def _render_publish_section(synthetic_df: pd.DataFrame, metrics) -> None:
+    """
+    Render the 'Publish to data.gouv.fr' section.
+
+    Only called when a dataset_id is available (data came from data.gouv.fr).
+    """
+    dataset_id = _get_source_dataset_id()
+    if not dataset_id:
+        return
+
+    st.divider()
+    st.subheader(t('publish_datagouv_title'))
+    st.markdown(t('publish_datagouv_description'))
+
+    # API key: prefer Streamlit secrets, fall back to manual input
+    api_key = st.secrets.get("DATA_GOUV", "")
+    if api_key:
+        st.success(t('publish_api_key_label') + " ✓")
+    else:
+        api_key = st.text_input(
+            t('publish_api_key_label'),
+            type="password",
+            key="publish_api_key",
+            help=t('publish_api_key_help'),
+        )
+
+    # Pre-filled title and description
+    n_samples = len(synthetic_df)
+    default_title = f"{t('publish_synthetic_prefix')} Synthetic data - {n_samples} samples"
+    default_description = (
+        f"Synthetic dataset generated with Intuitiveness.\n\n"
+        f"- Samples: {n_samples}\n"
+        f"- Columns: {len(synthetic_df.columns)}\n"
+        f"- Correlation preservation: {(1 - metrics.mean_correlation_error) * 100:.1f}%\n"
+        f"- Distribution similarity: {metrics.distribution_similarity * 100:.1f}%\n"
+        f"- Source: https://www.data.gouv.fr/fr/datasets/{dataset_id}/\n"
+        f"- Generator: https://intuitiveness.streamlit.app/"
+    )
+
+    title = st.text_input(
+        t('publish_title_label'),
+        value=default_title,
+        key="publish_title",
+    )
+    description = st.text_area(
+        t('publish_description_label'),
+        value=default_description,
+        key="publish_description",
+        height=150,
+    )
+
+    # Publish button
+    publish_disabled = not api_key
+    if publish_disabled:
+        st.caption(t('publish_missing_api_key'))
+
+    if st.button(
+        t('publish_button'),
+        type="primary",
+        key="btn_publish_datagouv",
+        disabled=publish_disabled,
+    ):
+        _execute_publish(synthetic_df, dataset_id, api_key, title, description)
+
+
+def _execute_publish(
+    synthetic_df: pd.DataFrame,
+    dataset_id: str,
+    api_key: str,
+    title: str,
+    description: str,
+) -> None:
+    """Convert DataFrame to CSV bytes and publish as community resource."""
+    from intuitiveness.services.datagouv_api import DataGouvAPI
+
+    with st.spinner(t('publish_uploading')):
+        try:
+            csv_bytes = synthetic_df.to_csv(index=False).encode('utf-8')
+            filename = "synthetic_data.csv"
+
+            api = DataGouvAPI()
+            result = api.publish_community_resource(
+                dataset_id=dataset_id,
+                file_content=csv_bytes,
+                filename=filename,
+                api_key=api_key,
+                title=title,
+                description=description,
+            )
+
+            if result.get('metadata_error'):
+                st.warning(t('publish_partial_success'))
+            else:
+                st.success(t('publish_success'))
+
+            # Show link to the resource on data.gouv.fr
+            resource_id = result.get('id')
+            if resource_id:
+                resource_url = f"https://www.data.gouv.fr/fr/datasets/{dataset_id}/#/community-resources/{resource_id}"
+                st.markdown(f"[{t('publish_view_resource')}]({resource_url})")
+
+        except requests.exceptions.HTTPError as e:
+            status_code = e.response.status_code if e.response is not None else None
+            if status_code == 401:
+                st.error(t('publish_error_401'))
+            elif status_code == 403:
+                st.error(t('publish_error_403'))
+            elif status_code == 404:
+                st.error(t('publish_error_404'))
+            else:
+                st.error(t('publish_error_generic', error=str(e)))
+        except Exception as e:
+            st.error(t('publish_error_generic', error=str(e)))
 
 
 def _get_source_dataframe() -> Optional[pd.DataFrame]:
@@ -171,3 +306,6 @@ def render_synthetic_page():
             mime="text/csv",
             key='btn_download_synthetic',
         )
+
+        # Publish to data.gouv.fr (only if source was from data.gouv.fr)
+        _render_publish_section(synthetic_df, metrics)
