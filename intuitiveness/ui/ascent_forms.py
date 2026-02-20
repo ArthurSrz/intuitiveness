@@ -1049,6 +1049,22 @@ def render_wizard_step_3_confirm(
     is_row_vector_format = isinstance(connections, dict) and connections.get('method') == 'row_vector_embeddings'
 
     if not connections:
+        # Single-file case: no connections needed, use the file directly
+        if len(dataframes) == 1:
+            single_df = list(dataframes.values())[0]
+            st.info(t("single_file_no_join"))
+            st.dataframe(single_df.head(10), use_container_width=True)
+
+            col1, col2 = st.columns(2)
+            with col1:
+                if st.button(t("back_to_step_2"), key=f"{key_prefix}_back_single"):
+                    _set_wizard_step(2)
+                    st.rerun()
+            with col2:
+                if st.button(t("continue_arrow"), key=f"{key_prefix}_confirm_single", type="primary"):
+                    return single_df
+            return None
+
         st.warning(t("no_connections_defined"))
         if st.button(t("back_to_step_2"), key=f"{key_prefix}_back_no_conn"):
             _set_wizard_step(2)
