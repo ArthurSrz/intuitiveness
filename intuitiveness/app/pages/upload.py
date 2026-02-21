@@ -70,16 +70,46 @@ def _render_selection_mode() -> None:
     # State indicator
     render_cart_state_indicator()
 
-    # Cart preview (if not empty)
+    # Cart preview + Start Analysis button (if not empty)
     from intuitiveness.app.models.cart import CartManager
     cart = CartManager()
 
     if not cart.is_empty():
         render_cart_preview_grid()
+
+        # Primary "Start Analysis" button in main area (sidebar may be hidden on landing)
+        col1, col2, col3 = st.columns([1, 2, 1])
+        with col2:
+            if st.button(
+                f"✅ {t('start_analysis')}",
+                type="primary",
+                use_container_width=True,
+                key="main_start_analysis"
+            ):
+                _handle_cart_start_analysis()
+
         st.markdown("---")
 
     # Data source options
     _render_search_interface()
+
+
+def _handle_cart_start_analysis() -> None:
+    """Handle 'Start Analysis' click from main content area."""
+    from intuitiveness.app.models.cart import CartManager
+    from intuitiveness.complexity import Level4Dataset
+    from intuitiveness.ui import _set_wizard_step
+
+    cart = CartManager()
+    st.session_state.raw_data = cart.to_raw_data()
+    if 'datasets' not in st.session_state:
+        st.session_state.datasets = {}
+    st.session_state.datasets['l4'] = Level4Dataset(st.session_state.raw_data)
+    st.session_state.cart_mode = 'processing'
+    st.session_state.analysis_started = True
+    st.session_state.current_step = 0
+    _set_wizard_step(1)
+    st.rerun()
 
 
 def _render_processing_mode() -> None:
