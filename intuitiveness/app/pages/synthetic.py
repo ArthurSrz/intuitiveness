@@ -189,6 +189,11 @@ def render_synthetic_page():
         get_synthetic_summary,
     )
 
+    # Back navigation (always accessible without sidebar)
+    if st.button("← Back to workflow", key="synthetic_back"):
+        st.session_state['active_quality_tool'] = 'none'
+        st.rerun()
+
     render_page_header(
         title=t('synthetic_data'),
         subtitle=t('synthetic_subtitle'),

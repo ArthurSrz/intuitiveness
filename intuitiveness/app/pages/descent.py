@@ -300,6 +300,17 @@ def render_results_view(l0_dataset: Level0Dataset):
             st.session_state[SessionStateKeys.CURRENT_STEP] = 99
             st.rerun()
 
+    # Data Tools: Quick access to synthetic data generation
+    st.divider()
+    st.markdown(f"#### 🧪 {t('data_tools')}")
+    if st.button(
+        f"🔮 {t('synthetic_data_tool')}",
+        key="results_goto_synthetic",
+        help=t('synthetic_subtitle'),
+    ):
+        st.session_state['active_quality_tool'] = 'synthetic'
+        st.rerun()
+
 
 def categorize_l3_to_l2(
     l3_dataset: Level3Dataset,
