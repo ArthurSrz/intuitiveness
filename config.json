@@ -1,0 +1,11 @@
+{
+    "mcpServers":
+    "neo4j-data-modeling":{
+        "type":"local",
+        "command": "uv",
+        "args": [
+            "run"
+            "mcp-neo4j-data-modeling"
+        ]
+    }
+}

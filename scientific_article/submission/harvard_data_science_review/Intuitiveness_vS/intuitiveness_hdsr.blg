@@ -1,0 +1,19 @@
+[0] Config.pm:307> INFO - This is Biber 2.19
+[0] Config.pm:310> INFO - Logfile is 'intuitiveness_hdsr.blg'
+[51] biber-darwin:340> INFO - === Tue Feb  3, 2026, 12:31:58
+[65] Biber.pm:419> INFO - Reading 'intuitiveness_hdsr.bcf'
+[130] Biber.pm:979> INFO - Found 16 citekeys in bib section 0
+[147] Biber.pm:4419> INFO - Processing section 0
+[154] Biber.pm:4610> INFO - Looking for bibtex file 'references.bib' for section 0
+[156] bibtex.pm:1713> INFO - LaTeX decoding ...
+[167] bibtex.pm:1519> INFO - Found BibTeX data source 'references.bib'
+[265] UCollate.pm:68> INFO - Overriding locale 'en-US' defaults 'normalization = NFD' with 'normalization = prenormalized'
+[265] UCollate.pm:68> INFO - Overriding locale 'en-US' defaults 'variable = shifted' with 'variable = non-ignorable'
+[265] Biber.pm:4239> INFO - Sorting list 'apa/apasortcite//global/global' of type 'entry' with template 'apa' and locale 'en-US'
+[265] Biber.pm:4245> INFO - No sort tailoring available for locale 'en-US'
+[293] UCollate.pm:68> INFO - Overriding locale 'en-US' defaults 'variable = shifted' with 'variable = non-ignorable'
+[293] UCollate.pm:68> INFO - Overriding locale 'en-US' defaults 'normalization = NFD' with 'normalization = prenormalized'
+[293] Biber.pm:4239> INFO - Sorting list 'apa/global//global/global' of type 'entry' with template 'apa' and locale 'en-US'
+[293] Biber.pm:4245> INFO - No sort tailoring available for locale 'en-US'
+[311] bbl.pm:660> INFO - Writing 'intuitiveness_hdsr.bbl' with encoding 'UTF-8'
+[325] bbl.pm:763> INFO - Output to intuitiveness_hdsr.bbl

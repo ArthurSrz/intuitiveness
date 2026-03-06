@@ -1,0 +1,963 @@
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%    Harvard Data Science Review Submission       %
+%    Intuitiveness Article                         %
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+\documentclass[]{hdsr}
+
+% Theorem styles (hdsr class already loads amsthm)
+\theoremstyle{plain}      % italic text, bold header
+\newtheorem{theorem}{Theorem}[section]
+\newtheorem{proposition}[theorem]{Proposition}
+\newtheorem{lemma}[theorem]{Lemma}
+\newtheorem{corollary}[theorem]{Corollary}
+
+\theoremstyle{definition} % normal text, bold header
+\newtheorem{definition}[theorem]{Definition}
+\newtheorem{example}[theorem]{Example}
+
+\theoremstyle{remark}     % normal text, italic header
+\newtheorem{remark}[theorem]{Remark}
+\newtheorem{note}[theorem]{Note}
+
+\begin{document}
+
+% Larger bottom margin for the first page
+\newgeometry{bottom=1.5in}
+
+% Editorial staff will replace with actual volume/issue/DOI numbers
+\volumeheader{0}{0}{00.000}
+
+\begin{center}
+  \title{Intuitiveness as the Next Stage of Open Data: dataset design and complexity}
+  \maketitle
+
+  % Start page numbering on second page
+  \thispagestyle{empty}
+  \vspace*{.2in}
+
+  % Authors and Affiliations
+  \begin{tabular}{cc}
+    Sarazin Arthur\upstairs{\affilone,*}, Mourey Mathis\upstairs{\affiltwo}
+   \\[0.25ex]
+   {\small \upstairs{\affilone} Researcher in Design Science, Veltys, France} \\
+   {\small \upstairs{\affiltwo} Researcher in Data Science, The Hague University of Applied Sciences, Netherlands} \\
+   {\small \upstairs{*} Researcher associated with the UNESCO Chair ``AI and Data Science for Society''} \\
+  \end{tabular}
+
+  \emails{\upstairs{*}asarazin@veltys.com}
+  \vspace*{0.4in}
+
+\begin{abstract}
+\noindent \textbf{Purpose:} Open data platforms face a critical challenge: datasets designed for expert users remain inaccessible to citizens and professionals with varying data literacy levels. This paper addresses the need for intuitive datasets whose complexity can adapt to user needs and capabilities, enabling broader value extraction from open data.
+
+\noindent \textbf{Methods:} We develop a conceptual meta-design framework grounded in design science research methodology and hierarchical design patterns. The framework defines five levels of data abstraction (L0-L4), from atomic datums to unlinkable multi-level datasets. We introduce the concept of dataset complexity mathematically and demonstrate that transitions between abstraction levels achieve 75-100\% complexity reduction. The framework is implemented as the open-source \texttt{intuitiveness} Python package, featuring AI-assisted entity discovery, semantic domain matching, and interactive navigation. We validate the approach through a case study with a major international logistics operator managing 8,368 indicators across multiple data sources.
+
+\noindent \textbf{Results:} The descent phase (L4$\to$L0) transformed fragmented datasets into a clear atomic metric, revealing 40,279 relationships and enabling systematic identification of redundancy clusters. The ascent phase (L0$\to$L3) reconstructed intuitive multi-level tables that directly answered business questions about indicator consolidation. The accompanying Streamlit interface integrates with France's data.gouv.fr platform, making 45,000+ datasets accessible through guided workflows supporting both descent and ascent operations.
+
+\noindent \textbf{Conclusions:} The framework provides a principled method for designing intuitive datasets that serve diverse data users: from citizens seeking single facts to data scientists building complex products. By formalizing complexity levels and reduction mechanisms, we enable open data platforms to move beyond one-size-fits-all presentations toward adaptive, user-responsive dataset designs. Future work includes formal user studies across literacy levels and extension to streaming data contexts.
+\end{abstract}
+\end{center}
+
+\vspace*{0.15in}
+\hspace{10pt}
+\small
+\textbf{\textit{Keywords: }} {open data; meta-design; data literacy; framework; dataset complexity}
+
+\copyrightnotice
+
+\section*{Media Summary}
+The open data movement has made thousands of datasets publicly available, but most remain inaccessible to non-experts. This paper introduces a method for designing "intuitive datasets" that adapt to users' varying data skills---from citizens seeking single facts to data scientists building complex analyses. We define five levels of data complexity (from atomic single values to interconnected multi-table structures) and prove mathematically that moving between levels reduces complexity by 55-100\%. Testing this with a logistics company managing 8,368 indicators, we transformed chaos into clarity: first simplifying to reveal one key metric, then rebuilding structured tables that directly answered business questions. An open-source Python tool and web interface now make this method available to anyone working with France's 45,000+ government datasets. This research shows how open data platforms can move beyond "one-size-fits-all" presentations to truly serve diverse users.
+
+% These commands adjust margins after the first page
+\restoregeometry
+\newgeometry{bottom=0.5in}
+
+
+
+%==================================
+% SECTION 1: INTRODUCTION
+%==================================
+\section{Introduction}
+
+\subsection{Context and motivation}
+
+This conceptual meta-design framework aims at demonstrating how design can assist in producing useful open datasets and related data products. The framework and the associated package and interface (\texttt{intuitiveness}) was created to support the open data community in their efforts to broaden the number of data users \citep{ruppert2012} who use data to support decision-making, create new services and products, or produce innovative information and knowledge \citep{safarov2017}.
+
+\subsection{Problem statement}
+
+The conceptual meta-design framework meets the need for a method to design intuitive datasets, that is datasets whose shape can adapt to the data literacy level and the need of the user. There is a very diverse range of data users whose data literacy and needs differ greatly considering data: some will only look for one piece of information in the dataset while others will use data as a core artifact of a data product they are making. Yet, these diverse needs and data literacy levels have not been considered by open data producers while designing datasets \citep{dymytrova2018}.
+
+\subsection{Contributions}
+
+In this paper, we make the following contributions:
+\begin{enumerate}
+    \item We propose a conceptual meta-design framework based on five levels of data abstraction, enabling dataset designers to adapt complexity to user needs.
+    \item We provide a formal definition of dataset complexity and demonstrate mathematically how transitions between abstraction levels reduce complexity.
+    \item We implement this framework as a Python library (\texttt{intuitiveness}) and validate it through a real-world case study with a major international logistics operator.
+    \item We propose an interface that demonstrate the value of the \texttt{intuitiveness} package by making all CSVs files from the french public open data platform data.gouv.fr accessible to the package. 
+    \item We offer practical guidelines for open data platforms to design intuitive datasets that address societal issues such as global warming, health, and public transparency.
+\end{enumerate}
+
+\subsection{Paper organization}
+
+The remainder of this paper is organized as follows. Section~\ref{sec:related-work} reviews related work on data literacy, open data reuse, and human-data interaction. Section~\ref{sec:framework} presents our conceptual meta-design framework with five levels of abstraction. Section~\ref{sec:complexity} provides the corresponding formal complexity analysis. Section~\ref{sec:case-study} describes the implementation and case study. Section~\ref{sec:discussion} discusses implications and limitations. Finally, Section~\ref{sec:conclusion} concludes the paper and outlines future work.
+
+%==================================
+% SECTION 2: RELATED WORK
+%==================================
+\section{Related Work}
+\label{sec:related-work}
+
+Our work on intuitive datasets draws from several research streams: adaptive data visualization, user modeling and assessment, documentation design, and human-data interaction. We review each in turn, highlighting how existing approaches inform our meta-design framework.
+
+\subsection{Adaptive data visualization}
+
+A growing body of research addresses the challenge of adapting visualizations to users with varying levels of expertise. \citet{poetzsch2020towardataxonomy} propose a taxonomy for adaptive data visualization in analytics applications, distinguishing between user traits (e.g., statistical expertise, graphical literacy) and user states (e.g., monitoring vs. analysis tasks). Their empirical evaluation reveals that monitoring tasks with higher data complexity receive better suitability ratings, while analysis tasks require richer interactive features such as filtering, brushing, and drill-down capabilities. This suggests that different abstraction levels may be appropriate for different analytical intents, a principle we formalize in our framework.
+\vspace{1em}
+\noindent \citet{steichen2013useradaptiveinformationvisualisation} demonstrate that eye gaze data can predict users' current visualization tasks and cognitive abilities, including perceptual speed, visual working memory, and verbal working memory. Their work enables real-time adaptive interventions such as highlighting relevant elements or de-emphasizing non-relevant data to reduce cognitive load. Notably, they find that users with low perceptual speed particularly benefit from adaptive assistance, reinforcing the need for interfaces that can dynamically adjust complexity.
+
+\vspace{1em}
+
+\noindent \citet{amyrotos2021adaptivevisualisationsfor} critiques the prevalent ``one-size-fits-all approach'' in data visualization tools and proposes a human-centered adaptive visualization framework. This framework incorporates a multi-dimensional user model considering cognitive factors, domain expertise, and task context. A data visualization engine then recommends best-fit visualizations, while an intelligent analytics component continuously refines the user model through interaction tracking. This work underscores the importance of moving beyond static dataset presentations toward dynamic, user-responsive designs.
+
+\subsection{Visualization recommenders and progressive disclosure}
+
+Selecting appropriate visualizations poses significant challenges for non-expert users. \citet{mutlu2016vizrec} address this through VizRec, a recommender system that suggests personalized visualizations by combining perceptual guidelines with user preferences. The system uses tag vectors to describe visualization content for content-based filtering and quality ratings for collaborative filtering. By reducing combinatorial explosion through perceptual constraints, VizRec alleviates choice overload, which is a key barrier to data accessibility for users with limited visualization literacy.
+
+\vspace{1em}
+
+\noindent \citet{cockburn2014supportingnoviceto} examine the broader challenge of supporting novice-to-expert transitions in user interfaces. They document systems like FollowUs, which integrates online tutorials within applications and enables community contributions, leading to higher task completion and lower frustration. The Chronicle system visualizes user workflows via a zoomable timeline, supporting reflection on interaction strategies. These mechanisms for progressive skill development complement our approach of progressive complexity reduction.
+
+\subsection{Dashboard Design and User-Centered Challenges}
+
+\noindent \citet{alhamadi2022dataqualitymismatched} provide empirical insights into the challenges of user-centered dashboard design. Through interviews with dashboard developers, they identify a significant gap between users' visual literacy and dashboard requirements. Their work categorizes three adaptation mechanisms: \textit{customization} (user-initiated modifications), \textit{personalization} (system-driven adjustments at load time), and \textit{automatic adaptation} (real-time updates based on user models). Developers report implementing practices such as minimal default charts, consistent color schemes, role-tailored filters, and explicit interpretation of visualizations.
+
+\vspace{1em}
+
+\noindent Crucially, \citeauthor{alhamadi2022dataqualitymismatched} find that users often struggle not only with visualization complexity but also with understanding data provenance and trusting displayed information. They recommend layered documentation (high-level summaries, in-situ definitions, and links to machine-readable metadata) to address these concerns. This resonates with our goal of designing datasets whose structure can reveal or hide complexity based on user needs.
+
+\subsection{User Modeling and Literacy Assessment}
+
+\noindent Effective adaptation requires accurate assessment of user capabilities. \citet{steichen2013useradaptiveinformationvisualisation} pioneer the use of behavioral telemetry for user modeling, demonstrating that gaze patterns can infer cognitive abilities with accuracy significantly above baseline. Prior work they reference shows that mouse click behavior and visualiZation selections can reveal user expertise and suboptimal usage patterns.
+
+\vspace{1em}
+
+\noindent \citet{amyrotos2021adaptivevisualisationsfor} extends this with reflective analytics and learning-curve modeling to refine user models over time. The goal is a ``generic data visualization engine'' that renders appropriate visualizations based on data characteristics, user models, and task specifications. Such systems move toward the vision of intuitive datasets that automatically calibrate their presentation to each user's proficiency level.
+
+\subsection{Positioning Our Contribution}
+
+\noindent Existing work focuses predominantly on adapting \textit{visualizations} and \textit{interfaces} to user characteristics. However, comparatively little attention has been paid to adapting the \textit{underlying dataset structure} itself. Our framework addresses this gap by proposing that datasets can be designed with multiple levels of abstraction, enabling not just different visual presentations but fundamentally different data structures optimized for users at different literacy levels.
+
+\vspace{1em}
+
+\noindent While adaptive visualization systems adjust how data is shown, our approach adjusts what data is shown and how it is organized. This represents a shift from presentation-layer adaptation to data-layer adaptation. By formalizing complexity levels and reduction mechanisms, we provide dataset designers with a principled method for creating intuitive open datasets that can serve diverse data users: from citizens seeking a single fact to data scientists building complex products.
+
+%==================================
+% SECTION 3: CONCEPTUAL FRAMEWORK (REVISED)
+%==================================
+\section{Conceptual Meta-Design Framework}
+\label{sec:framework}
+
+To create the conceptual meta-design framework we used the design science research methodology \citep{hevner2004} and applied the Hierarchical design pattern \citep{vaishnavi2015}. This pattern uses the divide and conquer strategy to design a complex system. It designs a system (the conceptual meta-design framework) by decomposing it into subsystems (five conceptual design frameworks to design each of the five levels of abstraction of one dataset), designing each of them before designing the interactions between them.
+\\
+
+\noindent We also ensured, following the recursive principle of granular computing that secures a high level of human-data interaction \citep{wilke2016}, that datasets of an upper level of abstraction could be constructed by human extrapolation of datasets of lower levels of abstraction.
+\\
+
+\noindent We consider five levels of abstraction for every dataset, hence five conceptual design frameworks. At the highest level, \textbf{Level 4} encompasses data made of unlinkable and multi-level datasets. Descending to \textbf{Level 3}, we find data made of linkable and multi-level datasets. \textbf{Level 2} represents data made of a single dataset with several entities and attributes. Moving further down, \textbf{Level 1} consists of data made of a single entity and several attributes, or alternatively of a single attribute and several entities. Finally, at the most granular level, \textbf{Level 0} comprises data made of a single entity, a single attribute, and a single value: corresponding to the classical definition of data as a triplet entity-value-attribute \citep{redman1997}, also considered as the fundamental information granule.
+\\
+
+\noindent These five levels were designed according to the five stages of an intuitive process \citep{csikszentmihalyi1997flow}. \textbf{Level 0} corresponds to the \emph{preparation} stage, where the user becomes interested in some datum (for example, discovering that 65 percent of the population uses ChatGPT on a daily basis). \textbf{Level 1} corresponds to the \emph{incubation} stage, where the user unfolds the datum and makes unusual connections (for instance, hypothesizing that the people using ChatGPT on a daily basis should be the youngest). \textbf{Level 2} corresponds to the \emph{insight} stage, where the user starts to put pieces together (such as comparing the `age' and the `daily GPT use' columns inside a data table to see if there is a pattern between the two). \textbf{Level 3} corresponds to the \emph{evaluation} stage, where the user puts their insight on trial (for example, the user challenges their intuition that people using ChatGPT must be the youngest by collecting a different dataset with the probability of being a ChatGPT daily user depending on age class). Finally, \textbf{Level 4} corresponds to the \emph{elaboration} stage where the user will use other logical mechanisms than data aggregation to make sense of different datasets (for instance, the user might look for demographic distributions to see what proportion the youngest represent out of an entire population and then specify that if 65 percent of the population are daily users of ChatGPT, the users are mostly the youngest, showing the technology has not spread yet to the entire population).
+\\
+
+\noindent According to these definitions, data will be qualified as \emph{intuitive} if it allows users to ascend the level ladder in order to elaborate from a single value or, in the opposite direction, descend the level ladder to uncover an insight that will trigger curiosity or decision-making.
+\\
+
+\noindent All in all, this paper sets forth a meta-design framework that will enable data modelers, architects, analysts and data platform editors to put data users in a position of experiencing the ``flow'', that is a mental state ``expected to occur when individuals perceive greater opportunities for action than they encounter on average in their daily lives, and have skills adequate to engage them'' \citep{nakamura2014concept}.
+\\
+
+\noindent In this section, we provide some of the mathematical notations to allow the reader to connect the intuition with the formal mathematical analysis given in Section\ref{def:complexity}.
+
+%----------------------------------
+% Subsection 3.1: Level 0
+%----------------------------------
+\subsection{Level 0: The Datum}
+
+We begin with the fundamental building block of all data structures.
+
+\begin{figure}[h!]
+    \centering
+    \includegraphics[width=0.4\linewidth]{0.png}
+    \caption{Table view of Level 0 data}
+    \label{fig:level0}
+\end{figure}
+
+\noindent At the lowest abstraction level, Level 0, data has no complexity as no interpretation is required for its comprehension. This type of data is commonly referred to as ``raw data.'' For instance, in our example, Michael weighs 45~kg, which is a fact. The datum can be expressed as the triple:
+\[
+d = (\texttt{Michael}, \texttt{Weight (kg)}, 45)
+\]
+
+%----------------------------------
+% Subsection 3.2: Level 1
+%----------------------------------
+\subsection{Level 1: Single Entity or Single Attribute}
+
+To move from Level 0 to Level 1 of abstraction, we need to find a common element among several data. It can be a common attribute (`weight'), a common entity (`Michael'), or a common value.
+\\
+
+\noindent As a result, we can obtain a table with a single entity defined by multiple attributes, or a table with a single attribute and multiple entities (see Figure~\ref{fig:level1}). These tables are the primary form of what we call `data' (plural of `datum').
+
+\begin{figure}[h!]
+    \centering
+    \includegraphics[width=0.8\linewidth]{1.png}
+    \caption{Table view of two Level 1 data: Type 1a (left) shows a single entity with multiple attributes; Type 1b (right) shows a single attribute across multiple entities}
+    \label{fig:level1}
+\end{figure}
+
+\noindent In the left table of Figure~\ref{fig:level1}, we have:
+\[
+D_1^{(a)} = \{(\texttt{Michael}, \texttt{Weight}, 45), (\texttt{Michael}, \texttt{Height}, 150)\}
+\]
+
+\noindent In the right table, we have:
+\[
+D_1^{(b)} = \{(\texttt{Michel}, \texttt{Weight}, 45), (\texttt{Giselle}, \texttt{Weight}, 60)\}
+\]
+
+%----------------------------------
+% Subsection 3.3: Level 2
+%----------------------------------
+\subsection{Level 2: Single Dataset with Multiple Entities and Attributes}
+
+To increase complexity and move from Level 1 to Level 2, we add both attributes and entities to the table.
+
+
+\begin{figure}[h!]
+    \centering
+    \includegraphics[width=0.5\linewidth]{2.png}
+    \caption{Table view of Level 2 dataset with $n=2$ entities and $m=2$ attributes}
+    \label{fig:level2}
+\end{figure}
+
+Figure~\ref{fig:level2} shows a Level 2 dataset that combines both entities (Michael, Giselle) and both attributes (Weight, Height):
+\[
+D_2 = \left\{
+\begin{array}{l}
+(\texttt{Michael}, \texttt{Weight}, 45), (\texttt{Michael}, \texttt{Height}, 150), \\
+(\texttt{Giselle}, \texttt{Weight}, 60), (\texttt{Giselle}, \texttt{Height}, 178)
+\end{array}
+\right\}
+\]
+
+%----------------------------------
+% Subsection 3.4: Level 3
+%----------------------------------
+\subsection{Level 3: Linkable Multi-Level Datasets}
+
+At a higher level of abstraction, data transition from one to many linkable datasets and from one to many levels of entities and/or attributes.
+
+\begin{figure}[h!]
+    \centering
+    \includegraphics[width=0.7\linewidth]{3.png}
+    \caption{Table view of Level 3 multi-level dataset with two entity dimensions (individuals, years) and one attribute dimension (physical characteristics)}
+    \label{fig:level3}
+\end{figure}
+
+\noindent In the example shown in Figure~\ref{fig:level3}, we have two levels of entities: individuals (Michael, Giselle) on one side, and years (2015, 2016) on the other. We also have one level of attribute: individual physical characteristics (Weight and Height). The linking relationship ($\mathcal{L}$) connects measurements of the same individual across different years, enabling longitudinal analysis.
+
+%----------------------------------
+% Subsection 3.5: Level 4
+%----------------------------------
+\subsection{Level 4: Unlinkable Multi-Level Datasets}
+
+At the highest level of abstraction, data exist as disconnected collections without established relationships.
+\\
+
+\noindent It has become commonplace to state that there is an ever-increasing amount of data available, which implies an underlying structure of extreme intelligence that can link data together. This structure would enable the discovery of fascinating knowledge and the creation of innovative applications. In this article, we assume that the reality of newly available data is quite different: there is no apparent structure to link them together, or if it does exist, it is undiscovered based on current knowledge. From our conceptual meta-design framework's perspective, \emph{all newly available datasets begin as Level 4 data}.
+\\
+
+\noindent Indeed, the available data, in their vast majority, do not share any attributes or common elements that would allow them to be linked together. For example, the link between daily shopping baskets in supermarkets and monthly water consumption in surrounding households has not been established. It may not exist, but certainly the connection remains undiscovered based on current scientific knowledge.
+\\
+
+\noindent Level 0 and Level 4 serve as boundary conditions: Level 0 represents the atomic unit of information with zero complexity, while Level 4 represents the default state of newly encountered data before relationships are established. Our main focus is to establish the conceptual framework of \emph{intuitive data}, which are defined as data whose level of abstraction and complexity can adapt to the data literacy level of the user.
+\\
+
+\noindent In the following section, we formally demonstrate that transitioning from a higher abstraction level to a lower level decreases the complexity of the data, and we determine precise bounds on this complexity reduction.
+
+%==================================
+% SECTION 4: FORMAL COMPLEXITY ANALYSIS (REVISED)
+%==================================
+\section{Formal Complexity Analysis}
+\label{sec:complexity}
+
+In this section, we formalize the intuition that transitioning between abstraction levels reduces dataset complexity. We first establish rigorous definitions, then derive complexity measures for each level, and finally prove bounds on complexity reduction during level transitions.
+
+\subsection{Foundational Definitions}
+
+\begin{definition}[Datum]
+\label{def:datum}
+A \emph{datum} $d$ is an ordered triple $(e, a, v)$ where $e \in \mathcal{E}$ is an entity from some entity space, $a \in \mathcal{A}$ is an attribute from some attribute space, and $v \in \mathcal{V}_a$ is a value from the domain of attribute $a$.
+\end{definition}
+
+\begin{definition}[Level 0 Dataset]
+\label{def:level0}
+A Level 0 dataset $D_0$ consists of exactly one datum:
+\[
+D_0 = \{(e, a, v)\}
+\]
+\end{definition}
+
+\begin{definition}[Level 1 Dataset]
+\label{def:level1}
+A Level 1 dataset $D_1$ takes one of two forms:
+\begin{itemize}
+    \item \textbf{Type 1a} (single entity, multiple attributes): For a fixed entity $e^*$,
+    \[
+    D_1^{(a)} = \{(e^*, a_i, v_i) : i = 1, \ldots, m\}
+    \]
+    \item \textbf{Type 1b} (single attribute, multiple entities): For a fixed attribute $a^*$,
+    \[
+    D_1^{(b)} = \{(e_j, a^*, v_j) : j = 1, \ldots, n\}
+    \]
+\end{itemize}
+\end{definition}
+
+\begin{definition}[Level 2 Dataset]
+\label{def:level2}
+A Level 2 dataset $D_2$ consists of multiple entities and multiple attributes:
+\[
+D_2 = \{(e_j, a_i, v_{ij}) : i = 1, \ldots, m; \, j = 1, \ldots, n\}
+\]
+This can be represented as an $n \times m$ table with $n$ entities (rows) and $m$ attributes (columns).
+\end{definition}
+
+\begin{definition}[Level 3 Dataset]
+\label{def:level3}
+A Level 3 dataset $D_3$ is a collection of linkable Level 2 datasets with hierarchical structure:
+\[
+D_3 = \left(\{D_2^{(k)}\}_{k=1}^K, \, \mathcal{L}\right)
+\]
+where $\mathcal{L} \subseteq \bigcup_{k \neq k'} (D_2^{(k)} \times D_2^{(k')})$ defines linking relationships between datasets, with $|\mathcal{L}| \geq 1$.
+\end{definition}
+
+\begin{definition}[Level 4 Dataset]
+\label{def:level4}
+A Level 4 dataset $D_4$ is a collection of datasets with no established linking relationships:
+\[
+D_4 = \{D^{(k)}\}_{k=1}^K \quad \text{where} \quad \mathcal{L} = \emptyset
+\]
+\end{definition}
+
+\subsection{Complexity Measure}
+
+The complexity of a dataset can be measured by the number of meaningful relationships that can be extracted from it. We formalize this intuition as follows.
+
+\begin{definition}[Atomic Relationship]
+\label{def:relationship}
+An \emph{atomic relationship} is a pairwise comparison or association between two data elements within a dataset structure. For elements $x$ and $y$, this includes comparisons of the form ``$x$ relates to $y$ with respect to some criterion.''
+\end{definition}
+
+\begin{definition}[Dataset Complexity]
+\label{def:complexity}
+The \emph{complexity} of a dataset $D$, denoted $C(D)$, is the cardinality of its relationship space:
+\[
+C(D) = |\mathcal{R}(D)|
+\]
+where $\mathcal{R}(D)$ is the set of all extractable atomic relationships.
+\end{definition}
+
+\subsection{Complexity at Each Level}
+
+We now derive the complexity for each abstraction level.
+
+\begin{proposition}[Level 0 Complexity]
+\label{prop:level0}
+For any Level 0 dataset $D_0$:
+\[
+C(D_0) = 0
+\]
+\end{proposition}
+
+\begin{proof}
+A single datum $(e, a, v)$ contains no internal structure permitting comparison. With only one element, there exist no pairs of distinct elements to relate, hence $|\mathcal{R}(D_0)| = 0$.
+\end{proof}
+
+\begin{proposition}[Level 1 Complexity]
+\label{prop:level1}
+For a Level 1 dataset $D_1$ with $n$ elements:
+\[
+C(D_1) = \binom{n}{2} = \frac{n(n-1)}{2}
+\]
+\end{proposition}
+
+\begin{proof}
+The relationships extractable from a single vector are pairwise comparisons between elements. With $n$ elements, there are exactly $\binom{n}{2}$ unordered pairs. Each pair constitutes one atomic relationship (e.g., ``entity $e_i$ has higher value than entity $e_j$ on attribute $a^*$'').
+\end{proof}
+
+\noindent\textbf{Complexity order:} $C(D_1) = O(n^2)$
+
+\begin{proposition}[Level 2 Complexity]
+\label{prop:level2}
+For a Level 2 dataset $D_2$ with $n$ entities and $m$ attributes:
+\begin{equation}
+C(D_2) = \underbrace{\binom{n}{2} \cdot m}_{\text{within-attribute}} + \underbrace{\binom{m}{2} \cdot n}_{\text{within-entity}} + \underbrace{\binom{n}{2} \cdot \binom{m}{2}}_{\text{cross-comparisons}}
+\label{eq:level2complexity}
+\end{equation}
+\end{proposition}
+
+\begin{proof}
+We enumerate three distinct relationship types:
+
+\textbf{(i) Within-attribute comparisons:} For each attribute $a_i$, we can compare any two entities on that attribute. This yields $\binom{n}{2}$ comparisons per attribute, totaling $\binom{n}{2} \cdot m$.
+
+\textbf{(ii) Within-entity comparisons:} For each entity $e_j$, we can compare any two of its attribute values. This yields $\binom{m}{2}$ comparisons per entity, totaling $\binom{m}{2} \cdot n$.
+
+\textbf{(iii) Cross-attribute, cross-entity comparisons:} We can examine how the relationship between two entities on one attribute compares to their relationship on another attribute (e.g., correlation structures, interaction effects). This yields $\binom{n}{2} \cdot \binom{m}{2}$ such comparisons.
+
+Summing these three terms yields the total complexity.
+\end{proof}
+
+\noindent Expanding Equation~\eqref{eq:level2complexity}:
+\[
+C(D_2) = \frac{n(n-1)m}{2} + \frac{m(m-1)n}{2} + \frac{n(n-1)m(m-1)}{4}
+\]
+
+\noindent\textbf{Complexity order:} $C(D_2) = O(n^2 m^2)$
+
+\begin{proposition}[Level 3 Complexity]
+\label{prop:level3}
+For a Level 3 dataset $D_3 = (\{D_2^{(k)}\}_{k=1}^K, \mathcal{L})$ where each $D_2^{(k)}$ has $n_k$ entities and $m_k$ attributes:
+\begin{equation}
+C(D_3) = \underbrace{\sum_{k=1}^{K} C(D_2^{(k)})}_{\text{internal complexity}} + \underbrace{C_{\mathcal{L}}}_{\text{linking complexity}}
+\label{eq:level3complexity}
+\end{equation}
+where the linking complexity $C_{\mathcal{L}}$ satisfies:
+\[
+C_{\mathcal{L}} \geq |\mathcal{L}| \cdot \min_{k,k'} \left( \min(n_k, n_{k'}) \right)
+\]
+\end{proposition}
+
+\begin{proof}
+The complexity decomposes into two components. First, each constituent Level 2 dataset contributes its internal complexity as computed in Proposition~\ref{prop:level2}. Second, each link in $\mathcal{L}$ connects entities or attributes across datasets, enabling new cross-dataset comparisons. The number of such comparisons is bounded below by the size of the smaller linked structures.
+\end{proof}
+
+\noindent\textbf{Complexity order:} For $K$ datasets each of size $O(n \times m)$:
+\[
+C(D_3) = O(K \cdot n^2 m^2 + |\mathcal{L}| \cdot nm)
+\]
+
+\begin{proposition}[Level 4 Complexity]
+\label{prop:level4}
+For a Level 4 dataset $D_4 = \{D^{(k)}\}_{k=1}^K$ with $\mathcal{L} = \emptyset$:
+\[
+C(D_4) = \sum_{k=1}^{K} C(D^{(k)})
+\]
+\end{proposition}
+
+\begin{remark}
+Level 4 does not possess ``infinite'' complexity. Rather, it exhibits \emph{fragmented} complexity, that is to say the sum of individual dataset complexities with no cross-dataset relational structure. What distinguishes Level 4 is not magnitude but the absence of integrating links: the complexity is partitioned and cannot be leveraged for cross-dataset insights without first establishing relationships (the L4$\to$L3 transition).
+\end{remark}
+
+\subsection{Complexity Reduction During Level Transitions}
+
+We now examine how complexity changes when transitioning between levels.
+
+\begin{definition}[Complexity Reduction Ratio]
+\label{def:reduction}
+For a transition from level $\ell$ to level $\ell'$ (where $\ell' < \ell$), the \emph{complexity reduction ratio} is:
+\[
+\rho_{\ell \to \ell'} = \frac{C(D_{\ell'})}{C(D_\ell)}
+\]
+The \emph{percentage reduction} is:
+\begin{equation}
+\Delta C_{\ell \to \ell'} = 1 - \rho_{\ell \to \ell'} = \frac{C(D_\ell) - C(D_{\ell'})}{C(D_\ell)}
+\label{eq:reduction}
+\end{equation}
+\end{definition}
+
+\subsubsection{Level 1 to Level 0}
+
+\begin{theorem}[L1$\to$L0 Reduction]
+\label{thm:l1l0}
+For any Level 1 dataset with $n \geq 2$ elements:
+\[
+\Delta C_{1 \to 0} = 100\%
+\]
+\end{theorem}
+
+\begin{proof}
+By Propositions~\ref{prop:level0} and~\ref{prop:level1}:
+\[
+\Delta C_{1 \to 0} = \frac{C(D_1) - C(D_0)}{C(D_1)} = \frac{\binom{n}{2} - 0}{\binom{n}{2}} = 1 = 100\%
+\]
+\end{proof}
+
+\subsubsection{Level 2 to Level 1}
+
+\begin{theorem}[L2$\to$L1 Reduction Bounds]
+\label{thm:l2l1}
+When reducing a Level 2 dataset to Level 1 by fixing either an entity or an attribute:
+\[
+\Delta C_{2 \to 1} \in [80\%, 100\%)
+\]
+\end{theorem}
+
+\begin{proof}
+Consider reducing $D_2$ (with $n$ entities, $m$ attributes) to $D_1$ by selecting a single entity and retaining all $m$ attributes. Then $C(D_1) = \binom{m}{2}$.
+
+\textbf{Lower bound:} Consider the minimal Level 2 dataset with $n = 2$ entities and $m = 2$ attributes:
+\[
+C(D_2) = \binom{2}{2} \cdot 2 + \binom{2}{2} \cdot 2 + \binom{2}{2} \cdot \binom{2}{2} = 1 \cdot 2 + 1 \cdot 2 + 1 \cdot 1 = 5
+\]
+\[
+C(D_1) = \binom{2}{2} = 1
+\]
+\[
+\Delta C_{2 \to 1} = 1 - \frac{1}{5} = \frac{4}{5} = 80\%
+\]
+
+\textbf{Upper bound:} As $n \to \infty$ while $m$ remains fixed:
+\[
+\lim_{n \to \infty} \Delta C_{2 \to 1} = 1 - \lim_{n \to \infty} \frac{O(m^2)}{O(n^2 m^2)} = 1 - 0 = 100\%
+\]
+The limit is approached but never attained for finite datasets.
+\end{proof}
+
+\subsubsection{Level 3 to Level 2}
+
+\begin{theorem}[L3$\to$L2 Reduction Bounds]
+\label{thm:l3l2}
+When reducing a Level 3 dataset to Level 2 by selecting a single constituent dataset:
+\[
+\Delta C_{3 \to 2} \in \left[\frac{6}{11}, 1\right) \approx [54.5\%, 100\%)
+\]
+\end{theorem}
+
+\begin{proof}
+Let $D_3$ consist of $K$ Level 2 datasets, and suppose we select dataset $D_2^{(k^*)}$.
+
+\noindent \textbf{Lower bound:} Consider the minimal Level 3 structure: $K = 2$ identical datasets, each with $n = 2$ and $m = 2$, connected by one link contributing minimal additional complexity. We have:
+\[
+C(D_3) \geq 2 \cdot C(D_2) + C_{\mathcal{L}} = 2 \cdot 5 + 1 = 11
+\]
+\[
+C(D_2^{(k^*)}) = 5
+\]
+\[
+\Delta C_{3 \to 2} \geq 1 - \frac{5}{11} = \frac{6}{11} \approx 54.5\%
+\]
+
+\noindent \textbf{Upper bound:} As $K \to \infty$:
+\[
+\lim_{K \to \infty} \Delta C_{3 \to 2} = 1 - \lim_{K \to \infty} \frac{C(D_2^{(k^*)})}{\sum_{k=1}^K C(D_2^{(k)}) + C_{\mathcal{L}}} = 1 - 0 = 100\%
+\]
+\end{proof}
+
+\subsubsection{Level 4 to Level 3}
+
+The L4$\to$L3 transition is qualitatively different from other transitions: it does not reduce \emph{structural} complexity but transforms its character.
+
+\begin{theorem}[L4$\to$L3 Structural Transformation]
+\label{thm:l4l3}
+The transition from Level 4 to Level 3 satisfies:
+\[
+C(D_3) \geq C(D_4)
+\]
+with equality only when $C_{\mathcal{L}} = 0$ (i.e., when no meaningful links are established).
+\end{theorem}
+
+\begin{proof}
+By Propositions~\ref{prop:level3} and~\ref{prop:level4}:
+\[
+C(D_3) = \sum_{k=1}^{K} C(D^{(k)}) + C_{\mathcal{L}} = C(D_4) + C_{\mathcal{L}}
+\]
+Since $C_{\mathcal{L}} \geq 0$, we have $C(D_3) \geq C(D_4)$.
+\end{proof}
+
+\begin{remark}[Cognitive Complexity]
+While structural complexity may increase during the L4$\to$L3 transition, \emph{cognitive} complexity decreases. We can formalize this by introducing a fragmentation penalty. Define the cognitive complexity as:
+\[
+C^{\text{cog}}(D_4) = \sum_{k=1}^{K} C(D^{(k)}) \cdot \alpha
+\]
+where $\alpha > 1$ reflects the cognitive cost of navigating disconnected datasets without integrating structure. For Level 3:
+\[
+C^{\text{cog}}(D_3) = C(D_3)
+\]
+The cognitive complexity reduction is then:
+\[
+\Delta C^{\text{cog}}_{4 \to 3} = 1 - \frac{C(D_4) + C_{\mathcal{L}}}{\alpha \cdot C(D_4)} > 0 \quad \text{when} \quad \alpha > 1 + \frac{C_{\mathcal{L}}}{C(D_4)}
+\]
+This formalizes the intuition that establishing links between previously disconnected datasets reduces the user's cognitive burden, even while revealing additional relationships.
+\end{remark}
+
+\subsection{Summary of Complexity Analysis}
+
+Table~\ref{tab:complexity_summary} summarizes the complexity measures and reduction bounds for each level transition.
+
+\begin{table}[h!]
+\centering
+\caption{Summary of complexity measures and reduction bounds}
+\label{tab:complexity_summary}
+\begin{tabular}{lll}
+\toprule
+\textbf{Level} & \textbf{Complexity $C(D)$} & \textbf{Order} \\
+\midrule
+L0 & $0$ & $O(1)$ \\
+L1 & $\displaystyle\binom{n}{2}$ & $O(n^2)$ \\
+L2 & $\displaystyle\binom{n}{2}m + \binom{m}{2}n + \binom{n}{2}\binom{m}{2}$ & $O(n^2m^2)$ \\
+L3 & $\displaystyle\sum_{k} C(D_2^{(k)}) + C_{\mathcal{L}}$ & $O(Kn^2m^2)$ \\
+L4 & $\displaystyle\sum_{k} C(D^{(k)})$ & $O(Kn^2m^2)$ \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\begin{table}[h!]
+\centering
+\caption{Complexity reduction bounds for level transitions}
+\label{tab:reduction_summary}
+\begin{tabular}{lll}
+\toprule
+\textbf{Transition} & \textbf{Reduction $\Delta C$} & \textbf{Nature} \\
+\midrule
+L1 $\to$ L0 & $100\%$ & Complete elimination \\
+L2 $\to$ L1 & $[80\%, 100\%)$ & Dimension reduction \\
+L3 $\to$ L2 & $[54.5\%, 100\%)$ & Dataset selection \\
+L4 $\to$ L3 & Variable (cognitive) & Structural transformation \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\begin{proposition}[Strict Complexity Ordering]
+\label{prop:ordering}
+For non-trivial datasets (i.e., $n, m, K \geq 2$), the complexity orders satisfy:
+\[
+C(D_0) < C(D_1) < C(D_2) < C(D_3)
+\]
+with $C(D_4) = C(D_3) - C_{\mathcal{L}} < C(D_3)$ when links are established.
+\end{proposition}
+
+\begin{proof}
+\begin{itemize}
+    \item $C(D_0) = 0 < \binom{n}{2} = C(D_1)$ for any $n \geq 2$.
+    \item $C(D_1) = O(n^2) < O(n^2 m^2) = C(D_2)$ for any $m \geq 2$.
+    \item $C(D_2) < C(D_3)$ since $D_3$ contains at least one $D_2$ plus linking structure with $C_{\mathcal{L}} > 0$.
+\end{itemize}
+This confirms that the abstraction hierarchy is well-ordered with respect to structural complexity.
+\end{proof}
+
+\noindent This analysis demonstrates that each descent through the abstraction levels achieves substantial complexity reduction, with lower bounds of 54.5\%--100\% depending on the transition. These reductions enable datasets to adapt to users with varying data literacy levels, supporting the framework's goal of designing intuitive data experiences.
+
+
+%==================================
+% SECTION 5: CASE STUDY
+%==================================
+\section{Case Study and Implementation}
+\label{sec:case-study}
+
+
+We implemented this method in a Python library (\texttt{intuitiveness}), applied it to a dataset from a major international logistics operator, and developed an interface. 
+
+\subsection{Case study}
+
+\subsubsection{Problem context}
+The organization faced an overwhelming amount of metadata on their indicators, coming from different sources and formats, making it difficult to manage their data ecosystem effectively. Their core challenge was: \textbf{given these metadata, how to identify which indicators to delete for operational efficiency while maintaining analytical capabilities?} With 8,368 indicators scattered across multiple sources, there was no intuitive way to determine which were essential and which were redundant or obsolete.
+
+\subsubsection{The Descent Phase (L4 $\to$ L0)}
+
+\vspace{1em}
+
+\noindent {Step 1: L4 $\to$ L3 (Graph Construction)}
+We modeled the raw ``unlinkable'' files into a knowledge graph, transforming a Level 4 dataset into Level 3. The graph revealed 40,279 relationships among 8,368 indicators (48 connections per indicator on average).
+
+\vspace{1em}
+
+\noindent {Step 2: L3 $\to$ L2 (Domain Isolation)}
+We queried the graph to isolate indicators by domain: revenues, volumes, and employees (ETP). This categorical structure provided the first layer of intuitive organization.
+
+\vspace{1em}
+
+\noindent {Step 3: L2 $\to$ L1 (Feature Extraction)}
+We extracted indicator names to analyze naming conventions and identify duplicates.
+
+\vspace{1em}
+
+\noindent {Step 4: L1 $\to$ L0 (Atomic Metric)}
+We derived the atomic metric: \textit{number of revenue indicators}. This precise formulation captures a business diagnostic, an overproduction of indicators, and served as the ground truth for the audit.
+
+\vspace{1em}
+
+
+\subsubsection{The Ascent Phase (L0 $\to$ L3)}
+
+\vspace{1em}
+
+\noindent {Step 5: L0 $\to$ L1 (Reconstructing the Vector)}
+From the atomic metric, we reconstructed a vector of naming signatures by extracting structural features from each indicator name.
+
+\vspace{1em}
+
+\noindent {Step 6: L1 $\to$ L2 (Initial Classification)}
+We added categories to the indicators. The \texttt{business\_objects} category captures the business domain (volume, revenue, ETP). The \texttt{calculated} category provides a binary flag distinguishing raw data from calculated metrics. We also introduced three binary flags: \texttt{weight\_flag}, \texttt{rse\_flag}, and \texttt{surcharges\_flag} to capture specific business attributes.
+
+\vspace{1em}
+
+\noindent {Step 7: L2 $\to$ L3 (Analytic Dimensions)}
+We added analytic dimensions to enable multi-level analysis. The \texttt{client\_segmentation} dimension specifies which client segments are addressed. The \texttt{sales\_location} dimension captures geographic usage patterns. The \texttt{product\_segmentation} dimension identifies which products are included. The \texttt{financial\_view} dimension provides the financial perspective of the indicator. Finally, the \texttt{lifecycle\_view} dimension indicates the business lifecycle stage being measured.
+
+\subsubsection{Results}
+
+The \textbf{descent} (L4 $\to$ L0) moved the organization from chaos to a clear atomic metric. The \textbf{ascent} (L0 $\to$ L3) produced intuitive Level 3 tables answering the business question.
+
+\noindent The Level 3 table reveals clusters of indicators sharing identical analytic dimensions:
+
+\begin{table}[h]
+\centering
+\small
+\begin{tabular}{@{}lllllll@{}}
+\toprule
+\textbf{Indicator} & \textbf{Object} & \textbf{Client} & \textbf{Location} & \textbf{Product} & \textbf{Financial} & \textbf{Lifecycle} \\ \midrule
+\texttt{CA|4p|12caps} & revenue & All & Global & All & operational & current \\
+\texttt{CA|4p|11caps} & revenue & All & Global & All & operational & current \\
+\texttt{CA|4p|10caps} & revenue & All & Global & All & operational & current \\ \bottomrule
+\end{tabular}
+\caption{Example of redundant indicators sharing all analytic dimensions}
+\end{table}
+
+\noindent These three indicators share \textbf{all six analytic dimensions}, hence making them candidates for consolidation. By grouping indicators with identical dimension profiles, the organization can systematically \textbf{identify redundancy clusters}, \textbf{select representatives} per cluster, and then \textbf{delete duplicates} with confidence.
+
+\noindent This demonstrates the power of the \textbf{Descent-Ascent cycle}: transforming ``data swamps'' into ``intuitive datasets.''
+
+\subsection{Implementation : the Intuitivness package}
+
+
+We implemented the framework as \texttt{intuitiveness}, an open-source Python package that operationalizes the descent-ascent methodology through three core capabilities: AI-assisted data modeling, semantic domain matching, and interactive navigation.
+
+\subsubsection{Adaptive data structures.}
+The package represents each abstraction level as a typed Python class. Level~4 wraps dictionaries of DataFrames representing disconnected CSV files. Level~3 holds NetworkX graphs or multi-level DataFrames with explicit relationships. Level~2 contains single pandas DataFrames for domain-specific tables. Level~1 stores pandas Series as feature vectors. Level~0 encapsulates scalar values with optional parent references enabling reverse navigation. A unified \texttt{Redesigner} class dispatches transitions between adjacent levels, enforcing the constraint that users cannot return to Level~4 once they descent. This ensures a commitment to the linking decisions that transform chaos into structure.
+
+\subsubsection{AI-powered entity discovery.}
+The L4$\to$L3 transition leverages large language models to suggest data models from raw CSVs. The system extracts column names, data types, and sample values, then prompts an LLM (supporting both local models via Ollama and cloud models via OpenAI) to propose entities, key properties, and relationships. Users review suggestions through an interactive schema visualization before graph construction. For users preferring manual control, a rule-based generator creates star schemes from user-specified entity lists. A three-tier relationship discovery system identifies connections between files: name heuristics ($\sim$5\,ms) detect common ID patterns; value overlap analysis ($\sim$100\,ms) computes Jaccard similarity on stratified samples; semantic embeddings ($\sim$2\,s) find conceptually related columns when exact matches fail.
+
+\subsubsection{Semantic domain matching.}
+The L3$\to$L2 transition employs embedding-based categorization using the multilingual-e5-small model\cite{wang2024}. Users specify target domains in natural language; the system first attempts keyword matching against domain-specific vocabularies, then batch-processes unmatched items through semantic similarity computation. This hybrid approach handles multilingual datasets and accommodates users unfamiliar with precise terminology. For instance: a query for ``revenus'' correctly matches columns labeled ``CA'' (\textit{chiffre d'affaires}) or ``income.''
+
+\subsubsection{Navigation and persistence.}
+A \texttt{NavigationSession} class enforces the framework's rules: entry exclusively at L4, vertical-only movement, and no return to L4 once departed. The system tracks accumulated outputs at each visited level, enabling export of complete analysis trails. A branching \texttt{NavigationTree} structure preserves alternative exploration paths, supporting time-travel to previous decision points. Sessions persist across browser restarts through localStorage serialization with version checking and corruption detection.
+
+
+\subsubsection{Interactive interface.}
+\noindent An accompanying Streamlit application provides guided workflows for each transition: file upload with drag-and-drop, entity discovery with confidence indicators, relationship confirmation with sample matches, domain categorisation with keyword/semantic toggles, column extraction with data type handling, and aggregation selection. Ascent-phase forms support enrichment function selection (L0$\to$L1), dimension addition with preview (L1$\to$L2), and drag-and-drop relationship building (L2$\to$L3). A sidebar decision tree visualizes exploration branches; a JSON exporter produces audit trails compatible with visualisation tools. The interface supports French and English with runtime language switching.
+
+\subsubsection{Data.gouv.fr integration.}
+To demonstrate real-world applicability, we integrated search capabilities for the French national open data platform. Users search datasets using natural language queries, preview metadata and sample records, then import CSV resources directly into the redesign workflow: applying the full descent-ascent cycle to any of the platform's 45,000+ datasets.
+
+
+%==================================
+% SECTION 6: DISCUSSION
+%==================================
+\section{Discussion}
+\label{sec:discussion}
+
+\subsection{Implications for Practice}
+
+% TODO: Develop this section with:
+% - How open data platforms can implement this framework
+% - Guidelines for dataset designers
+% - Impact on data literacy initiatives
+
+The conceptual meta-design framework and its implementation as the \texttt{intuitiveness} Python package offer several practical pathways for adoption by open data platforms, dataset designers, and data literacy initiatives.
+
+\subsubsection{For Open Data Platforms}
+
+International open data platforms such as data.gouv.fr, UIS.stat, or the World Bank Open Data can integrate the framework as a ``data redesign plugin.'' Our interface demonstrates this feasibility by making all CSV files from data.gouv.fr accessible through the \texttt{intuitiveness} package, allowing users to query datasets in natural language and navigate through abstraction levels. Specifically, platforms could adopt three key strategies. First, they could \textbf{expose multiple abstraction levels}, rather than providing a single download option, platforms could offer users the choice to access data at L0 (atomic metrics for quick facts), L1 (feature vectors for trend analysis), L2 (filtered tables for domain exploration), or L3 (linked multi-level datasets for advanced analytics). Second, they could \textbf{implement guided descent workflows}, following our Q\&A approach, platforms could guide users through progressive complexity reduction, asking questions such as ``What is your main indicator of interest?'' and ``Which domains are relevant to your analysis?'' Third, they could \textbf{enable user-driven ascent} once users reach L0 ground truth, platforms could support intentional reconstruction with user-specified analytic dimensions, producing datasets tailored to specific audiences or use cases.
+
+\subsubsection{For Dataset Designers}
+
+Data architects and analysts can apply the framework to redesign existing datasets or design new ones with intuitiveness in mind through three core practices. First, designers should \textbf{start with L0}, defining the atomic metric(s) that capture the essential truth of the data before adding complexity. This ``ground truth first'' approach ensures that even the most complex datasets can be traced back to fundamental, interpretable values. Second, they should \textbf{document complexity levels} for each dataset, explicitly documenting what L1, L2, and L3 representations exist and how to navigate between them. Our data model validation tools (\texttt{validate\_data\_model}) can verify that transitions are well-defined. Third, designers should \textbf{use semantic matching for domain isolation}. The L3$\to$L2 transition employs embedding-based categorization (using models like \texttt{intfloat/multilingual-e5-small}) to group data by semantic similarity, not just exact keyword matching. This approach handles multilingual datasets and accommodates users who may not know the precise terminology.
+
+\subsubsection{For Data Literacy Initiatives}
+
+Educational programs and training initiatives can leverage the framework to scaffold learning through three key mechanisms. First, the framework enables \textbf{progressive skill development}. The five abstraction levels align with increasing data literacy competencies, allowing beginners to start at L0 (understanding single facts) and progressively advance to L3 (working with linked, multi-level structures). Second, it facilitates \textbf{flow-based learning experiences}, drawing on Csikszentmihalyi's flow theory, the framework positions data users to experience optimal challenge-skill balance at each level, reducing frustration and increasing engagement. Third, it supports \textbf{adaptive interfaces} by following recommendations from the visualization literacy literature \citep{alhamadi2022dataqualitymismatched, amyrotos2021adaptivevisualisationsfor}, our Streamlit interface implements progressive disclosure, minimal default visualizations, and contextual guidance that adapts to user actions.
+
+\subsubsection{Integration with Knowledge Graphs}
+
+The framework's L4$\to$L3 transition leverages Neo4j and knowledge graph technologies to transform unlinkable datasets into structured, queryable graphs. Organizations can adopt three graph-based strategies. First, they can use LLM-assisted entity discovery to automatically suggest data models from raw CSV files. Second, they can map columns to entities rather than entire files, enabling finer-grained graph construction. Third, they can query the resulting knowledge graph using Cypher to isolate domain-specific subsets for further analysis. Our case study with the international logistics operator demonstrated that this approach can handle 8,368 indicators across multiple sources, producing actionable redundancy clusters within a single descent-ascent cycle.
+
+\subsection{Limitations}
+
+% TODO: Develop this section with:
+% - Assumptions and constraints of the framework
+% - Generalizability considerations
+% - Validation scope
+
+
+While the framework provides a principled approach to designing intuitive datasets, several limitations should be acknowledged.
+
+\subsubsection{Theoretical Constraints}
+
+Several theoretical limitations constrain the framework's applicability. First, \textbf{L4 and L0 function as theoretical extremes}. Level 4 (unlinkable datasets) and Level 0 (atomic datums) represent boundary conditions that are more useful as conceptual anchors than practical states. L4 assumes complete disconnection between datasets, which is rarely absolute in practice, as some implicit relationships often exist. Similarly, L0's single-value representation may oversimplify nuanced phenomena. Second, the \textbf{complexity formula makes simplifying assumptions}, the complexity order calculations assume that all possible combinations of rows and columns are equally meaningful. In practice, many combinations may be semantically invalid or analytically irrelevant. The formal bounds represent mathematical upper limits, not guaranteed practical outcomes. Third, the framework maintains a \textbf{tabular data focus}: it was developed primarily for tabular data (CSV files, relational tables). Extension to other data modalities, such as time series, geospatial data, or unstructured text, would require additional abstraction mechanisms.
+
+\subsubsection{Package and interface implementation Constraints}
+
+The implementation introduces several practical constraints. First, there is an \textbf{LLM dependency for entity discovery}. The L4$\to$L3 transition relies on large language models (via Ollama or OpenAI) to suggest entities and relationships. LLM outputs can be inconsistent, requiring manual validation and editing of the generated data model. Users without access to suitable LLMs may find this step challenging. Second, \textbf{semantic matching requires threshold tuning}. The embedding-based domain categorization (L3$\to$L2) requires careful threshold configuration. A threshold too low produces false positives; too high yields missed matches. The optimal threshold varies by domain and language, complicating cross-domain generalization. Third, the system has a \textbf{Neo4j infrastructure requirement}. In other words, the knowledge graph functionality requires a running Neo4j instance. While Docker deployment simplifies setup, this dependency may be prohibitive for users seeking a lightweight, standalone solution. Fourth, \textbf{performance at scale remains limited}: the current implementation processes datasets in memory and executes Cypher queries sequentially. For very large datasets (millions of rows), batch processing, pagination, or distributed computation would be necessary.
+
+\subsubsection{Validation Scope}
+
+The validation of the framework remains limited in several respects. Most importantly, the empirical evidence comes from a \textbf{single case study}. The validation is based on one case study with a logistics operator. While the results are promising (40,279 relationships discovered, actionable redundancy clusters identified), broader validation across diverse domains, dataset sizes, and user populations is needed to confirm generalization. Additionally, the \textbf{ascent phase is less mature}. While the descent phase (L4$\to$L0) is well-developed with comprehensive tooling, the ascent phase (L0$\to$L3) relies on manually specified dimensions and enrichment functions. Automated dimension suggestion based on user intent remains an open research challenge.
+
+\subsubsection{Scope Boundaries}
+
+Our framework does not assess that input data is reasonably clean and well-structured. It does not address data quality issues such as missing values, inconsistent encodings, or schema drift. Preprocessing steps are the user's responsibility. Second, the implementation operates on \textbf{static snapshots} and the current implementation operates on static dataset snapshots. Real-time or streaming data would require additional mechanisms for incremental updates and complexity recalculation. Finally, the framework provides a \textbf{single-user workflow}: it supports individual users navigating abstraction levels. Collaborative features, such as shared navigation sessions, annotation, or version control of redesigned datasets, are not yet implemented.
+
+%==================================
+% SECTION 7: CONCLUSION
+%==================================
+\section{Conclusion and Future Work}
+\label{sec:conclusion}
+
+\noindent The Data Redesign Method provides a rigorous path out of the ``data swamp.'' By quantifying complexity and enforcing a descent to atomic levels before any ascent, organizations can create datasets that adapt to the data literacy level of their users.
+
+\vspace{1em}
+
+\noindent This methodology, implemented as a Python package, can be used by designers, data scientists, and citizens dealing with real-world data. International open data platforms such as UIS.stat or the World Bank Open Data can use it to design data redesign plugins that increase dataset intuitiveness.
+
+\subsection{Future Work}
+
+\noindent  Several research directions emerge from this work. First, \textbf{formal user studies} are needed to validate intuitiveness gains across different data literacy levels. We plan to conduct controlled experiments comparing task completion times, error rates, and user satisfaction when working with datasets at different abstraction levels. Such studies would provide empirical evidence for the theoretical complexity reduction bounds derived in Section~\ref{sec:complexity}.
+
+\vspace{1em}
+
+\noindent Second, \textbf{platform integration pilots} with international open data portals would demonstrate scalability. We aim to collaborate with platforms such as the World Bank Open Data, the UNESCO Institute for Statistics (UIS.stat) and the European Data Portal to implement the framework as a ``data redesign plugin,'' enabling millions of users to access datasets at their preferred abstraction level.
+
+\vspace{1em}
+
+\noindent Third, \textbf{automated complexity assessment tools} could help dataset publishers evaluate their data's intuitiveness before release. By computing complexity metrics and identifying missing abstraction levels, such tools would guide publishers toward more accessible dataset designs.
+
+\vspace{1em}
+
+\noindent Fourth, \textbf{extension to streaming and real-time data} would broaden the framework's applicability. The current implementation operates on static snapshots; adapting the descent-ascent methodology to continuously updating data streams presents interesting challenges around incremental complexity recalculation and dynamic level transitions.
+
+\vspace{1em}
+
+\noindent Finally, \textbf{automated dimension suggestion} during the ascent phase remains an open challenge. Although the descent phase benefits from LLM-assisted entity discovery, the ascent currently relies on manually specified dimensions. Future work could explore how user intent expressed in natural language might guide automatic dimension recommendation, further lowering barriers for non-expert users.
+
+%----------------------------------
+% End Matter (HDSR Format)
+%----------------------------------
+
+\subsection*{Disclosure Statement}
+The authors have no conflicts of interest to declare. This research was funded by Datactivist and the UNESCO Chair in AI and Data Science for Society through the Dataflow project.
+
+\subsection*{Acknowledgments}
+The authors thank Datactivist and the UNESCO Chair ``AI and Data Science for Society'' for supporting this research.
+
+\subsection*{Contributions}
+\textbf{Sarazin Arthur:} Conceptualization, Methodology, Software, Validation, Formal analysis, Investigation, Data Curation, Writing – Original Draft, Writing – Review \& Editing, Visualization, Project administration.
+
+\textbf{Mourey Mathis:} Conceptualization, Methodology, Validation, Formal analysis, Resources, Writing – Review \& Editing, Supervision.
+
+\subsection*{Ethical Considerations}
+This research did not involve human participants, human data, or human tissue. The case study was conducted using anonymized metadata from a commercial organisation with appropriate data sharing agreements.
+
+\subsection*{Use of AI-Generated Content}
+This research employs large language models (LLMs) as part of the implemented framework's functionality, specifically for entity discovery during the L4$\to$L3 transition. No AI tools were used in the writing of this manuscript.
+
+\subsection*{Data Availability}
+The \texttt{intuitiveness} Python package is publicly available as open-source software at \url{https://github.com/ArthurSrz/intuitiveness} under an open-source license. Documentation, code examples, and synthetic demonstration datasets are provided in the package repository.
+
+%----------------------------------
+% References
+%----------------------------------
+\bibliographystyle{agsm}
+\begin{thebibliography}{99}
+
+\bibitem[Alhamadi et al., 2022]{alhamadi2022dataqualitymismatched}
+Alhamadi, M., Alghamdi, O., Clinch, S., \& Vigo, M. (2022).
+\newblock Data quality, mismatched expectations, and moving requirements: The challenges of user-centred dashboard design.
+\newblock \textit{Proceedings of the Nordic Human-Computer Interaction Conference}, 1--14.
+\newblock \doi{10.1145/3546155.3546708}
+
+
+ \bibitem[Amyrotos, 2021]{amyrotos2021adaptivevisualisationsfor}
+ Amyrotos, C. (2021).
+ \newblock Adaptive Visualisations for Enhanced Data Understanding and Interpretation.
+ \newblock \textit{Proceedings of the 29th ACM Conference on User Modeling, Adaptation and Personalization}, 291--297.
+ \newblock \doi{10.1145/3450613.3459657}
+
+ \bibitem[Cockburn et al., 2014]{cockburn2014supportingnoviceto}
+ Cockburn, A., Gutwin, C., Scarr, J., \& Malacria, S. (2014).
+ \newblock Supporting Novice to Expert Transitions in User Interfaces.
+ \newblock \textit{ACM Computing Surveys}, 47(2), 1--36.
+ \newblock \doi{10.1145/2659796}
+
+\bibitem[Csikszentmihalyi, 1997]{csikszentmihalyi1997flow}
+Csikszentmihalyi, M. (1997). Flow and the Psychology of Discovery and Invention. \textit{New York: HarperPerennial}.
+
+ \bibitem[Dymytrova et al., 2018]{dymytrova2018}
+Dymytrova, V., Larroche, V., \& Paquienséguy, F. (2018).
+\newblock Cadres d'usage des données par des développeurs, des data scientists et des data journalistes [Research report].
+\newblock Retrieved from \url{https://hal.science/hal-01730820}
+
+\bibitem[Hevner et al., 2004]{hevner2004}
+Hevner, A. R., March, S. T., Park, J., \& Ram, S. (2004).
+\newblock Design science in information systems research.
+\newblock \textit{MIS Quarterly}, 28(1), 75--105.
+
+ \bibitem[Mutlu et al., 2016]{mutlu2016vizrec}
+ Mutlu, B., Veas, E., \& Trattner, C. (2016).
+ \newblock VizRec: Recommending Personalized Visualisations.
+ \newblock \textit{ACM Transactions on Interactive Intelligent Systems}, 6(4), 1--39.
+ \newblock \doi{10.1145/2983923}
+
+ \bibitem[Nakamura \& Csikszentmihalyi, 2014]{nakamura2014concept}
+Nakamura, J., \& Csikszentmihalyi, M. (2014).
+\newblock The concept of flow.
+\newblock In \textit{Flow and the foundations of positive psychology: The collected works of Mihaly Csikszentmihalyi} (pp. 239--263).
+\newblock Springer.
+
+ \bibitem[Poetzsch et al., 2020]{poetzsch2020towardataxonomy}
+ Poetzsch, T., Germanakos, P., \& Huestegge, L. (2020).
+ \newblock Toward a Taxonomy for Adaptive Data Visualisation in Analytics Applications.
+ \newblock \textit{Frontiers in Artificial Intelligence}, 3.
+ \newblock \doi{10.3389/frai.2020.00009}
+
+\bibitem[Redman, 1997]{redman1997}
+Redman, T. C. (1997).
+\newblock \textit{Data Quality for the Information Age}.
+\newblock Artech House.
+
+\bibitem[Ruppert, 2012]{ruppert2012}
+Ruppert, E. (2012).
+\newblock Doing the transparent state: Open government data as performance indicators.
+\newblock In \textit{A World of Indicators} (pp. 51--78). Cambridge University Press.
+
+\bibitem[Safarov et al., 2017]{safarov2017}
+Safarov, I., Meijer, A., \& Grimmelikhuijsen, S. (2017).
+\newblock Utilization of open government data: A systematic literature review.
+\newblock \textit{Information Polity}, 22(1), 1--24.
+
+ \bibitem[Steichen et al., 2013]{steichen2013useradaptiveinformationvisualisation}
+ Steichen, B., Carenini, G., \& Conati, C. (2013).
+ \newblock User-adaptive information visualisation: using eye gaze data to infer visualisation tasks and user cognitive abilities.
+ \newblock \textit{Proceedings of the 2013 International Conference on Intelligent User Interfaces}, 317--328.
+ \newblock \doi{10.1145/2449396.2449439}
+
+\bibitem[Vaishnavi \& Kuechler, 2015]{vaishnavi2015}
+Vaishnavi, V. K., \& Kuechler, W. (2015).
+\newblock \textit{Design Science Research Methods and Patterns}.
+\newblock CRC Press.
+
+
+\bibitem[Wilke \& Portmann, 2016]{wilke2016}
+Wilke, G., \& Portmann, E. (2016).
+\newblock Granular computing as a basis of human--data interaction: A cognitive cities use case.
+\newblock \textit{Granular Computing}, 1, 181--197.
+
+
+
+
+
+\end{thebibliography}
+
+\end{document}

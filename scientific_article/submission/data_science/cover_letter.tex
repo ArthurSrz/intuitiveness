@@ -1,0 +1,151 @@
+\documentclass[11pt,a4paper]{letter}
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage[english]{babel}
+\usepackage{hyperref}
+\usepackage{geometry}
+
+\geometry{margin=2.5cm}
+
+% Sender information
+\address{%
+Arthur Sarazin\\
+Researcher in Design Science\\
+Veltys, France\\
+UNESCO Chair ``AI and Data Science for Society''\\
+Email: asarazin@veltys.com
+}
+
+% Date
+\date{\today}
+
+\begin{document}
+
+\begin{letter}{%
+Prof. Michel Dumontier\\
+Prof. Tobias Kuhn\\
+Editors-in-Chief\\
+Data Science Journal\\
+Sage Publishing
+}
+
+\opening{Dear Professors Dumontier and Kuhn,}
+
+We are pleased to submit our manuscript entitled \textbf{``Intuitiveness as the Next Stage of Open Data: dataset design and complexity''} for consideration as a \textbf{Research Paper} in \textit{Data Science}.
+
+\section*{Manuscript Overview}
+
+Our paper addresses a critical challenge in the open data ecosystem: datasets designed for expert users remain inaccessible to citizens and professionals with varying data literacy levels. We propose a conceptual meta-design framework that enables datasets to adapt their complexity to user needs, transforming the way open data platforms serve diverse audiences---from citizens seeking single facts to data scientists building complex analytical products.
+
+\section*{Key Contributions and Novelty}
+
+This manuscript makes four distinctive contributions to data science:
+
+\begin{enumerate}
+    \item \textbf{Theoretical Framework:} We formalize five levels of data abstraction (L0--L4) grounded in design science research and flow theory, providing a principled approach to dataset design that has been absent from the literature.
+
+    \item \textbf{Mathematical Formalization:} We define dataset complexity in terms of the number of extractable relationships and mathematically prove that transitions between abstraction levels achieve 75--100\% complexity reduction---offering quantitative guidance for dataset redesign.
+
+    \item \textbf{Practical Implementation:} We operationalize the framework as the open-source \texttt{intuitiveness} Python package, featuring AI-assisted entity discovery (using LLMs), semantic domain matching (using multilingual embeddings), and interactive navigation interfaces.
+
+    \item \textbf{Real-World Validation:} We validate the approach through a case study with a major international logistics operator managing 8,368 indicators across multiple sources, demonstrating how the descent-ascent methodology transforms ``data swamps'' into actionable insights. We also integrate with France's data.gouv.fr platform (45,000+ datasets), demonstrating scalability to national open data infrastructures.
+\end{enumerate}
+
+The novelty of our work lies in shifting adaptation from the \textit{presentation layer} (adaptive visualizations) to the \textit{data layer} itself. While existing research focuses on adapting how data is shown, we enable adapting what data is shown and how it is fundamentally organized.
+
+\section*{Relevance to Data Science}
+
+This manuscript is particularly well-suited to \textit{Data Science} for several reasons:
+
+\begin{itemize}
+    \item It addresses core data science challenges: data modeling, knowledge graph construction, semantic integration, and human-data interaction.
+
+    \item It bridges theoretical foundations (complexity analysis, abstraction hierarchies) with practical tooling (Python package, Streamlit interface, Neo4j integration).
+
+    \item It advances open data science by providing reproducible methods---all code, documentation, and demonstration datasets are publicly available.
+
+    \item It aligns with the journal's interdisciplinary scope, combining design science, data engineering, AI/LLM applications, and human-centered computing.
+\end{itemize}
+
+\section*{Manuscript Details}
+
+\begin{itemize}
+    \item \textbf{Article Type:} Research Paper
+    \item \textbf{Word Count:} Approximately 6,500 words (excluding references)
+    \item \textbf{Figures:} 4 figures
+    \item \textbf{Tables:} 1 table
+    \item \textbf{Supplemental Material:} Open-source code repository (URL to be provided upon acceptance)
+\end{itemize}
+
+\section*{Suggested Reviewers}
+
+We respectfully suggest the following experts whose work intersects with our research themes:
+
+\begin{enumerate}
+    \item \textbf{Dr. Giuseppe Carenini}\\
+    University of British Columbia, Canada\\
+    Email: carenini@cs.ubc.ca\\
+    \textit{Expertise: User-adaptive information visualization, intelligent user interfaces}
+
+    \item \textbf{Dr. Marjan Mernik}\\
+    University of Maribor, Slovenia\\
+    Email: marjan.mernik@um.si\\
+    \textit{Expertise: Domain-specific languages, data abstraction, adaptive systems}
+
+    \item \textbf{Dr. Albert Meroño-Peñuela}\\
+    King's College London, UK\\
+    Email: albert.merono@kcl.ac.uk\\
+    \textit{Expertise: Knowledge graphs, linked open data, semantic web}
+
+    \item \textbf{Dr. Silvana Castano}\\
+    Università degli Studi di Milano, Italy\\
+    Email: silvana.castano@unimi.it\\
+    \textit{Expertise: Data integration, semantic matching, open data platforms}
+\end{enumerate}
+
+\section*{Declarations}
+
+We confirm that:
+
+\begin{itemize}
+    \item This manuscript is our original work and has not been published elsewhere, nor is it currently under consideration by another journal.
+
+    \item All authors have approved the manuscript and agree with its submission to \textit{Data Science}.
+
+    \item The research complies with ethical standards. No human participants were involved; the case study used anonymized organizational metadata with appropriate data sharing agreements.
+
+    \item We have no conflicts of interest to declare.
+
+    \item The research was funded by Datactivist and the UNESCO Chair in AI and Data Science for Society through the Dataflow project.
+
+    \item The \texttt{intuitiveness} package will be released as open-source software, and documentation will be made publicly available to ensure reproducibility.
+\end{itemize}
+
+\section*{Conclusion}
+
+We believe this manuscript makes significant theoretical and practical contributions to data science, particularly in advancing open data accessibility and usability. The framework provides actionable guidance for open data platforms (e.g., data.gouv.fr, World Bank Open Data, UIS.stat) to move beyond one-size-fits-all approaches toward adaptive, user-responsive dataset designs.
+
+We look forward to your editorial decision and welcome the opportunity to address any questions or revisions during the peer review process.
+
+Thank you for considering our submission.
+
+\closing{Yours sincerely,}
+
+\vspace{1.5cm}
+
+\textbf{Arthur Sarazin} (Corresponding Author)\\
+Researcher in Design Science\\
+Veltys, France\\
+UNESCO Chair ``AI and Data Science for Society''\\
+Email: asarazin@veltys.com
+
+\vspace{1cm}
+
+\textbf{Mathis Mourey}\\
+Researcher in Data Science\\
+The Hague University of Applied Sciences, Netherlands\\
+UNESCO Chair ``AI and Data Science for Society''
+
+\end{letter}
+
+\end{document}

@@ -1,0 +1,108 @@
+Prof. Michel Dumontier
+Prof. Tobias Kuhn
+Editors-in-Chief
+Data Science Journal
+Sage Publishing
+
+Dear Professors Dumontier and Kuhn,
+
+We are pleased to submit our manuscript entitled "Intuitiveness as the Next Stage of Open Data: dataset design and complexity" for consideration as a Research Paper in Data Science.
+
+MANUSCRIPT OVERVIEW
+
+Our paper addresses a critical challenge in the open data ecosystem: datasets designed for expert users remain inaccessible to citizens and professionals with varying data literacy levels. We propose a conceptual meta-design framework that enables datasets to adapt their complexity to user needs, transforming the way open data platforms serve diverse audiences—from citizens seeking single facts to data scientists building complex analytical products.
+
+KEY CONTRIBUTIONS AND NOVELTY
+
+This manuscript makes four distinctive contributions to data science:
+
+1. Theoretical Framework: We formalize five levels of data abstraction (L0–L4) grounded in design science research and flow theory, providing a principled approach to dataset design that has been absent from the literature.
+
+2. Mathematical Formalization: We define dataset complexity in terms of the number of extractable relationships and mathematically prove that transitions between abstraction levels achieve 75–100% complexity reduction—offering quantitative guidance for dataset redesign.
+
+3. Practical Implementation: We operationalize the framework as the open-source 'intuitiveness' Python package, featuring AI-assisted entity discovery (using LLMs), semantic domain matching (using multilingual embeddings), and interactive navigation interfaces.
+
+4. Real-World Validation: We validate the approach through a case study with a major international logistics operator managing 8,368 indicators across multiple sources, demonstrating how the descent-ascent methodology transforms "data swamps" into actionable insights. We also integrate with France's data.gouv.fr platform (45,000+ datasets), demonstrating scalability to national open data infrastructures.
+
+The novelty of our work lies in shifting adaptation from the presentation layer (adaptive visualizations) to the data layer itself. While existing research focuses on adapting how data is shown, we enable adapting what data is shown and how it is fundamentally organized.
+
+RELEVANCE TO DATA SCIENCE
+
+This manuscript is particularly well-suited to Data Science for several reasons:
+
+- It addresses core data science challenges: data modeling, knowledge graph construction, semantic integration, and human-data interaction.
+
+- It bridges theoretical foundations (complexity analysis, abstraction hierarchies) with practical tooling (Python package, Streamlit interface, Neo4j integration).
+
+- It advances open data science by providing reproducible methods—all code, documentation, and demonstration datasets are publicly available.
+
+- It aligns with the journal's interdisciplinary scope, combining design science, data engineering, AI/LLM applications, and human-centered computing.
+
+MANUSCRIPT DETAILS
+
+- Article Type: Research Paper
+- Word Count: Approximately 6,500 words (excluding references)
+- Figures: 4 figures
+- Tables: 1 table
+- Supplemental Material: Open-source code repository (URL to be provided upon acceptance)
+
+SUGGESTED REVIEWERS
+
+We respectfully suggest the following experts whose work intersects with our research themes:
+
+1. Dr. Giuseppe Carenini
+   University of British Columbia, Canada
+   Email: carenini@cs.ubc.ca
+   Expertise: User-adaptive information visualization, intelligent user interfaces
+
+2. Dr. Marjan Mernik
+   University of Maribor, Slovenia
+   Email: marjan.mernik@um.si
+   Expertise: Domain-specific languages, data abstraction, adaptive systems
+
+3. Dr. Albert Meroño-Peñuela
+   King's College London, UK
+   Email: albert.merono@kcl.ac.uk
+   Expertise: Knowledge graphs, linked open data, semantic web
+
+4. Dr. Silvana Castano
+   Università degli Studi di Milano, Italy
+   Email: silvana.castano@unimi.it
+   Expertise: Data integration, semantic matching, open data platforms
+
+DECLARATIONS
+
+We confirm that:
+
+- This manuscript is our original work and has not been published elsewhere, nor is it currently under consideration by another journal.
+
+- All authors have approved the manuscript and agree with its submission to Data Science.
+
+- The research complies with ethical standards. No human participants were involved; the case study used anonymized organizational metadata with appropriate data sharing agreements.
+
+- We have no conflicts of interest to declare.
+
+- The research was funded by Datactivist and the UNESCO Chair in AI and Data Science for Society through the Dataflow project.
+
+- The 'intuitiveness' package will be released as open-source software, and documentation will be made publicly available to ensure reproducibility.
+
+CONCLUSION
+
+We believe this manuscript makes significant theoretical and practical contributions to data science, particularly in advancing open data accessibility and usability. The framework provides actionable guidance for open data platforms (e.g., data.gouv.fr, World Bank Open Data, UIS.stat) to move beyond one-size-fits-all approaches toward adaptive, user-responsive dataset designs.
+
+We look forward to your editorial decision and welcome the opportunity to address any questions or revisions during the peer review process.
+
+Thank you for considering our submission.
+
+Yours sincerely,
+
+Arthur Sarazin (Corresponding Author)
+Researcher in Design Science
+Veltys, France
+UNESCO Chair "AI and Data Science for Society"
+Email: asarazin@veltys.com
+
+Mathis Mourey
+Researcher in Data Science
+The Hague University of Applied Sciences, Netherlands
+UNESCO Chair "AI and Data Science for Society"
