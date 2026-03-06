@@ -19,13 +19,14 @@ from typing import Dict, List, Any, Optional, Tuple
 from dataclasses import dataclass
 
 # HuggingFace model for NL understanding (OpenAI-compatible API)
-# 3-stage fallback: hf-inference first, then novita, then sambanova.
+# Uses the Instruct variant for reliable chat/instruction following.
+# 3-stage fallback: specific providers first, then :auto for any available.
 # All routed through HF — no extra API key needed beyond HF_TOKEN.
 HF_BASE_URL = "https://router.huggingface.co/v1"
 HF_PROVIDERS = [
-    "HuggingFaceTB/SmolLM3-3B:hf-inference",  # Stage 1: native HF inference
-    "HuggingFaceTB/SmolLM3-3B:novita",         # Stage 2: novita fallback
-    "HuggingFaceTB/SmolLM3-3B:sambanova",      # Stage 3: sambanova fallback
+    "HuggingFaceTB/SmolLM3-3B-Instruct:novita",      # Stage 1: novita (fast)
+    "HuggingFaceTB/SmolLM3-3B-Instruct:sambanova",    # Stage 2: sambanova fallback
+    "HuggingFaceTB/SmolLM3-3B-Instruct:auto",         # Stage 3: any available provider
 ]
 HF_MODEL = HF_PROVIDERS[0]  # default for backward compat
 
@@ -94,6 +95,7 @@ class NLQueryEngine:
                 completion = client.chat.completions.create(
                     model=model_id,
                     messages=[
+                        {"role": "system", "content": "Tu es un assistant d'analyse de données. Réponds uniquement au format structuré demandé, sans explication supplémentaire."},
                         {"role": "user", "content": prompt}
                     ],
                     max_tokens=max_tokens,

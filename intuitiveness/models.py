@@ -3,9 +3,12 @@
 Uses intfloat/multilingual-e5-small for multilingual support (French, etc.)
 with fast local batching.
 """
+import logging
 import numpy as np
 from typing import List, Optional
 from sklearn.metrics.pairwise import cosine_similarity
+
+logger = logging.getLogger(__name__)
 
 # Model for semantic similarity - multilingual support
 SIMILARITY_MODEL = "intfloat/multilingual-e5-small"
@@ -63,9 +66,11 @@ def get_batch_similarities(source_sentences: List[str], target_sentences: List[s
     if model is None:
         return None
 
+    st = _get_streamlit()
+
     try:
-        # Show progress for encoding
-        st.info(f"Encoding {len(source_sentences)} items...")
+        if st:
+            st.info(f"Encoding {len(source_sentences)} items...")
 
         # Encode all sources and targets in batches (fast!)
         source_embeddings = model.encode(
@@ -82,11 +87,14 @@ def get_batch_similarities(source_sentences: List[str], target_sentences: List[s
         # Compute cosine similarity matrix
         similarities = cosine_similarity(source_embeddings, target_embeddings)
 
-        st.success(f"Encoding complete!")
+        if st:
+            st.success("Encoding complete!")
         return similarities
 
     except Exception as e:
-        st.warning(f"Embedding error: {e}")
+        logger.warning(f"Embedding error: {e}")
+        if st:
+            st.warning(f"Embedding error: {e}")
         return None
 
 
@@ -135,7 +143,10 @@ def get_embeddings(texts: List[str]) -> Optional[np.ndarray]:
         return embeddings
 
     except Exception as e:
-        st.warning(f"Embedding error: {e}")
+        logger.warning(f"Embedding error: {e}")
+        st = _get_streamlit()
+        if st:
+            st.warning(f"Embedding error: {e}")
         return None
 
 
