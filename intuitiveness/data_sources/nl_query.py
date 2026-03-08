@@ -19,14 +19,13 @@ from typing import Dict, List, Any, Optional, Tuple
 from dataclasses import dataclass
 
 # HuggingFace model for NL understanding (OpenAI-compatible API)
-# Uses the Instruct variant for reliable chat/instruction following.
-# 3-stage fallback: specific providers first, then :auto for any available.
+# SmolLM3-3B-Instruct has no working provider on HF router (tested 2026-03).
+# Qwen2.5-72B-Instruct is confirmed working via live API test.
 # All routed through HF — no extra API key needed beyond HF_TOKEN.
 HF_BASE_URL = "https://router.huggingface.co/v1"
 HF_PROVIDERS = [
-    "HuggingFaceTB/SmolLM3-3B-Instruct:novita",      # Stage 1: novita (fast)
-    "HuggingFaceTB/SmolLM3-3B-Instruct:sambanova",    # Stage 2: sambanova fallback
-    "HuggingFaceTB/SmolLM3-3B-Instruct:auto",         # Stage 3: any available provider
+    "Qwen/Qwen2.5-72B-Instruct",   # Stage 1: primary (confirmed working)
+    "Qwen/Qwen2.5-7B-Instruct",    # Stage 2: lighter fallback
 ]
 HF_MODEL = HF_PROVIDERS[0]  # default for backward compat
 
