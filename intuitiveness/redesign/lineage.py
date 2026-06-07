@@ -58,6 +58,19 @@ class SourceReference:
         Number of rows before operation (if applicable)
     row_count_after : Optional[int]
         Number of rows after operation (if applicable)
+    id : Optional[str]
+        Optional per-step UUID (absorbed from the former AscentOperation).
+    source_data_hash : Optional[str]
+        Optional fingerprint of the input payload for tamper detection.
+    result_data_hash : Optional[str]
+        Optional fingerprint of the output payload for tamper detection.
+
+    This is the single canonical provenance record for BOTH descent and
+    ascent transitions (spec 015 FR-005/FR-006). Direction-specific detail
+    such as ``enrichment_function`` or ``dimensions_added`` rides in
+    ``parameters`` rather than in a separate record type. The record is
+    descriptive only: it carries no validation logic (invariants live in the
+    Redesigner engine).
     """
     operation_type: str
     input_level: ComplexityLevel
@@ -67,6 +80,9 @@ class SourceReference:
     duration_ms: float = 0.0
     row_count_before: Optional[int] = None
     row_count_after: Optional[int] = None
+    id: Optional[str] = None
+    source_data_hash: Optional[str] = None
+    result_data_hash: Optional[str] = None
 
     def to_dict(self) -> Dict[str, Any]:
         """Convert to dictionary for serialization."""
@@ -79,11 +95,14 @@ class SourceReference:
             "duration_ms": self.duration_ms,
             "row_count_before": self.row_count_before,
             "row_count_after": self.row_count_after,
+            "id": self.id,
+            "source_data_hash": self.source_data_hash,
+            "result_data_hash": self.result_data_hash,
         }
 
     @classmethod
     def from_dict(cls, data: Dict[str, Any]) -> "SourceReference":
-        """Create from dictionary."""
+        """Create from dictionary. Optional fields default to None when absent."""
         return cls(
             operation_type=data["operation_type"],
             input_level=ComplexityLevel[data["input_level"]],
@@ -93,6 +112,9 @@ class SourceReference:
             duration_ms=data.get("duration_ms", 0.0),
             row_count_before=data.get("row_count_before"),
             row_count_after=data.get("row_count_after"),
+            id=data.get("id"),
+            source_data_hash=data.get("source_data_hash"),
+            result_data_hash=data.get("result_data_hash"),
         )
 
 

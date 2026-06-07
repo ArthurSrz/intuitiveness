@@ -1,0 +1,105 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://intuitiveness.dev/contracts/session_export.schema.json",
+  "title": "Intuitiveness Session Export Record",
+  "description": "Versioned, self-contained, full-fidelity export of a redesign session's branching tree. Designed to be loadable WITHOUT importing the intuitiveness package: a consumer only needs the documented decode rules below. Realizes spec FR-023..FR-028.",
+  "type": "object",
+  "required": ["schema_version", "metadata", "nodes"],
+  "additionalProperties": false,
+  "properties": {
+    "schema_version": {
+      "type": "string",
+      "description": "Semantic version of THIS record format. Consumers MUST fail-closed on an unknown future major version rather than guess.",
+      "examples": ["1.0.0"]
+    },
+    "metadata": {
+      "type": "object",
+      "required": ["session_id", "root_id", "current_id"],
+      "additionalProperties": true,
+      "properties": {
+        "session_id": { "type": "string" },
+        "title": { "type": "string" },
+        "created_at": { "type": "string", "format": "date-time" },
+        "root_id": { "type": "string", "description": "id of the L4 entry node" },
+        "current_id": { "type": "string", "description": "id of the active node at export time" }
+      }
+    },
+    "nodes": {
+      "type": "object",
+      "description": "FLAT map keyed by node id. Branches sharing ancestors reference the SAME id; each node is stored exactly once (FR-026). Reconstruct the tree by following parent_id/children_ids.",
+      "additionalProperties": { "$ref": "#/$defs/node" }
+    }
+  },
+  "$defs": {
+    "node": {
+      "type": "object",
+      "required": ["id", "level", "parent_id", "children_ids", "payload_kind", "payload", "lineage"],
+      "additionalProperties": false,
+      "properties": {
+        "id": { "type": "string" },
+        "level": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 4,
+          "description": "Granularity level: 0=datum, 1=vector, 2=table, 3=graph/linked, 4=raw/unlinkable."
+        },
+        "parent_id": { "type": ["string", "null"], "description": "null only for the root (L4 entry)." },
+        "children_ids": { "type": "array", "items": { "type": "string" } },
+        "edge_decision": {
+          "type": "object",
+          "description": "The typed params/choice that produced this node from its parent (e.g. {\"domains\":[...]}, {\"column\":\"x\",\"filter_query\":null}, {\"aggregation\":\"sum\"}, {\"dimensions\":[...]}). Empty {} for the root.",
+          "additionalProperties": true
+        },
+        "lineage": {
+          "type": "array",
+          "description": "Ordered list of provenance steps from raw origin to THIS node. Denormalized (FR-001).",
+          "items": { "$ref": "#/$defs/source_reference" }
+        },
+        "payload_kind": {
+          "type": "string",
+          "enum": ["unlinkable", "graph", "dataframe", "vector", "value"],
+          "description": "Determines how to decode `payload`. See decode rules."
+        },
+        "payload": {
+          "description": "Encoded data payload. Decode per payload_kind (see x-decode-rules).",
+          "type": ["string", "object", "number", "boolean", "null"]
+        }
+      }
+    },
+    "source_reference": {
+      "type": "object",
+      "required": ["operation_type", "input_level", "output_level", "timestamp", "parameters"],
+      "additionalProperties": false,
+      "properties": {
+        "operation_type": { "type": "string", "examples": ["L4→L3", "L3→L2", "L1→L0", "L0→L1"] },
+        "input_level": { "type": "integer", "minimum": 0, "maximum": 4 },
+        "output_level": { "type": "integer", "minimum": 0, "maximum": 4 },
+        "timestamp": { "type": "string", "format": "date-time" },
+        "parameters": {
+          "type": "object",
+          "description": "Direction-specific detail rides here: enrichment_function, dimensions_added, column, filter_query, aggregation, domains, etc.",
+          "additionalProperties": true
+        },
+        "duration_ms": { "type": "number" },
+        "row_count_before": { "type": ["integer", "null"] },
+        "row_count_after": { "type": ["integer", "null"] },
+        "id": { "type": ["string", "null"], "description": "Optional per-step UUID." },
+        "source_data_hash": { "type": ["string", "null"], "description": "Optional input fingerprint." },
+        "result_data_hash": { "type": ["string", "null"], "description": "Optional output fingerprint." }
+      }
+    }
+  },
+  "x-decode-rules": {
+    "description": "How to materialize `payload` per `payload_kind` WITHOUT the intuitiveness package.",
+    "unlinkable": "payload is an object mapping source name -> dataframe-encoded string (decode each as 'dataframe' below). Represents an L4 collection of raw sources.",
+    "graph": "payload is a JSON string of a networkx node-link object (json.loads -> {nodes:[...], links:[...]}). Any node-link-compatible graph reader can consume it.",
+    "dataframe": "payload is base64( zlib.compress( utf-8 CSV bytes ) ). Decode: base64-decode -> zlib-decompress -> read CSV. (Exact codec matches persistence/serializers.serialize_dataframe.)",
+    "vector": "payload is base64( zlib.compress( utf-8 CSV bytes of a single-column series ) ); decode as dataframe then take the single column. Carries the series name in edge_decision/lineage parameters.",
+    "value": "payload is a JSON scalar (string/number/boolean/null) — the atomic L0 datum."
+  },
+  "x-invariants": {
+    "single-occurrence": "Each node id appears once in `nodes` (FR-026/SC-009): shared ancestors are not duplicated per branch.",
+    "tree-reconstruction": "On load, re-link parent_id/children_ids so branches sharing an ancestor point to the SAME node object (FR-028).",
+    "version-fail-closed": "Unknown future schema_version major => reject, do not partially parse (Assumptions: schema versioning policy)."
+  }
+}

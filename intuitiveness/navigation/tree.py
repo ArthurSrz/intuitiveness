@@ -54,11 +54,17 @@ class NavigationTreeNode:
     metadata: Dict[str, Any] = field(default_factory=dict)
     decision_description: str = ""  # FR-021
     output_snapshot: Dict[str, Any] = field(default_factory=dict)  # FR-021
+    edge_decision: Dict[str, Any] = field(default_factory=dict)  # spec 015 FR-020: params on incoming edge
 
     @property
     def depth(self) -> int:
         """Depth in tree (for UI indentation). Root is depth 0."""
         return self.metadata.get('_depth', 0)
+
+    @property
+    def dataset(self) -> Dataset:
+        """Spec-015 alias: the complete retained dataset (payload + lineage)."""
+        return self.dataset_snapshot
 
     def to_dict(self) -> Dict[str, Any]:
         """Serialize for JSON export (excludes dataset_snapshot)."""
@@ -137,7 +143,8 @@ class NavigationTree:
         dataset: Dataset,
         metadata: Optional[Dict[str, Any]] = None,
         decision_description: str = "",
-        output_snapshot: Optional[Dict[str, Any]] = None
+        output_snapshot: Optional[Dict[str, Any]] = None,
+        edge_decision_payload: Optional[Dict[str, Any]] = None
     ) -> str:
         """
         Create a new branch from current position.
@@ -175,7 +182,8 @@ class NavigationTree:
             action=action.value if isinstance(action, NavigationAction) else action,
             metadata=node_metadata,
             decision_description=decision_description,
-            output_snapshot=output_snapshot
+            output_snapshot=output_snapshot,
+            edge_decision=edge_decision_payload or {}
         )
 
         # Add to tree
@@ -191,43 +199,19 @@ class NavigationTree:
         """
         Generate an output snapshot for a dataset (FR-021).
 
+        Spec 015 (T019/R5): each level describes itself via ``summary()`` —
+        the former type-switch is replaced by polymorphism. The L0 value is
+        coerced to ``str`` for JSON-safe display in the snapshot.
+
         Args:
             dataset: The dataset to summarize
 
         Returns:
             Dict with output summary info
         """
-        snapshot = {
-            "level": dataset.complexity_level.value,
-            "level_name": dataset.complexity_level.name
-        }
-
-        data = dataset.get_data()
-
-        if dataset.complexity_level == ComplexityLevel.LEVEL_0:
-            snapshot["type"] = "datum"
-            snapshot["value"] = str(data)
-        elif dataset.complexity_level == ComplexityLevel.LEVEL_1:
-            snapshot["type"] = "vector"
-            if hasattr(data, '__len__'):
-                snapshot["length"] = len(data)
-        elif dataset.complexity_level == ComplexityLevel.LEVEL_2:
-            snapshot["type"] = "dataframe"
-            if hasattr(data, 'shape'):
-                snapshot["row_count"] = data.shape[0]
-                snapshot["columns"] = list(data.columns) if hasattr(data, 'columns') else []
-        elif dataset.complexity_level == ComplexityLevel.LEVEL_3:
-            snapshot["type"] = "graph"
-            if hasattr(data, 'number_of_nodes'):
-                snapshot["node_count"] = data.number_of_nodes()
-                snapshot["edge_count"] = data.number_of_edges()
-            elif hasattr(data, 'shape'):
-                snapshot["row_count"] = data.shape[0]
-        elif dataset.complexity_level == ComplexityLevel.LEVEL_4:
-            snapshot["type"] = "unlinkable"
-            if isinstance(data, dict):
-                snapshot["source_count"] = len(data)
-
+        snapshot = dataset.summary()
+        if "value" in snapshot:
+            snapshot["value"] = str(snapshot["value"])
         return snapshot
 
     def restore(self, node_id: str) -> Dataset:
@@ -287,6 +271,43 @@ class NavigationTree:
 
         find_leaves(self._root_id, [])
         return branches
+
+    # ------------------------------------------------------------------ #
+    # Generator-facing query API (spec 015 FR-021) — consumed by a future
+    # synthetic-generation service as well as the UI.
+    # ------------------------------------------------------------------ #
+    def branches(self) -> List[List[NavigationTreeNode]]:
+        """All root→leaf trajectories (alias of get_all_branches)."""
+        return self.get_all_branches()
+
+    def nodes_at_level(self, level: ComplexityLevel) -> List[NavigationTreeNode]:
+        """Every node produced at a given granularity level this session."""
+        return [n for n in self._nodes.values() if n.level == level]
+
+    def siblings(self, node_or_id) -> List[NavigationTreeNode]:
+        """Nodes sharing the same parent as the given node (excluding itself)."""
+        node = node_or_id if isinstance(node_or_id, NavigationTreeNode) else self._nodes[node_or_id]
+        if node.parent_id is None:
+            return []
+        parent = self._nodes[node.parent_id]
+        return [self._nodes[cid] for cid in parent.children_ids if cid != node.id]
+
+    def divergence_point(self, a_id: str, b_id: str) -> NavigationTreeNode:
+        """Deepest common ancestor of two nodes — where two trajectories split."""
+        def ancestry(nid: str) -> List[str]:
+            chain = []
+            cur = nid
+            while cur is not None:
+                chain.append(cur)
+                cur = self._nodes[cur].parent_id
+            return chain  # leaf → root
+
+        a_chain = ancestry(a_id)
+        b_set = set(ancestry(b_id))
+        for nid in a_chain:  # first (deepest) shared ancestor
+            if nid in b_set:
+                return self._nodes[nid]
+        raise ValueError("Nodes are not in the same tree (no common ancestor).")
 
     def export_to_json(self) -> Dict[str, Any]:
         """
