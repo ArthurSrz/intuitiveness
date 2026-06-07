@@ -40,8 +40,14 @@ class L4toL3Params(TransitionParams):
 
 @dataclass
 class L3toL2Params(TransitionParams):
-    """L3→L2: isolate a domain-specific table from the graph/linked data."""
+    """L3→L2: isolate a domain-specific table from the graph/linked data.
+
+    ``prebuilt_table`` lets a caller (e.g. NavigationSession adapting a UI
+    ``query_func``) supply the already-extracted table, so the engine wraps it
+    rather than re-deriving — preserving legacy query semantics during cutover.
+    """
     domains: List[str] = field(default_factory=list)
+    prebuilt_table: Optional[Any] = None
     metadata: Dict[str, Any] = field(default_factory=dict)
 
 

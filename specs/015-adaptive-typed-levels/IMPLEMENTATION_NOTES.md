@@ -46,6 +46,19 @@ The new engine deliberately replaces callable injection with typed params (`L4to
 
 ---
 
+## Cutover progress (commit 2)
+
+**Session DESCENT path cut over to the unified Engine — verified, behavior-preserving.**
+
+- Built the missing **session-path regression net** first (`tests/integration/test_session_cutover.py`): drives a full L4→L0 descent through `NavigationSession(use_tree=True)` exactly as the deployed app does (`streamlit_app.py:1050`). Greened against legacy, then against the engine.
+- `NavigationSession.descend` now routes through `Engine` via `_descent_params()`, which adapts the UI's callable/kwarg inputs into typed params. For graph edges it **invokes `builder_func`/`query_func` exactly as legacy did** and passes the produced payload as `prebuilt_graph`/`prebuilt_table` — so the payload (and behavior) is identical; the engine just wraps it + stamps lineage.
+- Added `L3toL2Params.prebuilt_table` + engine support for it.
+- 92 tests green (incl. 20 pure-Python E2E + the new session net). Deployed app descent path unchanged in behavior, now lineage-stamped.
+
+**Still on legacy (deliberately, pending verification):**
+- **Session ASCENT** (`NavigationSession.ascend`) — the engine's ascent reconstructs from `parent_data` while legacy uses enrichment/dimension semantics; cutting over changes app behavior and needs the **Playwright E2E** + an ascent regression net first. Left on legacy.
+- **`interactive.py`** (the 979-line god-class) and **legacy/`AscentOperation` deletion** — gated on the ascent cutover + browser E2E (step 5–6).
+
 ## What was safely delivered (additive, tested)
 
 | Area | Status |

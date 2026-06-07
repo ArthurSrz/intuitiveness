@@ -192,7 +192,11 @@ class Redesigner:
     @staticmethod
     def _l3_to_l2(dataset: Level3Dataset, params: L3toL2Params) -> Level2Dataset:
         data = dataset.get_data()
-        if isinstance(data, pd.DataFrame):
+        if params.prebuilt_table is not None:
+            # caller (e.g. session adapter) already extracted the table via a
+            # query — wrap it, preserving legacy query semantics.
+            df = params.prebuilt_table
+        elif isinstance(data, pd.DataFrame):
             df = data
         else:
             # graph → table of nodes carrying attributes

@@ -24,6 +24,10 @@ from intuitiveness.complexity import (
     Level0Dataset, Level1Dataset, Level2Dataset, Level3Dataset, Level4Dataset
 )
 from intuitiveness.redesign import Redesigner
+from intuitiveness.redesign.engine import Redesigner as Engine
+from intuitiveness.redesign.params import (
+    L4toL3Params, L3toL2Params, L2toL1Params, L1toL0Params,
+)
 from intuitiveness.persistence.session_graph import SessionGraph
 
 # Import from package submodules (011-code-simplification)
@@ -143,6 +147,32 @@ class NavigationSession:
     # descend() - Move down one level
     # -------------------------------------------------------------------------
 
+    def _descent_params(self, current_level, target_level, params):
+        """Adapt UI kwargs into a typed descent params object (spec 015).
+
+        For graph edges (L4→L3, L3→L2) the UI passes callables; we invoke them
+        on the current payload — exactly as the legacy Redesigner did — and hand
+        the resulting payload to the engine as a prebuilt value, so behavior is
+        preserved while the engine remains the sole typed constructor.
+        """
+        edge = (current_level.value, target_level.value)
+        data = self._current_dataset.get_data()
+        if edge == (4, 3):
+            builder = params.get("builder_func") or params.get("linking_function")
+            if builder is None:
+                raise NavigationError("L4→L3 requires a builder_func/linking_function.")
+            return L4toL3Params(prebuilt_graph=builder(data), model=params.get("model"))
+        if edge == (3, 2):
+            query = params.get("query_func")
+            if query is not None:
+                return L3toL2Params(prebuilt_table=query(data), domains=params.get("domains", []))
+            return L3toL2Params(domains=params.get("domains", []))
+        if edge == (2, 1):
+            return L2toL1Params(column=params.get("column"), filter_query=params.get("filter_query"))
+        if edge == (1, 0):
+            return L1toL0Params(aggregation=params.get("aggregation", "sum"))
+        raise NavigationError(f"Unsupported descent edge {current_level.name}→{target_level.name}.")
+
     def descend(self, **params) -> 'NavigationSession':
         """
         Move down one level.
@@ -172,13 +202,18 @@ class NavigationSession:
         # Determine target level
         target_level = ComplexityLevel(current_level.value - 1)
 
-        # Use Redesigner to perform the descent
+        # Spec 015 cutover: route descent through the unified Engine. The
+        # session adapts the UI's callable/kwarg inputs into typed params,
+        # invoking builder_func/query_func exactly as legacy did (so the
+        # produced payload — and thus behavior — is identical), then the engine
+        # wraps it + stamps lineage. See IMPLEMENTATION_NOTES Deviation 2.
         try:
-            new_dataset = Redesigner.reduce_complexity(
-                self._current_dataset,
-                target_level,
-                **params
+            typed = self._descent_params(current_level, target_level, params)
+            new_dataset = Engine.reduce_complexity(
+                self._current_dataset, target_level, typed
             )
+        except NavigationError:
+            raise
         except Exception as e:
             raise NavigationError(f"Descent failed: {str(e)}")
 
