@@ -27,6 +27,7 @@ from intuitiveness.redesign import Redesigner
 from intuitiveness.redesign.engine import Redesigner as Engine
 from intuitiveness.redesign.params import (
     L4toL3Params, L3toL2Params, L2toL1Params, L1toL0Params,
+    L0toL1Params, L1toL2Params, L2toL3Params,
 )
 from intuitiveness.persistence.session_graph import SessionGraph
 
@@ -173,6 +174,26 @@ class NavigationSession:
             return L1toL0Params(aggregation=params.get("aggregation", "sum"))
         raise NavigationError(f"Unsupported descent edge {current_level.name}→{target_level.name}.")
 
+    def _ascent_params(self, current_level, target_level, params):
+        """Adapt UI kwargs into a typed ascent params object (spec 015).
+
+        The legacy kwarg names (``enrichment_func``, ``dimensions``,
+        ``relationships``) map onto the typed params; the engine then runs the
+        same enrichment/dimension transforms, so behavior is preserved.
+        """
+        edge = (current_level.value, target_level.value)
+        if edge == (0, 1):
+            return L0toL1Params(enrichment_function=params.get("enrichment_func"))
+        if edge == (1, 2):
+            return L1toL2Params(dimensions=params.get("dimensions", []))
+        if edge == (2, 3):
+            return L2toL3Params(
+                dimensions=params.get("dimensions", []),
+                relationships=params.get("relationships", []),
+                source_column=params.get("source_column"),
+            )
+        raise NavigationError(f"Unsupported ascent edge {current_level.name}→{target_level.name}.")
+
     def descend(self, **params) -> 'NavigationSession':
         """
         Move down one level.
@@ -284,13 +305,16 @@ class NavigationSession:
         # Determine target level
         target_level = ComplexityLevel(current_level.value + 1)
 
-        # Use Redesigner to perform the ascent
+        # Spec 015 cutover: route ascent through the unified Engine, which calls
+        # the SAME enrichment/dimension transforms legacy used (identical output)
+        # and stamps lineage. The session adapts UI kwargs into typed params.
         try:
-            new_dataset = Redesigner.increase_complexity(
-                self._current_dataset,
-                target_level,
-                **params
+            typed = self._ascent_params(current_level, target_level, params)
+            new_dataset = Engine.increase_complexity(
+                self._current_dataset, target_level, typed
             )
+        except NavigationError:
+            raise
         except Exception as e:
             raise NavigationError(f"Ascent failed: {str(e)}")
 

@@ -259,59 +259,109 @@ class Redesigner:
     # ------------------------------------------------------------------ #
     @staticmethod
     def _l0_to_l1(dataset: Level0Dataset, params: L0toL1Params) -> Level1Dataset:
-        # Reconstruct a vector. If the datum remembers its parent vector, use it;
-        # otherwise wrap the scalar into a 1-element series. L0→L1 legitimately
-        # changes item count (reconstruction), so row-count is NOT preserved here.
-        parent = dataset.get_parent_data() if hasattr(dataset, "get_parent_data") else None
-        if parent is not None:
-            series = parent.copy() if hasattr(parent, "copy") else pd.Series(parent)
-        else:
-            series = pd.Series([dataset.get_data()])
+        # Reconstruct a vector using the SAME enrichment transform as legacy
+        # (ascent/enrichment.py), so output is identical. L0→L1 legitimately
+        # changes item count (reconstruction), so row-count is NOT preserved.
+        from intuitiveness.ascent.enrichment import EnrichmentRegistry
+
+        registry = EnrichmentRegistry.get_instance()
+        enrichment_func = params.enrichment_function
+        if enrichment_func is None:
+            if getattr(dataset, "has_parent", False):
+                enrichment_func = "source_expansion"
+            else:
+                defaults = registry.get_defaults(
+                    ComplexityLevel.LEVEL_0, ComplexityLevel.LEVEL_1
+                )
+                if not defaults:
+                    raise TransitionError(
+                        "L0→L1 needs an enrichment_function (no parent data, no defaults)."
+                    )
+                enrichment_func = defaults[0].name
+
+        func = registry.get(enrichment_func) if isinstance(enrichment_func, str) else enrichment_func
+        data = dataset.get_data()
+        context = dataset.get_parent_data() if func.requires_context else None
+        if func.requires_context and context is None:
+            raise TransitionError(
+                f"Enrichment '{func.name}' requires parent data, but none is available."
+            )
+        series = func(data, context)
+        if not isinstance(series, pd.Series):
+            series = pd.Series(list(series)) if hasattr(series, "__iter__") and not isinstance(series, (str, dict)) else pd.Series([series])
+        if len(series) == 0:
+            raise TransitionError(f"Enrichment '{func.name}' produced an empty vector.")
+
         lineage = Redesigner._stamp(
             dataset, "L0→L1", ComplexityLevel.LEVEL_0, ComplexityLevel.LEVEL_1,
-            {"enrichment_function": params.enrichment_function, **params.metadata},
-            None, _row_count(series), dataset.get_data(), series,
+            {"enrichment_function": enrichment_func, **params.metadata},
+            None, _row_count(series), data, series,
         )
-        return Level1Dataset(series, name="reconstructed", lineage=lineage)
+        return Level1Dataset(series, name=f"enriched_{dataset.description}", lineage=lineage)
 
     @staticmethod
     def _l1_to_l2(dataset: Level1Dataset, params: L1toL2Params) -> Level2Dataset:
+        # Mirror legacy _increase_1_to_2: build {'value': series}, apply
+        # dimensions from the shared DimensionRegistry. Rows preserved.
+        from intuitiveness.ascent.dimensions import DimensionRegistry, DimensionDefinition
+
+        registry = DimensionRegistry.get_instance()
         series = dataset.get_data()
-        df = series.to_frame(name=dataset.name or "value")
-        # Dimensions are added as (initially empty/derived) attribute columns.
-        for dim in params.dimensions:
-            if dim not in df.columns:
-                df[dim] = None
+        df = pd.DataFrame({"value": series})
+        dimensions = list(params.dimensions)
+        if not dimensions:
+            defaults = registry.get_defaults(ComplexityLevel.LEVEL_1, ComplexityLevel.LEVEL_2)
+            dimensions = [d.name for d in defaults] if defaults else []
+        for dim in dimensions:
+            dim_def = registry.get(dim) if isinstance(dim, str) else dim
+            df = dim_def.apply_to_dataframe(df, source_column="value")
+
         before, after = _row_count(series), _row_count(df)
         Redesigner._require_row_count_preserved(before, after, "L1→L2")
         lineage = Redesigner._stamp(
             dataset, "L1→L2", ComplexityLevel.LEVEL_1, ComplexityLevel.LEVEL_2,
-            {"dimensions": list(params.dimensions), **params.metadata},
+            {"dimensions": dimensions, **params.metadata},
             before, after, series, df,
         )
         return Level2Dataset(df, name=f"table_{dataset.name}", lineage=lineage)
 
     @staticmethod
     def _l2_to_l3(dataset: Level2Dataset, params: L2toL3Params) -> Level3Dataset:
-        import networkx as nx
-        df = dataset.get_data()
+        # Mirror legacy _increase_2_to_3: apply analytic dimensions/relationships
+        # to the table via the shared DimensionRegistry. Rows preserved.
+        from intuitiveness.ascent.dimensions import (
+            DimensionRegistry, DimensionDefinition, RelationshipDefinition,
+            apply_relationships_to_dataframe,
+        )
+
+        registry = DimensionRegistry.get_instance()
+        df = dataset.get_data().copy()
         before = _row_count(df)
-        graph = nx.DiGraph()
-        entity_col = params.entity_column
-        # Build a simple bipartite graph row-entity -> extracted-entity; if no
-        # entity_column given, build a star around row indices (no orphans).
-        for idx in df.index:
-            graph.add_node(f"row_{idx}", node_type="row")
-        if entity_col and entity_col in df.columns:
-            for idx, val in df[entity_col].items():
-                if pd.notna(val):
-                    graph.add_node(val, node_type="entity", entity_type=entity_col)
-                    graph.add_edge(f"row_{idx}", val, relationship="belongs_to")
-        after_rows = before  # entities-as-rows preserved
-        Redesigner._require_row_count_preserved(before, after_rows, "L2→L3")
+
+        dimensions = list(params.dimensions)
+        relationships = list(params.relationships)
+        if not dimensions and not relationships:
+            defaults = registry.get_defaults(ComplexityLevel.LEVEL_2, ComplexityLevel.LEVEL_3)
+            dimensions = [d.name for d in defaults] if defaults else []
+
+        source_column = params.source_column
+        if source_column is None:
+            source_column = "value" if "value" in df.columns else (df.columns[0] if len(df.columns) else None)
+
+        for dim in dimensions:
+            dim_def = registry.get(dim) if isinstance(dim, str) else dim
+            df = dim_def.apply_to_dataframe(df, source_column=source_column)
+
+        if relationships:
+            rel_defs = [r if isinstance(r, RelationshipDefinition) else RelationshipDefinition.from_dict(r)
+                        for r in relationships]
+            df = apply_relationships_to_dataframe(df, rel_defs, source_column)
+
+        after = _row_count(df)
+        Redesigner._require_row_count_preserved(before, after, "L2→L3")
         lineage = Redesigner._stamp(
             dataset, "L2→L3", ComplexityLevel.LEVEL_2, ComplexityLevel.LEVEL_3,
-            {"dimensions": list(params.dimensions), "entity_column": entity_col, **params.metadata},
-            before, after_rows, df, graph,
+            {"dimensions": dimensions, **params.metadata},
+            before, after, dataset.get_data(), df,
         )
-        return Level3Dataset(graph, lineage=lineage)
+        return Level3Dataset(df, lineage=lineage)

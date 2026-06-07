@@ -88,6 +88,8 @@ class L1toL2Params(TransitionParams):
 class L2toL3Params(TransitionParams):
     """L2→L3: add analytic dimensions / links, producing a graph/linked set."""
     dimensions: List[str] = field(default_factory=list)
+    relationships: List[Any] = field(default_factory=list)
+    source_column: Optional[str] = None
     entity_column: Optional[str] = None
     value_column: Optional[str] = None
     metadata: Dict[str, Any] = field(default_factory=dict)

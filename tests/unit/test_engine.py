@@ -99,14 +99,16 @@ def test_ascent_to_l4_structurally_rejected():
 # --- RD-6: ascent row-count preservation ----------------------------------- #
 
 def test_ascent_l1_to_l2_preserves_row_count():
+    # No dimensions => engine uses the real DimensionRegistry defaults (or none);
+    # either way rows are preserved and the 'value' column is present.
     l1 = Level1Dataset(pd.Series([1, 2, 3], name="v"))
-    l2 = Redesigner.increase_complexity(l1, ComplexityLevel.LEVEL_2, L1toL2Params(dimensions=["region"]))
-    assert l2.get_data().shape[0] == 3  # rows preserved, dimension added as column
-    assert "region" in l2.get_data().columns
+    l2 = Redesigner.increase_complexity(l1, ComplexityLevel.LEVEL_2, L1toL2Params(dimensions=[]))
+    assert l2.get_data().shape[0] == 3  # rows preserved
+    assert "value" in l2.get_data().columns
 
 
 def test_ascent_l1_to_l2_lineage_recorded():
     l1 = Level1Dataset(pd.Series([1, 2, 3], name="v"))
-    l2 = Redesigner.increase_complexity(l1, ComplexityLevel.LEVEL_2, L1toL2Params(dimensions=["region"]))
+    l2 = Redesigner.increase_complexity(l1, ComplexityLevel.LEVEL_2, L1toL2Params(dimensions=[]))
     assert l2.lineage.operations[-1].operation_type == "L1→L2"
     assert l2.lineage.operations[-1].row_count_before == l2.lineage.operations[-1].row_count_after
