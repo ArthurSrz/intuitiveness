@@ -84,3 +84,27 @@ def test_session_tree_records_descent_path():
     history = session.get_history()
     # entry + 2 descents recorded on the branch path
     assert len(history) >= 2
+
+
+def test_full_round_trip_descent_then_ascent():
+    """Safety net for the ascent (build-up) cutover: go all the way down, then
+    all the way back up, through the session. Greened against the current
+    (legacy ascent) path; must stay green after the ascent cutover.
+    Known-good build-up values mirror tests/e2e/test_full_pipeline.py.
+    """
+    session = NavigationSession(_l4(), use_tree=True)
+
+    # down to the single number (descent now runs on the new engine)
+    session.descend(builder_func=_build_graph)   # L4→L3
+    session.descend(query_func=_query_table)     # L3→L2
+    session.descend(column="score")              # L2→L1
+    session.descend(aggregation="mean")          # L1→L0
+    assert session.current_level == ComplexityLevel.LEVEL_0
+
+    # back up (ascent still on legacy for now)
+    session.ascend(enrichment_func="source_expansion")  # L0→L1
+    assert session.current_level == ComplexityLevel.LEVEL_1
+    session.ascend(dimensions=[])                        # L1→L2
+    assert session.current_level == ComplexityLevel.LEVEL_2
+    session.ascend(dimensions=[])                        # L2→L3
+    assert session.current_level == ComplexityLevel.LEVEL_3
