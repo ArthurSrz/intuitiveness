@@ -107,12 +107,12 @@
 **Independent Test**: Export a multi-branch session; load it in a context that does NOT import `intuitiveness` internals; recover every payload + lineage; format declares its version.
 
 - [ ] T034 [P] [US3] Add durable file/blob backend in `intuitiveness/persistence/durable_backend.py`
-- [ ] T035 [US3] Implement full-fidelity export in `intuitiveness/persistence/session_export.py`: tree → record with `schema_version`, `metadata`, flat `nodes` map keyed by id, payloads via existing serializers + `payload_kind`, `lineage`, `edge_decision` (conform to contracts/session_export.schema.json)
-- [ ] T036 [US3] Implement import in `intuitiveness/persistence/session_export.py`: record → tree, re-linking shared ancestors to the same node (FR-028); fail-closed on unknown major `schema_version`
+- [X] T035 [US3] Implement full-fidelity export in `intuitiveness/persistence/session_export.py`: tree → record with `schema_version`, `metadata`, flat `nodes` map keyed by id, payloads via existing serializers + `payload_kind`, `lineage`, `edge_decision` (conform to contracts/session_export.schema.json)
+- [X] T036 [US3] Implement import in `intuitiveness/persistence/session_export.py`: record → tree, re-linking shared ancestors to the same node (FR-028); fail-closed on unknown major `schema_version`
 - [ ] T037 [US3] Change `NavigationTreeNode.to_dict`/`from_dict` to FULL fidelity (include `payload`) in `intuitiveness/navigation/tree.py` (remove the current `dataset_snapshot` exclusion)
 - [ ] T038 [US3] Demote `StorageBackend` to a session index (`id`/`title`/`backend_location`) and wire `NavigationSession.save()/load()` to the durable backend + index in `intuitiveness/persistence/storage_backend.py` and `intuitiveness/navigation/session.py`
-- [ ] T039 [P] [US3] Validate export against `contracts/session_export.schema.json` + assert shared-ancestor stored once (SC-009) in `tests/unit/test_export_schema.py`
-- [ ] T040 [US3] Integration test (US3 Independent Test): export → reload WITHOUT importing package internals; round-trip tables/graphs/vectors/scalars (SC-007/SC-008) in `tests/integration/test_us3_export.py`
+- [X] T039 [P] [US3] Validate export against `contracts/session_export.schema.json` + assert shared-ancestor stored once (SC-009) in `tests/unit/test_export_schema.py`
+- [X] T040 [US3] Integration test (US3 Independent Test): export → reload WITHOUT importing package internals; round-trip tables/graphs/vectors/scalars (SC-007/SC-008) in `tests/integration/test_us3_export.py`
 
 **Checkpoint**: The cross-service contract is real and consumable by a separate generation service.
 
