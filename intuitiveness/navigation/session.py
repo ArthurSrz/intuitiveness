@@ -23,7 +23,6 @@ from intuitiveness.complexity import (
     Dataset, ComplexityLevel,
     Level0Dataset, Level1Dataset, Level2Dataset, Level3Dataset, Level4Dataset
 )
-from intuitiveness.redesign import Redesigner
 from intuitiveness.redesign.engine import Redesigner as Engine
 from intuitiveness.redesign.params import (
     L4toL3Params, L3toL2Params, L2toL1Params, L1toL0Params,

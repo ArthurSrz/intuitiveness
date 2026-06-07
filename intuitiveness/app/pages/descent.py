@@ -22,7 +22,8 @@ from typing import Any, Dict, Optional
 from intuitiveness.complexity import (
     ComplexityLevel, Level3Dataset, Level2Dataset, Level1Dataset, Level0Dataset
 )
-from intuitiveness.redesign import Redesigner
+from intuitiveness.redesign.engine import Redesigner
+from intuitiveness.redesign.params import L2toL1Params, L1toL0Params
 from intuitiveness.ui import (
     render_page_header,
     render_section_header,
@@ -195,12 +196,11 @@ def render_feature_extraction_step(l2_dataset: Level2Dataset):
 
     if st.button(t('extract_features'), type="primary"):
         with st.spinner(t('extracting')):
-            # Extract column as L1 vector
-            redesigner = Redesigner()
-            l1_dataset = redesigner.reduce_complexity(
+            # Extract column as L1 vector (spec 015: unified engine + typed params)
+            l1_dataset = Redesigner.reduce_complexity(
                 l2_dataset,
-                target_level=ComplexityLevel.LEVEL_1,
-                column=column
+                ComplexityLevel.LEVEL_1,
+                L2toL1Params(column=column),
             )
 
             _ensure_datasets_dict()
@@ -239,12 +239,11 @@ def render_aggregation_step(l1_dataset: Level1Dataset):
 
     if st.button(t('compute_metric'), type="primary"):
         with st.spinner(t('computing')):
-            # Aggregate to L0
-            redesigner = Redesigner()
-            l0_dataset = redesigner.reduce_complexity(
+            # Aggregate to L0 (spec 015: unified engine + typed params)
+            l0_dataset = Redesigner.reduce_complexity(
                 l1_dataset,
-                target_level=ComplexityLevel.LEVEL_0,
-                aggregation=aggregation
+                ComplexityLevel.LEVEL_0,
+                L1toL0Params(aggregation=aggregation),
             )
 
             _ensure_datasets_dict()

@@ -32,13 +32,11 @@ Example:
 
 from intuitiveness.redesign.lineage import DataLineage, SourceReference
 
-# Spec 015: the unified Redesigner engine (the single transition chokepoint) is
-# available as `intuitiveness.redesign.engine.Redesigner` and re-exported here as
-# `Engine`. The package-level name `Redesigner` still resolves to the legacy
-# implementation during the migration so existing callers (navigation/session.py)
-# keep working; the top-level swap happens in US5/T042 once callers are rewired.
-from intuitiveness.redesign_legacy import Redesigner  # legacy (transitional)
-from intuitiveness.redesign.engine import Redesigner as Engine, TransitionError
+# Spec 015: the unified Redesigner engine is the single transition chokepoint.
+# `Redesigner` (and the alias `Engine`) both resolve to the typed engine; the
+# legacy redesign_legacy module has been removed (US5/T042 complete).
+from intuitiveness.redesign.engine import Redesigner, TransitionError
+Engine = Redesigner  # backwards-compatible alias
 from intuitiveness.redesign.params import (
     TransitionParams,
     L4toL3Params,
@@ -51,8 +49,8 @@ from intuitiveness.redesign.params import (
 )
 
 __all__ = [
-    "Redesigner",        # legacy (transitional — retired in US5/T042)
-    "Engine",            # spec-015 unified engine
+    "Redesigner",        # spec-015 unified engine
+    "Engine",            # alias of Redesigner
     "TransitionError",
     "DataLineage",
     "SourceReference",

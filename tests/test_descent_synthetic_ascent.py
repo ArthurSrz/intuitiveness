@@ -46,7 +46,8 @@ from intuitiveness.ascent.dimensions import (
     DimensionRegistry,
     create_dimension_groups,
 )
-from intuitiveness.ascent.operations import AscentOperation
+from intuitiveness.redesign.lineage import SourceReference
+from datetime import datetime, timezone
 
 
 # ============================================================================
@@ -300,7 +301,7 @@ class TestSyntheticToAscent:
             assert dim.name in l3.get_data().columns
 
     def test_ascent_operation_tracking(self, simulated_descent_l2):
-        """AscentOperation should track synthetic data transitions."""
+        """A SourceReference (the single provenance record) should track ascent transitions."""
         # Prepare synthetic
         preparation = prepare_for_tabpfn(simulated_descent_l2)
         df_prepared = preparation.prepared_df
@@ -331,21 +332,26 @@ class TestSyntheticToAscent:
         result_df = dim.apply_to_dataframe(synthetic_df, source_column=synthetic_df.columns[0])
         l3 = Level3Dataset(result_df)
 
-        # Track operation
-        operation = AscentOperation.create(
-            source_level=ComplexityLevel.LEVEL_2,
-            target_level=ComplexityLevel.LEVEL_3,
-            enrichment_function='dimension_classification',
-            source_data=l2.get_data(),
-            result_data=l3.get_data(),
-            dimensions_added=[dim.name],
+        # Track operation as the single canonical provenance record (spec 015)
+        operation = SourceReference(
+            operation_type="L2→L3",
+            input_level=ComplexityLevel.LEVEL_2,
+            output_level=ComplexityLevel.LEVEL_3,
+            timestamp=datetime.now(timezone.utc),
+            parameters={
+                'enrichment_function': 'dimension_classification',
+                'dimensions_added': [dim.name],
+            },
+            row_count_before=len(synthetic_df),
+            row_count_after=len(result_df),
         )
 
-        assert operation.source_level == ComplexityLevel.LEVEL_2
-        assert operation.target_level == ComplexityLevel.LEVEL_3
-        assert 'value_category' in operation.dimensions_added
+        assert operation.input_level == ComplexityLevel.LEVEL_2
+        assert operation.output_level == ComplexityLevel.LEVEL_3
+        assert 'value_category' in operation.parameters['dimensions_added']
         assert operation.row_count_before == len(synthetic_df)
-        assert operation.validate_integrity()
+        # ascent preserves item count (the integrity invariant, now enforced by the engine)
+        assert operation.row_count_before == operation.row_count_after
 
 
 # ============================================================================

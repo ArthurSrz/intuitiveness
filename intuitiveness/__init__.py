@@ -7,7 +7,7 @@ from .complexity import (
     Level1Dataset,
     Level0Dataset
 )
-# Import Redesigner from redesign package (uses legacy redesign_legacy.py for now)
+# Redesigner = the unified spec-015 engine (single transition chokepoint)
 from .redesign import Redesigner
 from .interactive import (
     InteractiveRedesigner,
@@ -41,7 +41,6 @@ from .ascent import (
     EnrichmentRegistry,
     DimensionDefinition,
     DimensionRegistry,
-    AscentOperation,
     suggest_dimensions,
     find_duplicates,
     create_dimension_groups,
@@ -112,7 +111,6 @@ __all__ = [
     "EnrichmentRegistry",
     "DimensionDefinition",
     "DimensionRegistry",
-    "AscentOperation",
     "suggest_dimensions",
     "find_duplicates",
     "create_dimension_groups",

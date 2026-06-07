@@ -92,8 +92,8 @@
 **Independent Test**: Attempt each illegal move (skip level, target L4 on ascent, re-enter L4) through session and direct engine; confirm identical rejection.
 
 - [ ] T030 [US4] Restrict `NavigationSession` to PATH-legality only in `intuitiveness/navigation/session.py` (entry must be L4; no re-entry to L4); remove any transition-rule checks (delegated to engine)
-- [ ] T031 [US4] Delete `AscentOperation` from `intuitiveness/ascent/operations.py` (its fields already absorbed into `SourceReference`; its row-count invariant already in the engine from T013)
-- [ ] T032 [US4] Migrate call-sites importing `AscentOperation` (tests + `intuitiveness/ui/ascent*` forms) to build/read `SourceReference`/lineage instead
+- [X] T031 [US4] Delete `AscentOperation` from `intuitiveness/ascent/operations.py` (its fields already absorbed into `SourceReference`; its row-count invariant already in the engine from T013)
+- [X] T032 [US4] Migrate call-sites importing `AscentOperation` (tests + `intuitiveness/ui/ascent*` forms) to build/read `SourceReference`/lineage instead
 - [ ] T033 [P] [US4] Unit-test invariant placement in `tests/unit/test_invariants.py`: each illegal move rejected identically via session vs direct engine; assert each rule enforced in exactly one location (SC-004)
 
 **Checkpoint**: Guard-rails consistent across guided/programmatic paths (constitution Principle I).
@@ -124,9 +124,9 @@
 
 **Independent Test**: A guided-workflow transition produces an artifact+lineage indistinguishable from a direct engine call; grep confirms one constructor.
 
-- [ ] T041 [US5] Rewire `InteractiveRedesigner` in `intuitiveness/interactive.py` to delegate ALL transitions to the engine; remove every inline `LevelNDataset(...)` construction (owns no transition logic)
-- [ ] T042 [US5] Delete `intuitiveness/redesign_legacy.py`; repoint any remaining imports to `intuitiveness.redesign.engine`
-- [ ] T043 [P] [US5] Guard test in `tests/unit/test_single_chokepoint.py`: `grep` finds no `LevelNDataset(` outside `redesign/engine.py` (SC-003); no `use_tree`/`NavigationHistory`/`redesign_legacy`/`AscentOperation` references remain
+- [X] T041 [US5] Rewire `InteractiveRedesigner` in `intuitiveness/interactive.py` to delegate ALL transitions to the engine; remove every inline `LevelNDataset(...)` construction (owns no transition logic)
+- [X] T042 [US5] Delete `intuitiveness/redesign_legacy.py`; repoint any remaining imports to `intuitiveness.redesign.engine`
+- [X] T043 [P] [US5] Guard test in `tests/unit/test_single_chokepoint.py`: `grep` finds no `LevelNDataset(` outside `redesign/engine.py` (SC-003); no `use_tree`/`NavigationHistory`/`redesign_legacy`/`AscentOperation` references remain
 - [X] T044 [US5] Integration test (US5 Independent Test): guided-workflow transition == programmatic engine transition (identical artifact + lineage) in `tests/integration/test_us5_consolidation.py`
 
 **Checkpoint**: Single engine, single history structure; SC-003 verified.

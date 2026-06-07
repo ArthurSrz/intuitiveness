@@ -13,14 +13,12 @@ from .dimensions import (
     create_dimension_groups,
     get_dimension_hierarchy
 )
-from .operations import AscentOperation
 
 __all__ = [
     'EnrichmentFunction',
     'EnrichmentRegistry',
     'DimensionDefinition',
     'DimensionRegistry',
-    'AscentOperation',
     'suggest_dimensions',
     'find_duplicates',
     'create_dimension_groups',
