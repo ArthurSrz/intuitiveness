@@ -32,17 +32,55 @@ class Neo4jResult:
         }
 
 
+def get_graph_db_credentials() -> Dict[str, Optional[str]]:
+    """Read graph-database (Memgraph/Neo4j, Bolt-compatible) connection details.
+
+    Resolution order, per key: Streamlit ``st.secrets`` first, then environment
+    variables. Looks up ``MEMGRAPH_*`` names first, then ``NEO4J_*`` aliases for
+    backward compatibility. There are NO hardcoded host or password defaults —
+    a missing value resolves to ``None`` so an unconfigured deployment fails
+    gracefully (the graph feature is optional) and no secrets live in source.
+
+    Returns a dict with keys: uri, user, password, database (any may be None).
+    """
+    import os
+
+    def _lookup(*names):
+        try:
+            import streamlit as st
+            for n in names:
+                try:
+                    if n in st.secrets:
+                        return st.secrets[n]
+                except Exception:
+                    pass
+        except Exception:
+            pass
+        for n in names:
+            v = os.getenv(n)
+            if v:
+                return v
+        return None
+
+    return {
+        "uri": _lookup("MEMGRAPH_URI", "NEO4J_URI"),
+        "user": _lookup("MEMGRAPH_USER", "NEO4J_USER"),
+        "password": _lookup("MEMGRAPH_PASSWORD", "NEO4J_PASSWORD"),
+        "database": _lookup("MEMGRAPH_DATABASE", "NEO4J_DATABASE"),
+    }
+
+
 class Neo4jClient:
     """
-    Simple Neo4j client using the official Python driver.
+    Bolt-protocol graph-database client (Memgraph or Neo4j) using the official
+    neo4j Python driver.
+
+    Connection details come from secrets/env via ``get_graph_db_credentials()``
+    (keys ``MEMGRAPH_URI``/``MEMGRAPH_USER``/``MEMGRAPH_PASSWORD``/
+    ``MEMGRAPH_DATABASE``); no credentials are hardcoded.
 
     Usage:
-        client = Neo4jClient(
-            uri="neo4j://localhost:7687",
-            user="neo4j",
-            password="1&Coalplelat",
-            database="neo4j"
-        )
+        client = Neo4jClient()  # reads MEMGRAPH_* from st.secrets / env
 
         # Connect
         client.connect()
@@ -59,27 +97,31 @@ class Neo4jClient:
 
     def __init__(
         self,
-        uri: str = "neo4j://localhost:7687",
-        user: str = "neo4j",
-        password: str = "1&Coalplelat",
-        database: str = "neo4j"
+        uri: Optional[str] = None,
+        user: Optional[str] = None,
+        password: Optional[str] = None,
+        database: Optional[str] = None
     ):
         """
-        Initialize Neo4j client.
+        Initialize the graph-database client.
+
+        Any argument left as None is read from secrets/env via
+        ``get_graph_db_credentials()``. No connection details are hardcoded.
 
         Args:
-            uri: Neo4j connection URI
-            user: Neo4j username
-            password: Neo4j password
-            database: Database name
+            uri: Bolt connection URI (e.g. bolt+s://host:port). None → secrets/env.
+            user: username. None → secrets/env (may be empty for no-auth Memgraph).
+            password: password. None → secrets/env.
+            database: database name. None → secrets/env, then "memgraph".
         """
         if not NEO4J_AVAILABLE:
             raise ImportError("Neo4j package not available. Install with: pip install neo4j")
 
-        self._uri = uri
-        self._user = user
-        self._password = password
-        self._database = database
+        creds = get_graph_db_credentials()
+        self._uri = uri if uri is not None else creds["uri"]
+        self._user = user if user is not None else creds["user"]
+        self._password = password if password is not None else creds["password"]
+        self._database = database or creds["database"] or "memgraph"
         self._driver = None
         self._connected = False
 
@@ -95,14 +137,18 @@ class Neo4jClient:
         Returns:
             True if connection successful
         """
+        if not self._uri:
+            print("[Graph DB Client] No connection URI configured "
+                  "(set MEMGRAPH_URI in st.secrets or env). Skipping connection.")
+            self._connected = False
+            return False
         try:
-            print(f"[Neo4j Client] Connecting to {self._uri}...")
-            print(f"[Neo4j Client] Database: {self._database}")
+            print(f"[Graph DB Client] Connecting to {self._uri}...")
+            print(f"[Graph DB Client] Database: {self._database}")
 
-            self._driver = GraphDatabase.driver(
-                self._uri,
-                auth=(self._user, self._password)
-            )
+            # Memgraph may run without auth — pass auth=None when no user is set.
+            auth = (self._user, self._password) if self._user else None
+            self._driver = GraphDatabase.driver(self._uri, auth=auth)
 
             # Verify connection
             self._driver.verify_connectivity()
