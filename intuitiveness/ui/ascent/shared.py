@@ -197,7 +197,7 @@ def apply_domain_categorization(
     Apply domain categorization to a DataFrame column.
 
     This is the core categorization logic reused by both descent and ascent.
-    Uses intfloat/multilingual-e5-base via HuggingFace API for semantic matching.
+    Uses the configured embeddings API (intuitiveness.models) for semantic matching.
 
     Args:
         df: DataFrame to categorize
@@ -219,7 +219,7 @@ def apply_domain_categorization(
             # Get values to categorize
             values = result_df[column].fillna('').astype(str).tolist()
 
-            # Use batch similarities (intfloat/multilingual-e5-base via HF API)
+            # Use batch similarities via the configured embeddings API
             # Shows progress bar during API calls
             similarities = get_batch_similarities(values, domains)
 

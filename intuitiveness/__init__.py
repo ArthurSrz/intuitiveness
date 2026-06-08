@@ -7,7 +7,7 @@ from .complexity import (
     Level1Dataset,
     Level0Dataset
 )
-# Import Redesigner from redesign package (uses legacy redesign_legacy.py for now)
+# Redesigner = the unified spec-015 engine (single transition chokepoint)
 from .redesign import Redesigner
 from .interactive import (
     InteractiveRedesigner,
@@ -31,8 +31,6 @@ from .neo4j_writer import (
 from .navigation import (
     NavigationSession,
     NavigationState,
-    NavigationStep,
-    NavigationHistory,
     NavigationError,
     SessionNotFoundError
 )
@@ -41,7 +39,6 @@ from .ascent import (
     EnrichmentRegistry,
     DimensionDefinition,
     DimensionRegistry,
-    AscentOperation,
     suggest_dimensions,
     find_duplicates,
     create_dimension_groups,
@@ -53,9 +50,14 @@ from .navigation import (
     NavigationAction
 )
 
-# UI Components (002-ascent-functionality)
-from . import ui
-from . import export
+# UI Components — optional, require the "app" extra (streamlit). Skipped on a
+# headless/library install so `import intuitiveness` works without streamlit.
+try:
+    from . import ui
+    from . import export
+    UI_AVAILABLE = True
+except ImportError:
+    UI_AVAILABLE = False
 
 # Neo4j Agent integration (optional - requires 'neo4j' package)
 try:
@@ -103,8 +105,6 @@ __all__ = [
     # Navigation (User Story 5)
     "NavigationSession",
     "NavigationState",
-    "NavigationStep",
-    "NavigationHistory",
     "NavigationError",
     "SessionNotFoundError",
     # Ascent functionality (User Story 2 - Reverse Navigation)
@@ -112,7 +112,6 @@ __all__ = [
     "EnrichmentRegistry",
     "DimensionDefinition",
     "DimensionRegistry",
-    "AscentOperation",
     "suggest_dimensions",
     "find_duplicates",
     "create_dimension_groups",

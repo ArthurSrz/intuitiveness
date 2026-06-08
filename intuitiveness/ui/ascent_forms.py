@@ -748,9 +748,8 @@ def _perform_row_vector_join(
     Returns:
         Joined DataFrame (L3 dataset) or None if join fails
     """
-    from sentence_transformers import SentenceTransformer
-    from sklearn.metrics.pairwise import cosine_similarity
     import numpy as np
+    from intuitiveness.models import get_batch_similarities
 
     files_config = config.get('files', {})
     threshold = config.get('threshold', 0.75)
@@ -793,23 +792,22 @@ def _perform_row_vector_join(
         print("[L4→L3] No valid rows for matching")
         return None
 
-    print(f"[L4→L3] Loading embedding model...")
-    model = SentenceTransformer('intfloat/multilingual-e5-small')
-
-    # Sample if datasets are too large (to avoid OOM)
+    # Sample if datasets are too large (to keep API calls bounded)
     max_rows = 5000
     df1_sample = df1_valid.head(max_rows)
     df2_sample = df2_valid.head(max_rows)
 
-    print(f"[L4→L3] Computing embeddings for {len(df1_sample)} x {len(df2_sample)} rows...")
+    print(f"[L4→L3] Computing embeddings for {len(df1_sample)} x {len(df2_sample)} rows via API...")
 
-    # Compute embeddings
-    embeddings1 = model.encode(df1_sample['_row_text'].tolist(), convert_to_numpy=True)
-    embeddings2 = model.encode(df2_sample['_row_text'].tolist(), convert_to_numpy=True)
-
-    # Compute similarity matrix
-    print(f"[L4→L3] Computing similarity matrix...")
-    similarities = cosine_similarity(embeddings1, embeddings2)
+    # Compute the similarity matrix via the embeddings API (no local model).
+    similarities = get_batch_similarities(
+        df1_sample['_row_text'].tolist(),
+        df2_sample['_row_text'].tolist(),
+    )
+    if similarities is None:
+        st.error(t("embedding_api_unavailable"))
+        print("[L4→L3] Embedding API unavailable - cannot compute row-vector join")
+        return None
 
     # Find best matches above threshold
     matches = []

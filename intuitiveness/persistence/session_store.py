@@ -14,7 +14,10 @@ from typing import Any, Dict, List, Optional
 
 import pandas as pd
 import networkx as nx
-import streamlit as st
+try:
+    import streamlit as st  # optional: only needed with the "app" extra
+except ImportError:
+    st = None
 
 from .serializers import (
     serialize_dataframe,

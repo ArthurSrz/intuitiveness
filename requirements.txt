@@ -6,6 +6,9 @@ python-dotenv>=1.0.0
 
 streamlit_pdf_viewer
 neo4j>=5.0.0
+# PostgreSQL driver for the durable session store (e.g. Railway). Optional at
+# runtime: the durable backend falls back to local files when no DATABASE_URL.
+psycopg2-binary>=2.9.0
 networkx
 pandas
 matplotlib

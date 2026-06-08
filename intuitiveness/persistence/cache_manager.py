@@ -33,7 +33,10 @@ from datetime import datetime, timedelta
 from typing import Any, Dict, List, Optional, Tuple
 
 import pandas as pd
-import streamlit as st
+try:
+    import streamlit as st  # optional: only needed with the "app" extra
+except ImportError:
+    st = None
 
 logger = logging.getLogger(__name__)
 

@@ -18,7 +18,10 @@ Usage:
 """
 
 from typing import Any, Optional
-import streamlit as st
+try:
+    import streamlit as st  # optional: only needed with the "app" extra
+except ImportError:
+    st = None
 
 from intuitiveness.styles.palette import COLORS
 

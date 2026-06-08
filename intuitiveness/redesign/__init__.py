@@ -32,12 +32,34 @@ Example:
 
 from intuitiveness.redesign.lineage import DataLineage, SourceReference
 
-# TODO (Spec 001: FR-018-024): Refactor Redesigner into redesign/core.py
-# For now, import from legacy redesign_legacy.py module for backward compatibility
-from intuitiveness.redesign_legacy import Redesigner
+# Spec 015: the unified Redesigner engine is the single transition chokepoint.
+# `Redesigner` (and the alias `Engine`) both resolve to the typed engine; the
+# legacy redesign_legacy module has been removed (US5/T042 complete).
+from intuitiveness.redesign.engine import Redesigner, TransitionError
+Engine = Redesigner  # backwards-compatible alias
+from intuitiveness.redesign.params import (
+    TransitionParams,
+    L4toL3Params,
+    L3toL2Params,
+    L2toL1Params,
+    L1toL0Params,
+    L0toL1Params,
+    L1toL2Params,
+    L2toL3Params,
+)
 
 __all__ = [
-    "Redesigner",  # Legacy import from intuitiveness.redesign_legacy
+    "Redesigner",        # spec-015 unified engine
+    "Engine",            # alias of Redesigner
+    "TransitionError",
     "DataLineage",
     "SourceReference",
+    "TransitionParams",
+    "L4toL3Params",
+    "L3toL2Params",
+    "L2toL1Params",
+    "L1toL0Params",
+    "L0toL1Params",
+    "L1toL2Params",
+    "L2toL3Params",
 ]

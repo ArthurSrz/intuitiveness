@@ -4,24 +4,34 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "intuitiveness"
-version = "0.1.0"
+version = "0.2.0"
 description = "Data Redesign Method - Intuitive Dataset Library"
 requires-python = ">=3.9"
+# Core = what the library/engine genuinely needs to run headless. Hosted-infra
+# drivers and the (legacy) Streamlit UI are opt-in extras, so `pip install
+# intuitiveness` stays lean and pulls no graph/DB driver or local ML stack.
+# Config is read from env vars (and st.secrets when the app extra is present),
+# so a headless backend on Railway brings its own secrets — see spec 016.
 dependencies = [
-    "neo4j>=5.0.0",
-    "networkx",
     "pandas",
-    "matplotlib",
+    "networkx",
+    "numpy",
     "scipy",
     "scikit-learn",
-    "sentence-transformers",
-    "streamlit>=1.28.0",
-    "streamlit-agraph>=0.0.45",
-    "requests",
     "openai>=1.0.0",
+    "requests",
 ]
 
 [project.optional-dependencies]
+# Graph database client (Memgraph/Neo4j) — L4->L3 knowledge graph + Cypher agent.
+graph = ["neo4j>=5.0.0"]
+# Durable session store on PostgreSQL (e.g. Railway). Falls back to local files.
+postgres = ["psycopg2-binary>=2.9.0"]
+# Legacy Streamlit UI. Being replaced by a separate backend/frontend; kept opt-in
+# so the current app still runs during the transition.
+app = ["streamlit>=1.28.0", "streamlit-agraph>=0.0.45", "matplotlib"]
+# Everything (for the bundled app deploy / full local dev).
+all = ["intuitiveness[graph,postgres,app]"]
 dev = ["pytest", "behave"]
 
 [tool.setuptools.packages.find]

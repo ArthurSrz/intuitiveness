@@ -44,6 +44,10 @@ from intuitiveness import (
 from intuitiveness.ascent.enrichment import EnrichmentRegistry
 from intuitiveness.ascent.dimensions import DimensionRegistry
 from intuitiveness.export.json_export import NavigationExport, OutputSummary, CumulativeOutputs
+from intuitiveness.redesign.params import (
+    L4toL3Params, L3toL2Params, L2toL1Params, L1toL0Params,
+    L0toL1Params, L1toL2Params, L2toL3Params,
+)
 
 
 # =============================================================================
@@ -313,7 +317,7 @@ class DescentAscentPipeline:
         l3 = Redesigner.reduce_complexity(
             self.current_dataset,
             ComplexityLevel.LEVEL_3,
-            builder_func=builder_func
+            L4toL3Params(prebuilt_graph=builder_func(self.current_dataset.get_data())),
         )
         self.current_dataset = l3
 
@@ -336,7 +340,7 @@ class DescentAscentPipeline:
         l2 = Redesigner.reduce_complexity(
             self.current_dataset,
             ComplexityLevel.LEVEL_2,
-            query_func=query_func
+            L3toL2Params(prebuilt_table=query_func(self.current_dataset.get_data())),
         )
         self.current_dataset = l2
 
@@ -359,8 +363,7 @@ class DescentAscentPipeline:
         l1 = Redesigner.reduce_complexity(
             self.current_dataset,
             ComplexityLevel.LEVEL_1,
-            column=column,
-            filter_query=filter_query
+            L2toL1Params(column=column, filter_query=filter_query),
         )
         self.current_dataset = l1
 
@@ -383,7 +386,7 @@ class DescentAscentPipeline:
         l0 = Redesigner.reduce_complexity(
             self.current_dataset,
             ComplexityLevel.LEVEL_0,
-            aggregation=aggregation
+            L1toL0Params(aggregation=aggregation),
         )
         self.current_dataset = l0
 
@@ -406,7 +409,7 @@ class DescentAscentPipeline:
         l1 = Redesigner.increase_complexity(
             self.current_dataset,
             ComplexityLevel.LEVEL_1,
-            enrichment_func=enrichment_func
+            L0toL1Params(enrichment_function=enrichment_func),
         )
         self.current_dataset = l1
 
@@ -429,7 +432,7 @@ class DescentAscentPipeline:
         l2 = Redesigner.increase_complexity(
             self.current_dataset,
             ComplexityLevel.LEVEL_2,
-            dimensions=dimensions or []
+            L1toL2Params(dimensions=dimensions or []),
         )
         self.current_dataset = l2
 
@@ -452,7 +455,7 @@ class DescentAscentPipeline:
         l3 = Redesigner.increase_complexity(
             self.current_dataset,
             ComplexityLevel.LEVEL_3,
-            dimensions=dimensions or []
+            L2toL3Params(dimensions=dimensions or []),
         )
         self.current_dataset = l3
 
@@ -817,7 +820,7 @@ class TestNavigationSession:
         l4 = Level4Dataset(test0_sources)
 
         # Create session with tree tracking
-        session = NavigationSession(l4, use_tree=True)
+        session = NavigationSession(l4)
         assert session.state == NavigationState.ENTRY
         assert session.current_level == ComplexityLevel.LEVEL_4
 
@@ -862,7 +865,7 @@ class TestNavigationSession:
     def test_navigation_tree_branching(self, test0_sources, output_dir):
         """Test branching in navigation tree."""
         l4 = Level4Dataset(test0_sources)
-        session = NavigationSession(l4, use_tree=True)
+        session = NavigationSession(l4)
 
         # Descend to L3
         session.descend(builder_func=build_graph_from_dataframes)
@@ -891,7 +894,7 @@ class TestComplexityReduction:
         l4 = Level4Dataset(test0_sources)
         l3 = Redesigner.reduce_complexity(
             l4, ComplexityLevel.LEVEL_3,
-            builder_func=build_graph_from_dataframes
+            L4toL3Params(prebuilt_graph=build_graph_from_dataframes(l4.get_data())),
         )
 
         # Just verify the transition works
@@ -900,7 +903,7 @@ class TestComplexityReduction:
     def test_cannot_return_to_l4(self, test0_sources):
         """Once at L3, cannot return to L4 (L4 is entry-only)."""
         l4 = Level4Dataset(test0_sources)
-        session = NavigationSession(l4, use_tree=True)
+        session = NavigationSession(l4)
 
         session.descend(builder_func=build_graph_from_dataframes)
 

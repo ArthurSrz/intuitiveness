@@ -8,8 +8,7 @@ Package Structure:
 ------------------
 - exceptions.py : NavigationError, SessionNotFoundError
 - state.py      : NavigationState, NavigationAction enums
-- history.py    : NavigationStep, NavigationHistory
-- tree.py       : NavigationTreeNode, NavigationTree
+- tree.py       : NavigationTreeNode, NavigationTree (the navigation backbone)
 - session.py    : NavigationSession (main class) [kept in original file]
 
 Spec Traceability:
@@ -32,10 +31,6 @@ from intuitiveness.navigation.state import (
     NavigationState,
     NavigationAction,
 )
-from intuitiveness.navigation.history import (
-    NavigationStep,
-    NavigationHistory,
-)
 from intuitiveness.navigation.tree import (
     NavigationTreeNode,
     NavigationTree,
@@ -52,10 +47,6 @@ __all__ = [
     # State enums
     'NavigationState',
     'NavigationAction',
-
-    # History (linear)
-    'NavigationStep',
-    'NavigationHistory',
 
     # Tree (branching)
     'NavigationTreeNode',

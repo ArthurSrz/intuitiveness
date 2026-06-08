@@ -26,7 +26,7 @@ Once the user has set up his intent and has a dataset he likes, intuitiveness wi
 ## Testing requirements
 - All tests results should be documented here (/Users/arthursarazin/Documents/data_redesign_method/tests)
 - All datasets (/Users/arthursarazin/Documents/data_redesign_method/test_data) should be tested with unit tests to ensure the correctness of the data transformations.
-- The ultimate test is a playwright test where the full ascent/descent cycle is conducted on all three datasets, with all intermediate artifacts exported from the interface. 
+- The ultimate test is a Chrome MCP dev tools (claude-in-chrome) walkthrough where the full ascent/descent cycle is conducted on all three datasets, with all intermediate artifacts exported from the interface. 
 
 ## Active Technologies
 - The main technology here is the intuitiveness package and all its functionnalities. 
@@ -39,6 +39,10 @@ Once the user has set up his intent and has a dataset he likes, intuitiveness wi
 - N/A (UI-only changes, no data layer modifications) (007-streamlit-design-makeup)
 - Python 3.11 (existing `myenv311` virtual environment) + Streamlit >=1.28.0, pandas, requests (all already installed) (008-datagouv-search)
 - Session state for search results; local file cache for downloaded CSVs (~/.cache/datagouv) (008-datagouv-search)
+- Python 3.11 (existing `myenv311` virtual environment) + Streamlit >=1.28.0, requests, pandas (all installed); `mcp_client.py` already implements Streamable HTTP (014-datagouv-mcp-search)
+- Session state for search results; local file cache `~/.cache/datagouv/` for downloaded CSVs (014-datagouv-mcp-search)
+- Python 3.11.9 + pandas 2.3.3 (DataFrames/Series), networkx 3.6.1 (graphs), dataclasses + typing (entities/typed params), copy.deepcopy (lineage isolation). No new runtime dependencies. (015-adaptive-typed-levels)
+- JSON for the session export record (cross-service contract); existing payload serializers (`serialize_dataframe` = zlib+base64, `serialize_graph` = node-link JSON, `serialize_value`); a durable file/blob backend for full payloads; the existing localStorage-style `StorageBackend` demoted to a lightweight session index. (015-adaptive-typed-levels)
 
 ## Project Structure
 
@@ -54,7 +58,7 @@ cd src [ONLY COMMANDS FOR ACTIVE TECHNOLOGIES][ONLY COMMANDS FOR ACTIVE TECHNOLO
 ## Code Style
 
 - I do spec-driven development, everything you code should comply with the constitution (/Users/arthursarazin/Documents/data_redesign_method/.specify/memory/constitution.md).
-- All tests should be run with playwright MCP as I pay attention to interactions with the user interface.
+- UI tests/walkthroughs should be run with the Chrome MCP dev tools (claude-in-chrome) as I pay attention to interactions with the user interface. (pytest is still used for unit/integration tests.)
 - I am a non-programmer and I like code that is easy to read and understand. Please use clear and descriptive names for variables, functions, and classes.
 - When I meet a bug and find the solution, I like to have a troubleshooting.md with the problem and the solution documented for future reference.
 
@@ -96,9 +100,9 @@ password = pypi-AgEIcHlwaS5vcmcC...  # ← Must be from pypi.org
 
 
 ## Recent Changes
+- 015-adaptive-typed-levels: Added Python 3.11.9 + pandas 2.3.3 (DataFrames/Series), networkx 3.6.1 (graphs), dataclasses + typing (entities/typed params), copy.deepcopy (lineage isolation). No new runtime dependencies.
+- 014-datagouv-mcp-search: Added Python 3.11 (existing `myenv311` virtual environment) + Streamlit >=1.28.0, requests, pandas (all installed); `mcp_client.py` already implements Streamable HTTP
 - 010-quality-ds-workflow: Added Python 3.11 (existing `myenv311` virtual environment)
-- 010-quality-ds-workflow: Data Scientist Co-Pilot - 60-second data prep workflow with synthetic-to-real validation, one-click improvements with benchmarks, and export-and-go functionality (extends 009)
-- 009-quality-data-platform: Added Python 3.11 (existing `myenv311` virtual environment)
 
 
 

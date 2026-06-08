@@ -484,7 +484,7 @@ RETURN count(r) as created
 class SemanticMatcher:
     """
     Handles semantic similarity matching for L3->L2 domain categorization.
-    Uses keyword matching + sentence embeddings (intfloat/multilingual-e5-small).
+    Uses keyword matching + sentence embeddings via the configured embeddings API.
     """
 
     def __init__(self, use_embeddings: bool = True):
@@ -594,14 +594,13 @@ class SemanticMatcher:
     ) -> Dict[str, float]:
         """Compute semantic similarity scores between item and each domain.
 
-        Uses HuggingFace sentence_similarity API with intfloat/multilingual-e5-base
-        for better multilingual support (French, etc).
+        Uses the configured embeddings API (intuitiveness.models) for
+        multilingual support (French, etc).
         """
         try:
             from intuitiveness.models import get_sentence_similarity
 
-            # Use sentence_similarity API directly (multilingual-e5-base)
-            # This compares the item against all domains in one API call
+            # Compare the item against all domains in one embeddings API call
             similarity_scores = get_sentence_similarity(item, domains)
 
             if similarity_scores is None:
