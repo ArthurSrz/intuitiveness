@@ -9,7 +9,10 @@ Created: 2026-01-09 (Phase 0 - Code Simplification)
 
 from typing import Any, Dict, List, Optional, TypeVar
 from dataclasses import dataclass
-import streamlit as st
+try:
+    import streamlit as st  # optional: only needed with the "app" extra
+except ImportError:
+    st = None
 
 
 # =============================================================================

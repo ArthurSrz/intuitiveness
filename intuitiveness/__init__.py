@@ -50,9 +50,14 @@ from .navigation import (
     NavigationAction
 )
 
-# UI Components (002-ascent-functionality)
-from . import ui
-from . import export
+# UI Components — optional, require the "app" extra (streamlit). Skipped on a
+# headless/library install so `import intuitiveness` works without streamlit.
+try:
+    from . import ui
+    from . import export
+    UI_AVAILABLE = True
+except ImportError:
+    UI_AVAILABLE = False
 
 # Neo4j Agent integration (optional - requires 'neo4j' package)
 try:

@@ -11,7 +11,10 @@ Professional, minimalist chart styling following DataGyver principles:
 Feature: 007-streamlit-design-makeup
 """
 
-import streamlit as st
+try:
+    import streamlit as st  # optional: only needed with the "app" extra
+except ImportError:
+    st = None
 import pandas as pd
 from typing import List, Dict, Any, Optional, Union
 import plotly.express as px

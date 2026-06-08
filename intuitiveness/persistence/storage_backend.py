@@ -5,7 +5,11 @@ Provides localStorage access via streamlit-javascript bridge.
 """
 
 from typing import Optional
-import streamlit as st
+
+try:
+    import streamlit as st  # optional: only needed with the "app" extra
+except ImportError:
+    st = None
 
 try:
     from streamlit_javascript import st_javascript
