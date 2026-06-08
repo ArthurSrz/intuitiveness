@@ -1281,12 +1281,9 @@ def get_neo4j_client():
         return None
 
     if 'neo4j_client' not in st.session_state:
-        st.session_state.neo4j_client = Neo4jClient(
-            uri=os.getenv("NEO4J_URI", "neo4j://localhost:7687"),
-            user=os.getenv("NEO4J_USERNAME", "neo4j"),
-            password=os.getenv("NEO4J_PASSWORD", "1&Coalplelat"),
-            database=os.getenv("NEO4J_DATABASE", "neo4j")
-        )
+        # Credentials resolved from st.secrets / env (MEMGRAPH_* or NEO4J_*),
+        # never hardcoded — see get_graph_db_credentials() in neo4j_client.py.
+        st.session_state.neo4j_client = Neo4jClient()
     return st.session_state.neo4j_client
 
 
