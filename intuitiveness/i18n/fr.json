@@ -602,5 +602,20 @@
   "publish_error_generic": "Échec de la publication : {error}",
   "publish_missing_api_key": "Veuillez entrer votre clé API pour publier.",
   "publish_view_resource": "Voir sur data.gouv.fr",
-  "publish_synthetic_prefix": "[Synthétique]"
+  "publish_synthetic_prefix": "[Synthétique]",
+  "embedding_api_unavailable": "L'appariement sémantique est indisponible : l'API d'embeddings n'est pas configurée ou injoignable. Renseignez EMBEDDING_API_KEY dans vos secrets.",
+  "manage_branches": "Gérer les branches",
+  "branch_from_hint": "Astuce : cliquez sur un nœud ci-dessus pour y revenir, puis prenez une décision différente pour démarrer une nouvelle branche.",
+  "no_branches_to_manage": "Aucune branche à gérer pour l'instant — prenez d'abord quelques décisions.",
+  "select_branch_to_manage": "Sélectionnez un nœud de branche",
+  "prune_branch": "🗑️ Élaguer",
+  "archive_branch": "📦 Archiver",
+  "branch_pruned": "{count} nœud(s) élagué(s).",
+  "branch_archived": "{count} nœud(s) archivé(s).",
+  "full_fidelity_export": "Export haute-fidélité (toutes les branches + données)",
+  "full_fidelity_description": "Exportez tout l'arbre de navigation — chaque branche, les données et la lignée de chaque point — en un seul enregistrement versionné et autonome. Il est relisible sans ce package.",
+  "download_full_record": "⬇️ Télécharger l'enregistrement complet (JSON)",
+  "save_to_durable_store": "💾 Enregistrer dans le magasin de sessions",
+  "session_saved_to": "Session enregistrée dans : {location}",
+  "no_active_session": "Aucune session de navigation active à exporter pour l'instant."
 }

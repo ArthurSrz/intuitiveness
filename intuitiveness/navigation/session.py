@@ -16,7 +16,7 @@ Contains:
 from datetime import datetime
 from typing import Any, Dict, List, Optional
 import uuid
-import pickle
+import json
 import os
 
 from intuitiveness.complexity import (
@@ -33,7 +33,8 @@ from intuitiveness.persistence.session_graph import SessionGraph
 # Import from package submodules (011-code-simplification)
 from intuitiveness.navigation.exceptions import NavigationError, SessionNotFoundError
 from intuitiveness.navigation.state import NavigationState, NavigationAction
-from intuitiveness.navigation.history import NavigationStep, NavigationHistory
+# NavigationHistory (flat linear log) was removed in spec 015: the session is
+# now tree-only (branching + time-travel are always available).
 from intuitiveness.navigation.tree import NavigationTree, NavigationTreeNode
 
 
@@ -61,14 +62,16 @@ class NavigationSession:
     # Class-level session storage for resume functionality
     _sessions: Dict[str, 'NavigationSession'] = {}
 
-    def __init__(self, dataset: Dataset, use_tree: bool = False):
+    def __init__(self, dataset: Dataset):
         """
         Initialize a navigation session.
 
+        The session is always backed by a ``NavigationTree`` (spec 015): every
+        transition becomes a tree node, so branching and time-travel are always
+        available — there is no separate "linear" mode.
+
         Args:
             dataset: Must be an L4 (UNLINKABLE) dataset - the entry point.
-            use_tree: If True, uses NavigationTree for branching/time-travel support.
-                      If False, uses linear NavigationHistory (default).
 
         Raises:
             NavigationError: If dataset is not L4.
@@ -84,8 +87,6 @@ class NavigationSession:
         self._state = NavigationState.ENTRY
         self._initial_dataset = dataset
         self._current_dataset = dataset
-        self._current_node_id = "root"
-        self._use_tree = use_tree
 
         # FR-019: Track accumulated outputs from all levels visited
         self._accumulated_outputs: Dict[int, Any] = {}  # level -> dataset
@@ -99,21 +100,9 @@ class NavigationSession:
                     self._raw_data_columns.extend(list(source_data.columns))
             self._raw_data_columns = list(set(self._raw_data_columns))
 
-        # Initialize navigation tracking (tree or linear history)
-        if use_tree:
-            self._tree = NavigationTree(dataset)
-            self._current_node_id = self._tree.root_id
-            self._history = None  # Not used when tree is enabled
-        else:
-            self._tree = None
-            self._history = NavigationHistory()
-            # Record entry step
-            entry_step = NavigationStep(
-                level=ComplexityLevel.LEVEL_4,
-                node_id="root",
-                action="entry"
-            )
-            self._history.append(entry_step)
+        # Tree-backed navigation (the only mode).
+        self._tree = NavigationTree(dataset)
+        self._current_node_id = self._tree.root_id
 
         # Store for resume
         NavigationSession._sessions[self._session_id] = self
@@ -251,22 +240,14 @@ class NavigationSession:
         # FR-021: Generate decision_description
         decision_description = self._generate_decision_description("descend", current_level, target_level, params)
 
-        # Record step (tree or linear history)
-        if self._use_tree and self._tree:
-            metadata = {"params": {k: str(v) for k, v in params.items()}}
-            self._current_node_id = self._tree.branch(
-                NavigationAction.DESCEND,
-                new_dataset,
-                metadata,
-                decision_description=decision_description  # FR-021
-            )
-        elif self._history:
-            step = NavigationStep(
-                level=target_level,
-                node_id=node_id,
-                action="descend"
-            )
-            self._history.append(step)
+        # Record step as a tree node.
+        metadata = {"params": {k: str(v) for k, v in params.items()}}
+        self._current_node_id = self._tree.branch(
+            NavigationAction.DESCEND,
+            new_dataset,
+            metadata,
+            decision_description=decision_description  # FR-021
+        )
 
         return self
 
@@ -330,29 +311,20 @@ class NavigationSession:
         # FR-021: Generate decision_description
         decision_description = self._generate_decision_description("ascend", current_level, target_level, params)
 
-        # Record step (tree or linear history)
-        if self._use_tree and self._tree:
-            # Build metadata with ascent-specific info
-            metadata = {}
-            if "enrichment_func" in params:
-                metadata["enrichment"] = params["enrichment_func"]
-            if "dimensions" in params:
-                metadata["dimensions"] = params["dimensions"]
-            if "relationships" in params:
-                metadata["relationships"] = [str(r) for r in params["relationships"]]
-            self._current_node_id = self._tree.branch(
-                NavigationAction.ASCEND,
-                new_dataset,
-                metadata,
-                decision_description=decision_description  # FR-021
-            )
-        elif self._history:
-            step = NavigationStep(
-                level=target_level,
-                node_id=node_id,
-                action="ascend"
-            )
-            self._history.append(step)
+        # Record step as a tree node, with ascent-specific metadata.
+        metadata = {}
+        if "enrichment_func" in params:
+            metadata["enrichment"] = params["enrichment_func"]
+        if "dimensions" in params:
+            metadata["dimensions"] = params["dimensions"]
+        if "relationships" in params:
+            metadata["relationships"] = [str(r) for r in params["relationships"]]
+        self._current_node_id = self._tree.branch(
+            NavigationAction.ASCEND,
+            new_dataset,
+            metadata,
+            decision_description=decision_description  # FR-021
+        )
 
         return self
 
@@ -535,12 +507,8 @@ class NavigationSession:
         Returns:
             List of dicts with level, node_id, action, timestamp for each step.
         """
-        if self._use_tree and self._tree:
-            path = self._tree.get_current_branch_path()
-            return [node.to_dict() for node in path]
-        elif self._history:
-            return self._history.get_path_dicts()
-        return []
+        path = self._tree.get_current_branch_path()
+        return [node.to_dict() for node in path]
 
     # -------------------------------------------------------------------------
     # exit() - End navigation session
@@ -555,15 +523,6 @@ class NavigationSession:
         """
         self._state = NavigationState.EXITED
 
-        # Record exit step (only for linear history mode)
-        if not self._use_tree and self._history:
-            step = NavigationStep(
-                level=self.current_level,
-                node_id=self._current_node_id,
-                action="exit"
-            )
-            self._history.append(step)
-
         # Return export data per FR-015
         return self.export()
 
@@ -571,46 +530,92 @@ class NavigationSession:
     # save() and load() - Session persistence
     # -------------------------------------------------------------------------
 
-    def save(self, path: str) -> None:
+    def save(self, location: Optional[str] = None) -> str:
         """
-        Save session to file for later resumption.
+        Persist the session as a full-fidelity, package-free-readable record.
+
+        Spec 015 T034/T038: the whole navigation tree (every branch, every
+        point's data + lineage) is serialized via the cross-service export
+        contract and written to a durable file/blob backend — no pickle, so the
+        record can be read by a separate program using only the documented
+        schema.
 
         Args:
-            path: File path to save the session (will use pickle).
-        """
-        # Ensure directory exists
-        os.makedirs(os.path.dirname(path) if os.path.dirname(path) else ".", exist_ok=True)
+            location: Optional explicit file path. If omitted, the durable
+                      backend's default location keyed by ``session_id`` is used.
 
-        with open(path, 'wb') as f:
-            pickle.dump(self, f)
+        Returns:
+            The durable location the record was written to.
+        """
+        from intuitiveness.persistence.session_export import export_session
+        from intuitiveness.persistence.durable_backend import get_durable_backend
+
+        record = export_session(self._tree, metadata={
+            "session_id": self._session_id,
+            "state": self._state.value,
+        })
+
+        if location is not None:
+            os.makedirs(os.path.dirname(location) or ".", exist_ok=True)
+            with open(location, "w", encoding="utf-8") as f:
+                json.dump(record, f, ensure_ascii=False)
+            return location
+
+        # Postgres (e.g. Railway) when configured, else local files.
+        return get_durable_backend().save_record(self._session_id, record)
 
     @classmethod
-    def load(cls, path: str) -> 'NavigationSession':
+    def load(cls, location: str) -> 'NavigationSession':
         """
-        Load session from file.
+        Restore a session from a full-fidelity record (spec 015 T038).
 
         Args:
-            path: File path to load the session from.
+            location: A file path to a record, or a session id resolved against
+                      the durable backend's default location.
 
         Returns:
             Restored NavigationSession.
 
         Raises:
-            SessionNotFoundError: If file not found.
+            SessionNotFoundError: If no record can be found.
         """
-        if not os.path.exists(path):
-            raise SessionNotFoundError(f"Session file not found: {path}")
+        from intuitiveness.persistence.session_export import import_session
+        from intuitiveness.persistence.durable_backend import get_durable_backend
 
-        with open(path, 'rb') as f:
-            session = pickle.load(f)
+        if os.path.exists(location):
+            with open(location, "r", encoding="utf-8") as f:
+                record = json.load(f)
+        else:
+            try:
+                record = get_durable_backend().load_record(location)
+            except FileNotFoundError:
+                raise SessionNotFoundError(f"Session record not found: {location}")
 
-        # Re-register in session storage
-        NavigationSession._sessions[session._session_id] = session
+        tree = import_session(record)
+        return cls._from_tree(tree, record.get("metadata", {}))
 
-        # If it was exited, mark as exploring again
-        if session._state == NavigationState.EXITED:
-            session._state = NavigationState.EXPLORING
+    @classmethod
+    def _from_tree(cls, tree: NavigationTree, metadata: Dict[str, Any]) -> 'NavigationSession':
+        """Build a session around an already-rebuilt navigation tree."""
+        root_dataset = tree.nodes[tree.root_id].dataset_snapshot
+        session = cls(root_dataset)          # builds a throwaway tree we replace
+        session._tree = tree
+        session._current_node_id = tree.current_id
+        session._current_dataset = tree.current_node.dataset_snapshot
 
+        # Rebuild the per-level accumulated outputs from the active branch path.
+        session._accumulated_outputs = {
+            node.level.value: node.dataset_snapshot
+            for node in tree.get_current_branch_path()
+        }
+        session._state = NavigationState.EXPLORING
+
+        # Restore the saved session id (re-registering under it).
+        saved_id = metadata.get("session_id")
+        if saved_id:
+            cls._sessions.pop(session._session_id, None)
+            session._session_id = saved_id
+        cls._sessions[session._session_id] = session
         return session
 
     # -------------------------------------------------------------------------
@@ -644,15 +649,6 @@ class NavigationSession:
         if session._state == NavigationState.EXITED:
             session._state = NavigationState.EXPLORING
 
-            # Record resume step (only for linear history mode)
-            if not session._use_tree and session._history:
-                step = NavigationStep(
-                    level=session.current_level,
-                    node_id=session._current_node_id,
-                    action="resume"
-                )
-                session._history.append(step)
-
         return session
 
     # -------------------------------------------------------------------------
@@ -661,7 +657,7 @@ class NavigationSession:
 
     def restore(self, node_id: str) -> 'NavigationSession':
         """
-        Time-travel to a previous navigation state (tree mode only).
+        Time-travel to a previous navigation state.
 
         Args:
             node_id: ID of the tree node to restore
@@ -670,13 +666,8 @@ class NavigationSession:
             Self for method chaining
 
         Raises:
-            NavigationError: If not in tree mode or node not found
+            NavigationError: If the node is not found
         """
-        if not self._use_tree or not self._tree:
-            raise NavigationError(
-                "restore() requires tree mode. Initialize with use_tree=True."
-            )
-
         try:
             self._current_dataset = self._tree.restore(node_id)
             self._current_node_id = node_id
@@ -686,6 +677,94 @@ class NavigationSession:
 
         return self
 
+    def time_travel(self, node_id: str) -> 'NavigationSession':
+        """Move the current position to an existing node (spec 015 T025).
+
+        This is the explicit, intention-revealing name for jumping to a node
+        without creating a new branch; it is equivalent to :meth:`restore`.
+
+        Args:
+            node_id: ID of the tree node to jump to
+
+        Returns:
+            Self for method chaining
+        """
+        return self.restore(node_id)
+
+    def branch_from(self, node_id: str, action: str = "descend",
+                    **params) -> 'NavigationSession':
+        """Start a NEW branch from an earlier node (spec 015 T025).
+
+        Time-travels to ``node_id``, then performs one transition through the
+        unified engine (descend or ascend). Because the engine always branches
+        off the current position, this creates a fresh child of ``node_id`` —
+        a new exploration branch that leaves the original path untouched.
+
+        Args:
+            node_id: ID of the node to branch from
+            action: "descend" or "ascend"
+            **params: Transition params forwarded to descend()/ascend()
+
+        Returns:
+            Self for method chaining
+
+        Raises:
+            NavigationError: If the node is missing or the action is invalid
+        """
+        self.restore(node_id)
+        normalized = action.lower().strip()
+        if normalized == "descend":
+            return self.descend(**params)
+        if normalized == "ascend":
+            return self.ascend(**params)
+        raise NavigationError(
+            f"branch_from() action must be 'descend' or 'ascend', got '{action}'."
+        )
+
+    def prune(self, node_id: str) -> int:
+        """Explicitly remove a branch and its subtree (spec 015 T027).
+
+        There is no automatic eviction — branches persist until the user removes
+        them. The current branch and the root are protected.
+
+        Args:
+            node_id: ID of the node whose subtree to remove
+
+        Returns:
+            Number of nodes removed
+
+        Raises:
+            NavigationError: If the node is missing or protected
+        """
+        try:
+            return self._tree.prune(node_id)
+        except KeyError:
+            raise NavigationError(f"Node '{node_id}' not found in navigation tree")
+        except ValueError as e:
+            raise NavigationError(str(e))
+
+    def archive(self, node_id: str) -> int:
+        """Explicitly soft-hide a branch and its subtree (spec 015 T027).
+
+        Reversible alternative to :meth:`prune`: the subtree is marked archived
+        (kept in the tree, data and lineage intact) so a UI can filter it out.
+
+        Args:
+            node_id: ID of the node whose subtree to archive
+
+        Returns:
+            Number of nodes marked archived
+
+        Raises:
+            NavigationError: If the node is missing or protected
+        """
+        try:
+            return self._tree.archive(node_id)
+        except KeyError:
+            raise NavigationError(f"Node '{node_id}' not found in navigation tree")
+        except ValueError as e:
+            raise NavigationError(str(e))
+
     def get_tree_visualization(self) -> Dict[str, Any]:
         """
         Get decision tree for sidebar rendering.
@@ -693,14 +772,6 @@ class NavigationSession:
         Returns:
             Dict with nodes, current_path, and branches for UI display.
         """
-        if not self._use_tree or not self._tree:
-            # Return empty structure for linear mode
-            return {
-                "nodes": [],
-                "current_path": [],
-                "branches": []
-            }
-
         # Get all nodes as NavigationNodeInfo-like dicts
         # Per FR-021, includes decision_description and output_snapshot for each node
         nodes = []
@@ -781,15 +852,9 @@ class NavigationSession:
             "current_output": output_summary
         }
 
-        # Add navigation structure
-        if self._use_tree and self._tree:
-            export_data["navigation_tree"] = self._tree.export_to_json()
-            export_data["current_path"] = [n.id for n in self._tree.get_current_branch_path()]
-        else:
-            export_data["navigation_tree"] = {"nodes": [], "root_id": None, "current_id": None}
-            export_data["current_path"] = []
-            if self._history:
-                export_data["navigation_history"] = self._history.get_path_dicts()
+        # Add navigation structure (tree is always present).
+        export_data["navigation_tree"] = self._tree.export_to_json()
+        export_data["current_path"] = [n.id for n in self._tree.get_current_branch_path()]
 
         # FR-019: Add cumulative outputs from all levels visited
         cumulative = self.get_cumulative_export()
@@ -871,7 +936,7 @@ class NavigationSession:
 
     def _generate_node_id(self, action: str, params: Dict) -> str:
         """Generate a node ID based on the action and parameters."""
-        history_len = len(self._history) if self._history else len(self._tree) if self._tree else 0
+        history_len = len(self._tree)
 
         if action == "descend":
             if "column" in params:
@@ -1054,19 +1119,17 @@ class NavigationSession:
             )
 
     @property
-    def navigation_tree(self) -> Optional[NavigationTree]:
-        """Get the navigation tree (if tree mode is enabled)."""
+    def navigation_tree(self) -> NavigationTree:
+        """Get the navigation tree (always present)."""
         return self._tree
 
     def __repr__(self) -> str:
-        step_count = len(self._tree) if self._tree else len(self._history) if self._history else 0
-        mode = "tree" if self._use_tree else "linear"
+        step_count = len(self._tree)
         return (
             f"NavigationSession("
             f"id={self._session_id[:8]}..., "
             f"state={self._state.value}, "
             f"level={self.current_level.name}, "
-            f"mode={mode}, "
             f"steps={step_count})"
         )
 
@@ -1094,39 +1157,24 @@ class NavigationSession:
         # Build graph from accumulated outputs and history
         prev_node_id = None
 
-        # Get history steps
-        if self._use_tree and self._tree:
-            # Tree mode: traverse from root to current
-            steps = []
-            current = self._tree.nodes.get(self._current_node_id)
-            while current:
-                steps.insert(0, current)
-                if current.parent_id:
-                    current = self._tree.nodes.get(current.parent_id)
-                else:
-                    break
-        elif self._history:
-            # Linear mode: use history steps
-            steps = list(self._history._steps)
-        else:
-            steps = []
-
-        # Add each step as a node
-        for i, step in enumerate(steps):
-            if self._use_tree:
-                # Tree mode - step is NavigationTreeNode
-                level = step.level.value
-                action = step.action
-                metadata = step.metadata.copy() if step.metadata else {}
-                metadata["decision_description"] = step.decision_description
-                # Get data from accumulated outputs
-                data = self._accumulated_outputs.get(level)
+        # Traverse the tree from root to the current node.
+        steps = []
+        current = self._tree.nodes.get(self._current_node_id)
+        while current:
+            steps.insert(0, current)
+            if current.parent_id:
+                current = self._tree.nodes.get(current.parent_id)
             else:
-                # Linear mode - step is NavigationStep
-                level = step.level.value
-                action = step.action
-                metadata = {}
-                data = self._accumulated_outputs.get(level)
+                break
+
+        # Add each step (a NavigationTreeNode) as a graph node.
+        for i, step in enumerate(steps):
+            level = step.level.value
+            action = step.action
+            metadata = step.metadata.copy() if step.metadata else {}
+            metadata["decision_description"] = step.decision_description
+            # Get data from accumulated outputs
+            data = self._accumulated_outputs.get(level)
 
             # Determine output value based on level
             if level == 0:

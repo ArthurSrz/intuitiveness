@@ -73,7 +73,7 @@ def semantic_table_join(
         ... )
         >>> l3_table = semantic_table_join(df1, df2, config)
     """
-    print(f"[L4→L3] Using HuggingFace API with intfloat/multilingual-e5-base model")
+    print(f"[L4→L3] Using the configured embeddings API for semantic join")
 
     # Validate columns exist
     if config.left_column not in left_df.columns:
@@ -209,7 +209,7 @@ def find_best_join_columns(
     """
     Automatically find the best columns to join on based on column name similarity.
 
-    Uses HuggingFace API with intfloat/multilingual-e5-base model.
+    Uses the configured embeddings API (intuitiveness.models).
 
     Args:
         left_df: First DataFrame

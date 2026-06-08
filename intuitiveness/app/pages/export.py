@@ -94,6 +94,13 @@ def render_export_page():
         if st.button(t('export_session_json'), type="primary"):
             export_complete_session()
 
+    # Option 1b: Full-fidelity export (spec 015) — the whole navigation tree as a
+    # single versioned, package-free-readable record, persisted to the durable
+    # store (PostgreSQL when configured, else local files).
+    with st.expander(t('full_fidelity_export'), expanded=False):
+        st.write(t('full_fidelity_description'))
+        export_full_fidelity_session()
+
     # Option 2: Level-specific exports
     with st.expander(t('level_specific_exports')):
         st.write(t('level_export_description'))
@@ -143,6 +150,46 @@ def export_complete_session():
 
     except Exception as e:
         st.error(f"{t('export_error')}: {str(e)}")
+
+
+def export_full_fidelity_session():
+    """Export the whole navigation tree as a full-fidelity, versioned record.
+
+    Additive to ``export_complete_session`` (spec 015 T038): offers a download
+    of the self-contained record AND a one-click save to the durable backend
+    (PostgreSQL on Railway when configured, else local files).
+    """
+    nav_session = st.session_state.get("nav_session")
+    if nav_session is None:
+        st.info(t('no_active_session'))
+        return
+
+    from intuitiveness.persistence.session_export import export_session
+
+    try:
+        record = export_session(nav_session.navigation_tree, metadata={
+            "session_id": nav_session.session_id,
+            "state": nav_session.state.value,
+        })
+    except Exception as e:  # noqa: BLE001
+        st.error(f"{t('export_error')}: {str(e)}")
+        return
+
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    st.download_button(
+        label=t('download_full_record'),
+        data=json.dumps(record, indent=2, ensure_ascii=False),
+        file_name=f"intuitiveness_full_session_{timestamp}.json",
+        mime="application/json",
+        key="dl_full_fidelity",
+    )
+
+    if st.button(t('save_to_durable_store'), key="save_durable"):
+        try:
+            location = nav_session.save()  # Postgres/file via the factory
+            st.success(t('session_saved_to', location=location))
+        except Exception as e:  # noqa: BLE001
+            st.error(f"{t('export_error')}: {str(e)}")
 
 
 def export_l3_graph(l3_dataset):

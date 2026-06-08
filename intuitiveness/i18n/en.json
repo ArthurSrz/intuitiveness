@@ -602,5 +602,20 @@
   "publish_error_generic": "Publication failed: {error}",
   "publish_missing_api_key": "Please enter your API key to publish.",
   "publish_view_resource": "View on data.gouv.fr",
-  "publish_synthetic_prefix": "[Synthetic]"
+  "publish_synthetic_prefix": "[Synthetic]",
+  "embedding_api_unavailable": "Semantic matching is unavailable: the embeddings API is not configured or could not be reached. Set EMBEDDING_API_KEY in your secrets.",
+  "manage_branches": "Manage Branches",
+  "branch_from_hint": "Tip: click any node above to time-travel there, then take a different decision to start a new branch.",
+  "no_branches_to_manage": "No branches to manage yet — make a few decisions first.",
+  "select_branch_to_manage": "Select a branch node",
+  "prune_branch": "🗑️ Prune",
+  "archive_branch": "📦 Archive",
+  "branch_pruned": "Pruned {count} node(s).",
+  "branch_archived": "Archived {count} node(s).",
+  "full_fidelity_export": "Full-Fidelity Export (all branches + data)",
+  "full_fidelity_description": "Export the entire navigation tree — every branch, each point's data and lineage — as a single versioned, self-contained record. It can be read back without this package.",
+  "download_full_record": "⬇️ Download full record (JSON)",
+  "save_to_durable_store": "💾 Save to session store",
+  "session_saved_to": "Session saved to: {location}",
+  "no_active_session": "No active navigation session to export yet."
 }

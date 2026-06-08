@@ -31,8 +31,6 @@ from .neo4j_writer import (
 from .navigation import (
     NavigationSession,
     NavigationState,
-    NavigationStep,
-    NavigationHistory,
     NavigationError,
     SessionNotFoundError
 )
@@ -102,8 +100,6 @@ __all__ = [
     # Navigation (User Story 5)
     "NavigationSession",
     "NavigationState",
-    "NavigationStep",
-    "NavigationHistory",
     "NavigationError",
     "SessionNotFoundError",
     # Ascent functionality (User Story 2 - Reverse Navigation)

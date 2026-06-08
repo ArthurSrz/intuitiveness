@@ -820,7 +820,7 @@ class TestNavigationSession:
         l4 = Level4Dataset(test0_sources)
 
         # Create session with tree tracking
-        session = NavigationSession(l4, use_tree=True)
+        session = NavigationSession(l4)
         assert session.state == NavigationState.ENTRY
         assert session.current_level == ComplexityLevel.LEVEL_4
 
@@ -865,7 +865,7 @@ class TestNavigationSession:
     def test_navigation_tree_branching(self, test0_sources, output_dir):
         """Test branching in navigation tree."""
         l4 = Level4Dataset(test0_sources)
-        session = NavigationSession(l4, use_tree=True)
+        session = NavigationSession(l4)
 
         # Descend to L3
         session.descend(builder_func=build_graph_from_dataframes)
@@ -903,7 +903,7 @@ class TestComplexityReduction:
     def test_cannot_return_to_l4(self, test0_sources):
         """Once at L3, cannot return to L4 (L4 is entry-only)."""
         l4 = Level4Dataset(test0_sources)
-        session = NavigationSession(l4, use_tree=True)
+        session = NavigationSession(l4)
 
         session.descend(builder_func=build_graph_from_dataframes)
 

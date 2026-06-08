@@ -1047,7 +1047,7 @@ def render_free_navigation_main():
             st.error(t("upload_data_first"))
             return
         l4_dataset = Level4Dataset(st.session_state.raw_data)
-        st.session_state.nav_session = NavigationSession(l4_dataset, use_tree=True)
+        st.session_state.nav_session = NavigationSession(l4_dataset)
         st.session_state.relationship_builder = DragDropRelationshipBuilder()
         nav_session = st.session_state.nav_session
 
@@ -1285,6 +1285,63 @@ def render_free_navigation_sidebar():
         on_node_click=on_node_click,
         available_options=nav_session.get_available_options()
     )
+
+    render_branch_management(nav_session)
+
+
+def render_branch_management(nav_session):
+    """Explicit branch controls (spec 015 T025/T027): time-travel, prune, archive.
+
+    Time-travel + branch-from are already available by clicking a node in the
+    tree above and then taking a new decision; this panel adds the explicit
+    prune/archive actions (no automatic eviction).
+    """
+    tree = nav_session.navigation_tree
+
+    # Candidate nodes to manage: everything except the root and the node we're
+    # currently standing on (pruning either would orphan the active position).
+    candidates = {}
+    for node_id, node in tree.nodes.items():
+        if node.parent_id is None:           # root
+            continue
+        if node_id == tree.current_id:       # current position
+            continue
+        archived = " 📦" if node.metadata.get("_archived") else ""
+        desc = node.decision_description or node.action
+        label = f"{node.level.name.replace('LEVEL_', 'L')} · {desc}{archived}"
+        candidates[label] = node_id
+
+    with st.sidebar.expander(t("manage_branches"), expanded=False):
+        st.caption(t("branch_from_hint"))
+
+        if not candidates:
+            st.info(t("no_branches_to_manage"))
+            return
+
+        chosen_label = st.selectbox(
+            t("select_branch_to_manage"),
+            options=list(candidates.keys()),
+            key="branch_mgmt_select",
+        )
+        chosen_id = candidates[chosen_label]
+
+        col_prune, col_archive = st.columns(2)
+        with col_prune:
+            if st.button(t("prune_branch"), key="branch_mgmt_prune", use_container_width=True):
+                try:
+                    removed = nav_session.prune(chosen_id)
+                    st.success(t("branch_pruned", count=removed))
+                    st.rerun()
+                except NavigationError as e:
+                    st.error(str(e))
+        with col_archive:
+            if st.button(t("archive_branch"), key="branch_mgmt_archive", use_container_width=True):
+                try:
+                    marked = nav_session.archive(chosen_id)
+                    st.success(t("branch_archived", count=marked))
+                    st.rerun()
+                except NavigationError as e:
+                    st.error(str(e))
 
 
 if __name__ == "__main__":

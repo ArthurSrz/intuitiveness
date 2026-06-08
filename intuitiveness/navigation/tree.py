@@ -66,9 +66,19 @@ class NavigationTreeNode:
         """Spec-015 alias: the complete retained dataset (payload + lineage)."""
         return self.dataset_snapshot
 
-    def to_dict(self) -> Dict[str, Any]:
-        """Serialize for JSON export (excludes dataset_snapshot)."""
-        return {
+    def to_dict(self, include_payload: bool = False) -> Dict[str, Any]:
+        """Serialize a node to a JSON-safe dict.
+
+        By default this is the LIGHTWEIGHT view (no data payload) used by the UI
+        tree visualization and the JSON-Crack session export — keeping those
+        views small and readable.
+
+        Pass ``include_payload=True`` for a FULL-fidelity node record (spec 015
+        T037): it additionally encodes the dataset payload (by type) and the
+        lineage, so :meth:`from_dict` can rebuild the exact node. The payload is
+        encoded with the same serializers as the cross-service export contract.
+        """
+        base = {
             "id": self.id,
             "level": self.level.value,
             "level_name": self.level.name,
@@ -78,8 +88,44 @@ class NavigationTreeNode:
             "timestamp": self.timestamp.isoformat(),
             "metadata": {k: v for k, v in self.metadata.items() if not k.startswith('_')},
             "decision_description": self.decision_description,
-            "output_snapshot": self.output_snapshot
+            "output_snapshot": self.output_snapshot,
         }
+        if not include_payload:
+            return base
+
+        # Full fidelity: encode payload + lineage (lazy import avoids a cycle).
+        from intuitiveness.persistence.session_export import _encode_payload
+        kind, payload = _encode_payload(self.dataset_snapshot.get_data())
+        base["payload_kind"] = kind
+        base["payload"] = payload
+        base["lineage"] = [ref.to_dict() for ref in self.dataset_snapshot.lineage.operations]
+        base["edge_decision"] = dict(self.edge_decision or {})
+        return base
+
+    @classmethod
+    def from_dict(cls, data: Dict[str, Any]) -> "NavigationTreeNode":
+        """Rebuild a node from a FULL-fidelity dict (``to_dict(include_payload=True)``).
+
+        Spec 015 T037 — the inverse of the full-fidelity serialization, restoring
+        the dataset payload and its lineage.
+        """
+        from intuitiveness.persistence.session_export import _rebuild_dataset
+        from intuitiveness.redesign.lineage import DataLineage, SourceReference
+
+        lineage = DataLineage()
+        lineage.operations = [SourceReference.from_dict(r) for r in data.get("lineage", [])]
+        ds = _rebuild_dataset(data["level"], data["payload_kind"], data["payload"], lineage)
+        return cls(
+            id=data["id"],
+            level=ComplexityLevel(data["level"]),
+            dataset_snapshot=ds,
+            parent_id=data.get("parent_id"),
+            children_ids=list(data.get("children_ids", [])),
+            action=data.get("action", "entry"),
+            decision_description=data.get("decision_description", ""),
+            output_snapshot=dict(data.get("output_snapshot", {})),
+            edge_decision=dict(data.get("edge_decision", {})),
+        )
 
 
 class NavigationTree:
@@ -327,6 +373,66 @@ class NavigationTree:
         if node_id not in self._nodes:
             raise KeyError(f"Node '{node_id}' not found")
         return self._nodes[node_id]
+
+    # ------------------------------------------------------------------ #
+    # Explicit branch management (spec 015 FR — no automatic eviction)
+    # ------------------------------------------------------------------ #
+    def _subtree_ids(self, node_id: str) -> List[str]:
+        """All node ids in the subtree rooted at node_id (node included)."""
+        collected: List[str] = []
+
+        def walk(nid: str) -> None:
+            collected.append(nid)
+            for child_id in self._nodes[nid].children_ids:
+                walk(child_id)
+
+        walk(node_id)
+        return collected
+
+    def prune(self, node_id: str) -> int:
+        """Permanently remove a node and its entire subtree (explicit only).
+
+        Branches are never auto-evicted; pruning is a deliberate user action.
+        The root and any node on the current branch path are protected — pruning
+        them would orphan the active position, so time-travel away first.
+
+        Returns the number of nodes removed.
+        """
+        if node_id not in self._nodes:
+            raise KeyError(f"Node '{node_id}' not found in navigation tree")
+        if node_id == self._root_id:
+            raise ValueError("Cannot prune the root node.")
+        on_current_path = {n.id for n in self.get_current_branch_path()}
+        if node_id in on_current_path:
+            raise ValueError(
+                "Cannot prune a node on the current branch (it holds your current "
+                "position or an ancestor of it). Time-travel to another branch first."
+            )
+
+        to_remove = self._subtree_ids(node_id)
+        parent_id = self._nodes[node_id].parent_id
+        if parent_id is not None:
+            self._nodes[parent_id].children_ids.remove(node_id)
+        for nid in to_remove:
+            del self._nodes[nid]
+        return len(to_remove)
+
+    def archive(self, node_id: str) -> int:
+        """Soft-hide a node and its subtree without deleting it (reversible).
+
+        Marks each node in the subtree with ``metadata['_archived'] = True`` so a
+        UI can filter it out, while the data and lineage stay intact. The root
+        cannot be archived. Returns the number of nodes marked.
+        """
+        if node_id not in self._nodes:
+            raise KeyError(f"Node '{node_id}' not found in navigation tree")
+        if node_id == self._root_id:
+            raise ValueError("Cannot archive the root node.")
+
+        subtree = self._subtree_ids(node_id)
+        for nid in subtree:
+            self._nodes[nid].metadata['_archived'] = True
+        return len(subtree)
 
     def __len__(self) -> int:
         """Number of nodes in tree."""
