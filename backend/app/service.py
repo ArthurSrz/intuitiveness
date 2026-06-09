@@ -139,6 +139,13 @@ class SessionService:
         session = self._load(session_id)
         return session.navigation_tree.export_to_json()
 
+    def node(self, session_id: str, node_id: str) -> Dict[str, Any]:
+        """Full-fidelity record for one node (level, encoded payload, lineage,
+        edge decision) — what a level view renders. Raises KeyError → 422 if the
+        node id is unknown."""
+        session = self._load(session_id)
+        return session.navigation_tree.get_node(node_id).to_dict(include_payload=True)
+
     def time_travel(self, session_id: str, node_id: str) -> Dict[str, Any]:
         session = self._load(session_id)
         session.time_travel(node_id)

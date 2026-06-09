@@ -1,0 +1,12 @@
+node_modules
+.next
+out
+.env*.local
+*.tsbuildinfo
+next-env.d.ts
+
+# The repo-root .gitignore has a generic Python `lib/` rule that would swallow
+# the frontend's typed API client (lib/api/). Re-include it — it's source, not
+# a build artifact. (`frontend/` isn't ignored, so this negation is allowed.)
+!lib/
+!lib/**

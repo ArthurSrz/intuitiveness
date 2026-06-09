@@ -1,0 +1,107 @@
+/*
+ * DESIGN TOKENS — the single seam for the user's design system.
+ * ----------------------------------------------------------------------------
+ * SC-004 CONSTRAINT: Components must NEVER hardcode hex colors, px sizes, font
+ * stacks, radii, or animation values. They consume ONLY the Tailwind theme
+ * utilities (e.g. `bg-bg`, `text-fg`, `rounded-md`, `p-4`) which are wired to
+ * the CSS custom properties declared below (see tailwind.config.ts).
+ *
+ * Because every visual decision flows through one of these variables, flipping
+ * a single value here restyles the entire app with ZERO component edits. This
+ * file is the place — and the only place — where the design system is defined.
+ *
+ * Add a `[data-theme="dark"]` override (already present below) to swap palettes
+ * at runtime by setting `data-theme="dark"` on <html>.
+ * ----------------------------------------------------------------------------
+ */
+
+:root {
+  /* ---- Color: surfaces & text ---- */
+  --color-bg: #f7f8fa;
+  --color-surface: #ffffff;
+  --color-surface-muted: #eef1f5;
+  --color-border: #d9dee6;
+  --color-fg: #1b2330;
+  --color-fg-muted: #5b6675;
+
+  /* ---- Color: brand & accents ---- */
+  --color-primary: #2f6df0;
+  --color-primary-fg: #ffffff;
+  --color-primary-hover: #2456c4;
+  --color-accent: #7c5cff;
+  --color-success: #1f9d63;
+  --color-warning: #c98a12;
+  --color-danger: #d8453b;
+
+  /* ---- Color: per-level identity (L4 raw -> L0 datum) ---- */
+  --color-level-4: #6c7a8c;
+  --color-level-3: #7c5cff;
+  --color-level-2: #2f6df0;
+  --color-level-1: #1f9d63;
+  --color-level-0: #d8453b;
+
+  /* ---- Typography ---- */
+  --font-sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  --font-mono: ui-monospace, "SF Mono", "Roboto Mono", Menlo, Consolas, monospace;
+
+  --text-xs: 0.75rem;
+  --text-sm: 0.875rem;
+  --text-base: 1rem;
+  --text-lg: 1.125rem;
+  --text-xl: 1.5rem;
+  --text-2xl: 2rem;
+  --text-3xl: 3rem;
+  --text-4xl: 4.5rem;
+
+  /* ---- Spacing scale ---- */
+  --space-1: 0.25rem;
+  --space-2: 0.5rem;
+  --space-3: 0.75rem;
+  --space-4: 1rem;
+  --space-5: 1.5rem;
+  --space-6: 2rem;
+  --space-8: 3rem;
+
+  /* ---- Radii ---- */
+  --radius-sm: 0.25rem;
+  --radius-md: 0.5rem;
+  --radius-lg: 0.875rem;
+  --radius-full: 9999px;
+
+  /* ---- Motion ---- */
+  --duration-fast: 120ms;
+  --duration-base: 200ms;
+  --duration-slow: 360ms;
+  --ease-standard: cubic-bezier(0.2, 0, 0, 1);
+  --ease-emphasized: cubic-bezier(0.3, 0, 0, 1);
+
+  /* ---- Elevation ---- */
+  --shadow-sm: 0 1px 2px rgba(16, 24, 40, 0.06);
+  --shadow-md: 0 6px 18px rgba(16, 24, 40, 0.10);
+}
+
+[data-theme="dark"] {
+  --color-bg: #0e1117;
+  --color-surface: #161b24;
+  --color-surface-muted: #1f2733;
+  --color-border: #2b3543;
+  --color-fg: #e6ebf2;
+  --color-fg-muted: #93a0b1;
+
+  --color-primary: #5b8bff;
+  --color-primary-fg: #0e1117;
+  --color-primary-hover: #7aa1ff;
+  --color-accent: #9d83ff;
+  --color-success: #3fc488;
+  --color-warning: #e0a93c;
+  --color-danger: #ff6b60;
+
+  --color-level-4: #93a0b1;
+  --color-level-3: #9d83ff;
+  --color-level-2: #5b8bff;
+  --color-level-1: #3fc488;
+  --color-level-0: #ff6b60;
+
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.4);
+  --shadow-md: 0 6px 18px rgba(0, 0, 0, 0.5);
+}
