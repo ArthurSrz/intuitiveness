@@ -10,7 +10,9 @@
 
 FROM node:20-slim
 
-ENV NODE_ENV=production
+# NOTE: do NOT set NODE_ENV=production before `npm ci` — that omits
+# devDependencies (openapi-typescript, typescript, tailwindcss), which the build
+# step needs. `next start` runs in production mode regardless of this var.
 WORKDIR /app
 
 ARG NEXT_PUBLIC_API_URL

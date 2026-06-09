@@ -62,8 +62,8 @@ package (core, reused), PostgreSQL + Memgraph + OpenRouter (live on Railway).
 **Independent test**: in the browser against the deployed services, drive a session; backend uses internal DATABASE_URL; `/healthz` green.
 
 - [x] T022 [US4] /healthz endpoint mirroring the three verify scripts (postgres/memgraph/embeddings) in backend/app/routers/health.py
-- [ ] T023 [US4] Railway backend service: root backend/, start `uvicorn app.main:app`, env DATABASE_URL (internal ref) + MEMGRAPH_* + EMBEDDING_* + ALLOWED_ORIGINS; verify /healthz on Railway
-- [ ] T024 [US4] Railway frontend service: root frontend/, NEXT_PUBLIC_API_URL → backend public domain; browser walkthrough on Railway green
+- [x] T023 [US4] Railway backend service: root backend/, start `uvicorn app.main:app`, env DATABASE_URL (internal ref) + MEMGRAPH_* + EMBEDDING_* + ALLOWED_ORIGINS; verify /healthz on Railway
+- [x] T024 [US4] Railway frontend service: root frontend/, NEXT_PUBLIC_API_URL → backend public domain; browser walkthrough on Railway green
 
 ## Phase 7: Polish & Cross-Cutting (Phase D — retire Streamlit)
 
