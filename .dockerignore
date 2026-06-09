@@ -1,0 +1,32 @@
+# Docker build context trim (spec 017). Build context is the repo root for both
+# service images; exclude everything neither image needs. The big wins are the
+# accidental duplicate project copies nested under intuitiveness/ (~160 MB each).
+
+.git
+**/__pycache__
+**/*.pyc
+**/*.pyo
+
+# Accidental full-project duplicate copies under the package dir (not imported).
+intuitiveness/synteticData
+intuitiveness/ux
+intuitiveness/package
+intuitiveness/navigation-path
+intuitiveness/.understand-anything
+.understand-anything
+.playwright-mcp
+
+# Data / artifacts the services don't need at runtime.
+test_data
+tests/artifacts
+*.zip
+*.pdf
+
+# Frontend build leftovers (the image runs npm ci / build itself).
+frontend/node_modules
+frontend/.next
+
+# Local envs / secrets
+**/.env
+**/.env.local
+myenv*

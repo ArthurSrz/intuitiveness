@@ -1,0 +1,24 @@
+# Trim what `railway up` uploads (it respects .gitignore + .railwayignore, NOT
+# .dockerignore). Without this, the accidental duplicate project copies nested
+# under intuitiveness/ (~160 MB each) make every upload slow.
+
+.git
+**/__pycache__
+**/*.pyc
+
+intuitiveness/synteticData
+intuitiveness/ux
+intuitiveness/package
+intuitiveness/navigation-path
+intuitiveness/.understand-anything
+.understand-anything
+.playwright-mcp
+
+test_data
+tests/artifacts
+*.zip
+*.pdf
+
+frontend/node_modules
+frontend/.next
+myenv*
