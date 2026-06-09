@@ -4,8 +4,9 @@ import "./globals.css";
 import { Providers } from "./providers";
 
 export const metadata: Metadata = {
-  title: "Intuitiveness",
-  description: "Descent / ascent over abstraction levels L4 → L0.",
+  title: "Intuitiveness — dataset design for tabular data",
+  description:
+    "Design datasets that adapt to the reader. Strip a dataset from chaos down to its core, then rebuild it for your readers' needs.",
 };
 
 export default function RootLayout({
@@ -15,7 +16,20 @@ export default function RootLayout({
 }) {
   return (
     <html lang="en">
-      <body className="min-h-screen bg-bg text-fg">
+      <head>
+        {/* Blue Pulse type: Inter (UI) + JetBrains Mono (data/code). */}
+        <link rel="preconnect" href="https://fonts.googleapis.com" />
+        <link
+          rel="preconnect"
+          href="https://fonts.gstatic.com"
+          crossOrigin="anonymous"
+        />
+        <link
+          href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;700&display=swap"
+          rel="stylesheet"
+        />
+      </head>
+      <body>
         <Providers>{children}</Providers>
       </body>
     </html>

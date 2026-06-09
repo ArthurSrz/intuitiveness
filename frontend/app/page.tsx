@@ -3,88 +3,575 @@
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { useCreateSession } from "@/lib/api/hooks";
-import { DEMO_SOURCES, type DemoSource } from "@/lib/api/types";
 import { ApiError } from "@/lib/api/client";
-import { Button } from "@/components/ui/Button";
-import { StatusBadge } from "@/components/StatusBadge";
+import type { DemoSource } from "@/lib/api/types";
+import { Icon } from "@/components/ui/Icon";
+import { gradientColor } from "@/lib/design";
 
 /*
- * Landing page: pick a demo dataset, create a session, route to it.
+ * Landing — the "Interactive Data Redesign Method" entry screen, recreated from
+ * the Blue Pulse design (landing.jsx): hero + descent/ascent diagram, a
+ * federated search bar, the paper's two demo use-cases, an upload row, and the
+ * UNESCO / author footer.
+ *
+ * Every entry action creates a real backend session (useCreateSession) and
+ * routes to /session/{id}. The two demo cards map to live demo sources.
  */
 export default function HomePage() {
   const router = useRouter();
   const createSession = useCreateSession();
-  const [source, setSource] = useState<DemoSource>(DEMO_SOURCES[0].id);
+  const [pendingSource, setPendingSource] = useState<DemoSource | null>(null);
 
-  function handleStart() {
+  function start(source: DemoSource) {
+    setPendingSource(source);
     createSession.mutate(
       { source },
       {
-        onSuccess: (state) => {
-          router.push(`/session/${state.session_id}`);
-        },
+        onSuccess: (state) => router.push(`/session/${state.session_id}`),
+        onError: () => setPendingSource(null),
       },
     );
   }
 
+  const busy = createSession.isPending;
   const error = createSession.error as ApiError | null;
 
   return (
-    <main className="mx-auto flex min-h-screen max-w-3xl flex-col gap-8 px-4 py-8">
-      <header className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-semibold text-fg">Intuitiveness</h1>
-          <p className="mt-1 text-sm text-fg-muted">
-            Descend L4 → L0 and ascend back, one abstraction level at a time.
-          </p>
+    <div style={{ minHeight: "100vh", overflowY: "auto", background: "var(--surface)" }}>
+      {/* top bar */}
+      <div
+        style={{
+          display: "flex",
+          alignItems: "center",
+          gap: 12,
+          padding: "20px 32px",
+          maxWidth: 1080,
+          margin: "0 auto",
+        }}
+      >
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img
+          src="/intuitiveness_mark.svg"
+          alt="Intuitiveness"
+          width={40}
+          height={40}
+          style={{ display: "block", flex: "none", borderRadius: 11 }}
+        />
+        <div style={{ lineHeight: 1 }}>
+          <div className="t-name" style={{ fontWeight: 800, letterSpacing: "-0.02em", fontSize: 17 }}>
+            Intuitiveness
+          </div>
+          <div className="t-meta" style={{ fontSize: 11.5, marginTop: 2 }}>
+            dataset design · tabular data
+          </div>
         </div>
-        <StatusBadge />
-      </header>
-
-      <section className="rounded-lg border border-border bg-surface p-6 shadow-sm">
-        <h2 className="text-lg font-semibold text-fg">Start a session</h2>
-        <p className="mt-1 text-sm text-fg-muted">
-          Pick a demo dataset to begin.
-        </p>
-
-        <div className="mt-5 grid gap-3">
-          {DEMO_SOURCES.map((demo) => {
-            const selected = demo.id === source;
-            return (
-              <button
-                key={demo.id}
-                type="button"
-                onClick={() => setSource(demo.id)}
-                className={[
-                  "flex items-center justify-between rounded-md border px-4 py-3 text-left transition-colors duration-fast ease-standard",
-                  selected
-                    ? "border-primary bg-surface-muted"
-                    : "border-border bg-surface hover:bg-surface-muted",
-                ].join(" ")}
-              >
-                <span className="text-sm font-medium text-fg">
-                  {demo.label}
-                </span>
-                <span className="font-mono text-xs text-fg-muted">
-                  {demo.id}
-                </span>
-              </button>
-            );
-          })}
+        <div style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: 8 }}>
+          <span className="chip">
+            <Icon name="dataset" size={14} /> data.gouv.fr
+          </span>
+          <span className="chip" style={{ color: "var(--text)" }}>
+            <Icon name="info" size={14} /> The paper
+          </span>
         </div>
+      </div>
 
-        <Button
-          onClick={handleStart}
-          disabled={createSession.isPending}
-          className="mt-6 w-full"
+      {/* hero */}
+      <div style={{ maxWidth: 1080, margin: "0 auto", padding: "12px 32px 56px" }}>
+        <div
+          style={{
+            display: "grid",
+            gridTemplateColumns: "minmax(0,1fr) minmax(0,1fr)",
+            gap: 40,
+            alignItems: "center",
+            padding: "20px 0 36px",
+          }}
         >
-          {createSession.isPending ? "Creating…" : "Start"}
-        </Button>
+          <div>
+            <span
+              className="chip"
+              style={{ background: "var(--blue-soft)", color: "var(--blue)", marginBottom: 18 }}
+            >
+              <Icon name="spark" size={14} /> Intuitiveness — the next stage of dataset design
+            </span>
+            <h1
+              style={{
+                fontSize: 44,
+                lineHeight: 1.05,
+                fontWeight: 800,
+                letterSpacing: "-0.03em",
+                margin: "0 0 16px",
+                textWrap: "balance",
+              }}
+            >
+              Design datasets that adapt&nbsp;to the reader
+            </h1>
+            <p
+              className="t-body"
+              style={{
+                fontSize: 17,
+                lineHeight: 1.55,
+                color: "var(--text-2)",
+                margin: "0 0 24px",
+                maxWidth: 482,
+                textWrap: "pretty",
+              }}
+            >
+              <b style={{ color: "var(--text)" }}>Intuitive datasets</b> are tabular data whose
+              complexity adapts to each reader&apos;s data literacy level. Strip a dataset from{" "}
+              <b style={{ color: "var(--text)" }}>chaos</b> down to its{" "}
+              <b style={{ color: "var(--text)" }}>core</b>, then rebuild it for your own
+              readers&apos; needs.
+            </p>
+            <div style={{ display: "flex", alignItems: "center", gap: 18, flexWrap: "wrap" }}>
+              <button
+                className="pill-btn primary lg"
+                onClick={() => start("demo:school_scores")}
+                disabled={busy}
+              >
+                {busy && pendingSource === "demo:school_scores" ? "Starting…" : "Start the descent"}{" "}
+                <Icon name="arrowRight" size={18} stroke={2.1} />
+              </button>
+            </div>
+          </div>
 
-        {error && (
-          <p className="mt-3 text-xs text-danger">{error.displayMessage}</p>
+          {/* diagram card */}
+          <div className="card" style={{ padding: 26, background: "var(--bg)" }}>
+            <div className="t-label" style={{ color: "var(--text-2)", marginBottom: 18 }}>
+              THE FIVE GRANULARITY LEVELS
+            </div>
+            <DescentAscentDiagram />
+          </div>
+        </div>
+
+        {/* entry choice */}
+        <div style={{ marginTop: 10 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 16 }}>
+            <span className="t-section" style={{ fontSize: 18 }}>
+              Begin with your data
+            </span>
+            <span className="divider" style={{ flex: 1 }} />
+          </div>
+
+          {/* federated open-data search (data.gouv.fr + World Bank via the app) */}
+          <div style={{ marginBottom: 20 }}>
+            <form
+              onSubmit={(e) => {
+                e.preventDefault();
+                start("demo:school_scores");
+              }}
+              className="card"
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: 6,
+                padding: "6px 6px 6px 18px",
+                borderRadius: "var(--pill)",
+                background: "var(--bg)",
+                boxShadow: "var(--shadow-1)",
+              }}
+            >
+              <Icon name="search" size={20} style={{ color: "var(--text-2)", flex: "none" }} />
+              <input
+                type="text"
+                placeholder="Search open data in plain language — “résultats du brevet”, “GDP per capita”…"
+                style={{
+                  flex: 1,
+                  minWidth: 0,
+                  border: "none",
+                  background: "transparent",
+                  outline: "none",
+                  color: "var(--text)",
+                  fontFamily: "var(--font)",
+                  fontSize: 15,
+                  padding: "11px 8px",
+                }}
+              />
+              <button type="submit" className="pill-btn primary" style={{ height: 42, flex: "none" }} disabled={busy}>
+                Search <Icon name="arrowRight" size={16} stroke={2.1} />
+              </button>
+            </form>
+            <div
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: 8,
+                marginTop: 11,
+                paddingLeft: 4,
+                flexWrap: "wrap",
+              }}
+            >
+              <span className="t-meta">Searches across</span>
+              <span className="chip mono" style={{ whiteSpace: "nowrap" }}>
+                <Icon name="dataset" size={13} /> data.gouv.fr
+              </span>
+              <span className="chip mono" style={{ whiteSpace: "nowrap" }}>
+                <Icon name="core" size={13} /> World Bank
+              </span>
+              <span className="t-meta" style={{ whiteSpace: "nowrap" }}>
+                · tens of thousands of public datasets, in one query
+              </span>
+            </div>
+          </div>
+
+          {/* the paper's two demo use-cases */}
+          <div
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: 8,
+              margin: "2px 0 12px",
+              paddingLeft: 4,
+              flexWrap: "wrap",
+            }}
+          >
+            <span className="t-label" style={{ color: "var(--text-2)", whiteSpace: "nowrap" }}>
+              READY-MADE DEMOS
+            </span>
+            <span className="t-meta" style={{ whiteSpace: "nowrap" }}>
+              — the paper&apos;s two use-cases
+            </span>
+          </div>
+
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "var(--gap)" }}>
+            <EntryCard
+              glyph="dataset"
+              kicker="DEMO · FRANCE"
+              title="French collèges"
+              desc="Two unrelated data.gouv.fr tables joined into one raw dataset — run the full descent, then the ascent."
+              sources={["DNB brevet results", "Collège effectifs"]}
+              meta="data.gouv.fr"
+              cta="Open French demo"
+              busy={busy && pendingSource === "demo:school_scores"}
+              onClick={() => start("demo:school_scores")}
+            />
+            <EntryCard
+              glyph="core"
+              kicker="DEMO · WORLD BANK"
+              title="World Bank indicators"
+              desc="Two unrelated World Bank tables joined into one raw dataset — the same cycle on global development data."
+              sources={["GDP per capita", "Life expectancy"]}
+              meta="data.worldbank.org"
+              cta="Open World Bank demo"
+              busy={busy && pendingSource === "demo:energy"}
+              onClick={() => start("demo:energy")}
+            />
+          </div>
+
+          {/* bring your own */}
+          <button
+            onClick={() => start("demo:ademe")}
+            disabled={busy}
+            style={{
+              marginTop: "var(--gap)",
+              width: "100%",
+              textAlign: "left",
+              display: "flex",
+              alignItems: "center",
+              gap: 16,
+              padding: "16px 20px",
+              borderRadius: "var(--radius-xl)",
+              border: "2px dashed var(--border-strong)",
+              background: "var(--bg)",
+              transition: "border-color .15s",
+            }}
+            onMouseEnter={(e) => (e.currentTarget.style.borderColor = "var(--blue)")}
+            onMouseLeave={(e) => (e.currentTarget.style.borderColor = "var(--border-strong)")}
+          >
+            <span
+              style={{
+                width: 42,
+                height: 42,
+                borderRadius: 11,
+                flex: "none",
+                display: "inline-flex",
+                alignItems: "center",
+                justifyContent: "center",
+                background: "var(--surface)",
+                color: "var(--text-2)",
+              }}
+            >
+              <Icon name="export" size={21} stroke={1.9} />
+            </span>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div className="t-name" style={{ fontSize: 15.5 }}>
+                Bring your own data
+              </div>
+              <div className="t-meta">
+                Upload one or more CSV files — encoding and delimiter are detected for you, then we
+                build the raw view to begin.
+              </div>
+            </div>
+            <span className="pill-btn ghost" style={{ height: 40, flex: "none", pointerEvents: "none" }}>
+              Choose files <Icon name="export" size={16} stroke={2.1} />
+            </span>
+          </button>
+
+          {error && (
+            <p
+              className="t-meta"
+              style={{
+                color: "var(--error)",
+                marginTop: 14,
+                paddingLeft: 4,
+              }}
+            >
+              Could not start a session: {error.displayMessage}
+            </p>
+          )}
+        </div>
+
+        {/* footer */}
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            gap: 14,
+            marginTop: 40,
+            paddingTop: 22,
+            borderTop: "1px solid var(--border)",
+            flexWrap: "wrap",
+          }}
+        >
+          <span className="t-meta">
+            In partnership with the{" "}
+            <b style={{ color: "var(--text)" }}>UNESCO Chair in AI &amp; Data Science for Society</b>
+          </span>
+          <span
+            className="t-meta"
+            style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: 6 }}
+          >
+            By
+            <a
+              href="https://www.linkedin.com/in/arthursarazin/"
+              target="_blank"
+              rel="noopener noreferrer"
+              style={{ color: "var(--blue)", fontWeight: 600 }}
+            >
+              Arthur Sarazin
+            </a>
+            <span aria-hidden="true">·</span>
+            <a
+              href="https://www.linkedin.com/in/mathis-mourey-189640153/"
+              target="_blank"
+              rel="noopener noreferrer"
+              style={{ color: "var(--blue)", fontWeight: 600 }}
+            >
+              Mathis Mourey
+            </a>
+          </span>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ---- the five-level descent/ascent diagram in the hero card ---- */
+function DescentAscentDiagram() {
+  const steps = [
+    { code: "L4", glyph: "table", label: "Unlinked" },
+    { code: "L3", glyph: "graph", label: "Linked" },
+    { code: "L2", glyph: "categories", label: "Table" },
+    { code: "L1", glyph: "vector", label: "Vector" },
+    { code: "L0", glyph: "core", label: "Value" },
+  ];
+  const colColor = (i: number) => gradientColor(i / (steps.length - 1));
+
+  const IconCell = ({ s, i }: { s: (typeof steps)[number]; i: number }) => {
+    const col = colColor(i);
+    const isCore = i === steps.length - 1;
+    return (
+      <span
+        style={{
+          width: 52,
+          height: 52,
+          borderRadius: 15,
+          display: "inline-flex",
+          alignItems: "center",
+          justifyContent: "center",
+          background: isCore ? col : "var(--bg)",
+          color: isCore ? "#fff" : col,
+          border: `2px solid ${col}`,
+          boxShadow: isCore ? "var(--shadow-1)" : "none",
+          justifySelf: "center",
+        }}
+      >
+        <Icon name={s.glyph} size={25} stroke={1.9} />
+      </span>
+    );
+  };
+
+  const Conn = ({ ascent }: { ascent: boolean }) => (
+    <div style={{ display: "flex", flexDirection: "column", gap: 9, alignSelf: "center", padding: "0 3px" }}>
+      <div style={{ position: "relative", height: 2, background: "var(--border-strong)", borderRadius: 2 }}>
+        <span
+          style={{
+            position: "absolute",
+            right: -1,
+            top: -4,
+            width: 0,
+            height: 0,
+            borderTop: "5px solid transparent",
+            borderBottom: "5px solid transparent",
+            borderLeft: "7px solid var(--border-strong)",
+          }}
+        />
+      </div>
+      <div style={{ position: "relative", height: 2, background: ascent ? "var(--blue)" : "transparent", borderRadius: 2 }}>
+        {ascent && (
+          <span
+            style={{
+              position: "absolute",
+              left: -1,
+              top: -4,
+              width: 0,
+              height: 0,
+              borderTop: "5px solid transparent",
+              borderBottom: "5px solid transparent",
+              borderRight: "7px solid var(--blue)",
+            }}
+          />
         )}
-      </section>
-    </main>
+      </div>
+    </div>
+  );
+
+  const cols = "auto 1fr auto 1fr auto 1fr auto 1fr auto";
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: 16, width: "100%" }}>
+      <div style={{ display: "grid", gridTemplateColumns: cols, alignItems: "center", rowGap: 9 }}>
+        {steps.map((s, i) => (
+          <span key={"i" + s.code} style={{ display: "contents" }}>
+            <IconCell s={s} i={i} />
+            {i < steps.length - 1 && <Conn ascent={i > 0} />}
+          </span>
+        ))}
+        {steps.map((s, i) => (
+          <span key={"l" + s.code} style={{ display: "contents" }}>
+            <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 2 }}>
+              <span className="mono" style={{ fontSize: 12, fontWeight: 700, color: colColor(i) }}>
+                {s.code}
+              </span>
+              <span className="t-meta" style={{ fontSize: 11.5 }}>
+                {s.label}
+              </span>
+            </div>
+            {i < steps.length - 1 && <div />}
+          </span>
+        ))}
+      </div>
+      <div style={{ display: "flex", alignItems: "center", gap: 16, flexWrap: "wrap" }}>
+        <span className="chip" style={{ background: "var(--neutral-soft)", color: "var(--neutral)" }}>
+          <Icon name="arrowRight" size={14} stroke={2.2} /> Descent · four reductions to the core
+        </span>
+        <span className="chip" style={{ background: "var(--blue-soft)", color: "var(--blue)" }}>
+          <Icon name="up" size={14} stroke={2.2} /> Ascent · three amplifications with intent
+        </span>
+      </div>
+    </div>
+  );
+}
+
+/* ---- a single entry card (demo use-case) ---- */
+function EntryCard({
+  glyph,
+  kicker,
+  title,
+  desc,
+  meta,
+  cta,
+  sources,
+  busy,
+  onClick,
+}: {
+  glyph: string;
+  kicker: string;
+  title: string;
+  desc: string;
+  meta?: string;
+  cta: string;
+  sources?: [string, string];
+  busy?: boolean;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      onClick={onClick}
+      disabled={busy}
+      style={{
+        textAlign: "left",
+        display: "flex",
+        flexDirection: "column",
+        gap: 0,
+        width: "100%",
+        background: "var(--bg)",
+        borderRadius: "var(--radius-xl)",
+        padding: 22,
+        border: "1px solid var(--border)",
+        transition: "border-color .15s, box-shadow .15s, transform .08s",
+      }}
+      onMouseEnter={(e) => {
+        e.currentTarget.style.borderColor = "var(--blue)";
+        e.currentTarget.style.boxShadow = "var(--shadow-1)";
+      }}
+      onMouseLeave={(e) => {
+        e.currentTarget.style.borderColor = "var(--border)";
+        e.currentTarget.style.boxShadow = "none";
+      }}
+    >
+      <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 14 }}>
+        <span
+          style={{
+            width: 44,
+            height: 44,
+            borderRadius: 12,
+            flex: "none",
+            display: "inline-flex",
+            alignItems: "center",
+            justifyContent: "center",
+            background: "var(--blue)",
+            color: "#fff",
+          }}
+        >
+          <Icon name={glyph} size={22} stroke={1.9} />
+        </span>
+        <span className="t-label" style={{ color: "var(--text-2)", whiteSpace: "nowrap" }}>
+          {kicker}
+        </span>
+      </div>
+      <div className="t-section" style={{ fontSize: 19, marginBottom: 6 }}>
+        {title}
+      </div>
+      <div className="t-body" style={{ color: "var(--text-2)", marginBottom: sources ? 14 : 16, textWrap: "pretty" }}>
+        {desc}
+      </div>
+      {sources && (
+        <div style={{ display: "flex", flexDirection: "column", gap: 7, marginBottom: 16 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+            <span className="chip mono" style={{ whiteSpace: "nowrap" }}>
+              {sources[0]}
+            </span>
+            <span className="mono" style={{ color: "var(--text-2)", fontWeight: 700 }}>
+              +
+            </span>
+            <span className="chip mono" style={{ whiteSpace: "nowrap" }}>
+              {sources[1]}
+            </span>
+          </div>
+          <span className="t-meta" style={{ fontSize: 11.5 }}>
+            two unrelated tables → one raw dataset
+          </span>
+        </div>
+      )}
+      <div style={{ marginTop: "auto", display: "flex", alignItems: "center", gap: 10 }}>
+        <span className="pill-btn primary" style={{ height: 40, pointerEvents: "none" }}>
+          {busy ? "Starting…" : cta} <Icon name="arrowRight" size={16} stroke={2.1} />
+        </span>
+        {meta && (
+          <span className="t-meta mono" style={{ marginLeft: "auto" }}>
+            {meta}
+          </span>
+        )}
+      </div>
+    </button>
   );
 }

@@ -3,14 +3,23 @@
 import { useMemo } from "react";
 import type { NodeDetail } from "@/lib/api/types";
 import { decodeDataframe, type DecodedTable } from "@/lib/payload";
-import { Card } from "@/components/ui/Card";
+import { Icon } from "@/components/ui/Icon";
 
 /*
- * L2 — A table (kind "dataframe" = zlib+base64). We inflate it client-side with
- * pako. If decoding fails or the payload is absent, we fall back to whatever
- * the summary/output_snapshot reports so the view still renders something.
+ * Tabular level view (kind "dataframe" = zlib+base64, inflated client-side with
+ * pako). Rendered in the design's bordered table chrome with a header chip +
+ * row count, and a graceful summary fallback if decoding fails. Used for the L2
+ * categorized table and the L3 ascent "purpose-built dataset" (via `code`).
  */
-export function L2Table({ node }: { node: NodeDetail }) {
+export function L2Table({
+  node,
+  code = "L2",
+  glyph = "categories",
+}: {
+  node: NodeDetail;
+  code?: string;
+  glyph?: string;
+}) {
   const table: DecodedTable | null = useMemo(() => {
     if (typeof node.payload === "string") {
       return decodeDataframe(node.payload);
@@ -20,28 +29,31 @@ export function L2Table({ node }: { node: NodeDetail }) {
 
   if (!table) {
     return (
-      <Card title="L2 · Table" subtitle="Categorized table">
-        <SummaryFallback node={node} />
-      </Card>
+      <div className="card" style={{ padding: 0, overflow: "hidden" }}>
+        <Header code={code} glyph={glyph} label="Categorized table" meta="" />
+        <div style={{ padding: 16 }}>
+          <SummaryFallback node={node} />
+        </div>
+      </div>
     );
   }
 
   const previewRows = table.rows.slice(0, 50);
 
   return (
-    <Card
-      title="L2 · Table"
-      subtitle={`${table.rows.length} rows × ${table.columns.length} columns`}
-    >
-      <div className="overflow-x-auto rounded-md border border-border">
-        <table className="w-full border-collapse text-sm">
+    <div className="card" style={{ padding: 0, overflow: "hidden" }}>
+      <Header
+        code={code}
+        glyph={glyph}
+        label={node.decision_description ?? (code === "L3" ? "Purpose-built dataset" : "Categorized table")}
+        meta={`${table.rows.length} rows · ${table.columns.length} cols`}
+      />
+      <div style={{ overflowX: "auto" }}>
+        <table style={{ borderCollapse: "collapse", width: "100%", minWidth: 480 }}>
           <thead>
-            <tr className="bg-surface-muted text-left">
+            <tr>
               {table.columns.map((col) => (
-                <th
-                  key={col}
-                  className="border-b border-border px-3 py-2 font-medium text-fg"
-                >
+                <th key={col} className="mono" style={thStyle}>
                   {col}
                 </th>
               ))}
@@ -49,12 +61,9 @@ export function L2Table({ node }: { node: NodeDetail }) {
           </thead>
           <tbody>
             {previewRows.map((row, i) => (
-              <tr key={i} className="even:bg-surface-muted">
+              <tr key={i} className="rawrow">
                 {table.columns.map((col) => (
-                  <td
-                    key={col}
-                    className="border-b border-border px-3 py-2 font-mono text-xs text-fg"
-                  >
+                  <td key={col} className="mono" style={tdStyle}>
                     {formatCell(row[col])}
                   </td>
                 ))}
@@ -64,25 +73,94 @@ export function L2Table({ node }: { node: NodeDetail }) {
         </table>
       </div>
       {table.rows.length > previewRows.length && (
-        <p className="mt-3 text-xs text-fg-muted">
-          Showing first {previewRows.length} of {table.rows.length} rows.
-        </p>
+        <div style={{ padding: "12px 16px", borderTop: "1px solid var(--border)" }}>
+          <span className="t-meta mono">
+            Showing first {previewRows.length} of {table.rows.length} rows
+          </span>
+        </div>
       )}
-    </Card>
+    </div>
+  );
+}
+
+function Header({
+  code,
+  glyph,
+  label,
+  meta,
+}: {
+  code: string;
+  glyph: string;
+  label: string;
+  meta: string;
+}) {
+  return (
+    <div
+      style={{
+        display: "flex",
+        alignItems: "center",
+        gap: 10,
+        padding: "14px 16px",
+        borderBottom: "1px solid var(--border)",
+        flexWrap: "wrap",
+      }}
+    >
+      <span className="chip">
+        <Icon name={glyph} size={15} />
+        {code} · Table
+      </span>
+      <span className="t-name" style={{ fontWeight: 700 }}>
+        {label}
+      </span>
+      {meta && (
+        <span className="t-meta mono" style={{ marginLeft: "auto" }}>
+          {meta}
+        </span>
+      )}
+    </div>
   );
 }
 
 function SummaryFallback({ node }: { node: NodeDetail }) {
   const summary = node.summary ?? node.output_snapshot;
-  if (!summary) {
-    return <p className="text-sm text-fg-muted">No table payload available.</p>;
-  }
+  if (!summary) return <p className="t-meta">No table payload available.</p>;
   return (
-    <pre className="overflow-x-auto rounded-md bg-surface-muted p-4 font-mono text-xs text-fg">
+    <pre
+      className="mono"
+      style={{
+        overflowX: "auto",
+        borderRadius: "var(--radius-md)",
+        background: "var(--surface)",
+        padding: 16,
+        fontSize: 12,
+        color: "var(--text)",
+      }}
+    >
       {JSON.stringify(summary, null, 2)}
     </pre>
   );
 }
+
+const thStyle: React.CSSProperties = {
+  textAlign: "left",
+  padding: "9px 12px",
+  fontSize: 12,
+  fontWeight: 700,
+  color: "var(--text-2)",
+  borderBottom: "1px solid var(--border)",
+  background: "var(--surface)",
+  position: "sticky",
+  top: 0,
+  letterSpacing: "0.01em",
+  whiteSpace: "nowrap",
+};
+const tdStyle: React.CSSProperties = {
+  padding: "10px 12px",
+  fontSize: 13,
+  borderBottom: "1px solid var(--border)",
+  color: "var(--text)",
+  whiteSpace: "nowrap",
+};
 
 function formatCell(value: unknown): string {
   if (value == null) return "";

@@ -32,7 +32,13 @@ export function LevelView({
     case 4:
       return <L4Sources node={node} />;
     case 3:
-      return <L3Graph node={node} />;
+      // Descent L3 is a graph; the L2→L3 ascent rebuilds a dataframe (the
+      // "purpose-built dataset"), so render that as a table.
+      return node.payload_kind === "dataframe" ? (
+        <L2Table node={node} code="L3" glyph="graph" />
+      ) : (
+        <L3Graph node={node} />
+      );
     case 2:
       return <L2Table node={node} />;
     case 1:
