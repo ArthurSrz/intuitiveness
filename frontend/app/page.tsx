@@ -1,7 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useCreateSession } from "@/lib/api/hooks";
 import { ApiError } from "@/lib/api/client";
 import type { DemoSource } from "@/lib/api/types";
@@ -22,6 +22,23 @@ export default function HomePage() {
   const createSession = useCreateSession();
   const [pendingSource, setPendingSource] = useState<DemoSource | null>(null);
 
+  // First visit plays the animated descent–ascent intro (served from
+  // /public/intro). Once "Enter the app" / "Skip intro" is clicked it sets the
+  // flag, so we only auto-redirect the very first time. Gate the render until
+  // we've checked, so first-timers never flash the landing before the intro.
+  const [introChecked, setIntroChecked] = useState(false);
+  useEffect(() => {
+    try {
+      if (!localStorage.getItem("intuitiveness:intro-seen")) {
+        window.location.href = "/intro/index.html";
+        return;
+      }
+    } catch {
+      // localStorage unavailable — just show the landing.
+    }
+    setIntroChecked(true);
+  }, []);
+
   function start(source: DemoSource) {
     setPendingSource(source);
     createSession.mutate(
@@ -35,6 +52,12 @@ export default function HomePage() {
 
   const busy = createSession.isPending;
   const error = createSession.error as ApiError | null;
+
+  // Hold the landing back until the intro check runs (avoids a flash before the
+  // first-visit redirect to /intro).
+  if (!introChecked) {
+    return <div style={{ minHeight: "100vh", background: "var(--surface)" }} />;
+  }
 
   return (
     <div style={{ minHeight: "100vh", overflowY: "auto", background: "var(--surface)" }}>
@@ -66,6 +89,16 @@ export default function HomePage() {
           </div>
         </div>
         <div style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: 8 }}>
+          <a
+            href="/intro/index.html"
+            className="chip"
+            style={{ color: "var(--blue)", background: "var(--blue-soft)", whiteSpace: "nowrap" }}
+          >
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor">
+              <path d="M5 3l16 9-16 9V3z" />
+            </svg>{" "}
+            Watch the intro
+          </a>
           <span className="chip">
             <Icon name="dataset" size={14} /> data.gouv.fr
           </span>
