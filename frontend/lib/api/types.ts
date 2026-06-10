@@ -8,7 +8,45 @@
  */
 import type { components } from "./schema";
 
-export type SessionState = components["schemas"]["SessionState"];
+/** Introspection for per-edge controls (service `_options`). */
+export interface SessionOptions {
+  builders: string[];
+  aggregations: string[];
+  columns: string[];
+  sources: string[];
+}
+
+/** A registry enrichment function (L0→L1 ascent), from `available_moves`. */
+export interface EnrichmentOption {
+  name: string;
+  description?: string;
+  requires_context?: boolean;
+}
+
+/** A registry dimension (L1→L2 / L2→L3 ascent), from `available_moves`. */
+export interface DimensionOption {
+  name: string;
+  description?: string;
+  possible_values?: string[];
+}
+
+/** An ascent move descriptor; carries the registry option lists. */
+export interface AscendMove {
+  target?: string;
+  step?: string;
+  description?: string;
+  enrichment_functions?: EnrichmentOption[];
+  dimensions?: DimensionOption[];
+}
+
+/*
+ * The backend adds `options` to its state projection (service.state_of). The
+ * generated schema types it loosely; this augmentation names the shape the UI
+ * relies on without a full openapi regen.
+ */
+export type SessionState = components["schemas"]["SessionState"] & {
+  options?: SessionOptions;
+};
 export type SessionSummary = components["schemas"]["SessionSummary"];
 export type CreateSessionRequest =
   components["schemas"]["CreateSessionRequest"];

@@ -12,7 +12,7 @@ import {
 } from "@/lib/api/hooks";
 import { API_BASE_URL, ApiError } from "@/lib/api/client";
 import { decodeValue } from "@/lib/payload";
-import type { DescendRequest, SessionState, TreeResponse } from "@/lib/api/types";
+import type { AscendMove, SessionState, TreeResponse } from "@/lib/api/types";
 import { LevelView } from "@/components/levels/LevelView";
 import { L0Datum } from "@/components/levels/L0Datum";
 import { Icon } from "@/components/ui/Icon";
@@ -21,6 +21,13 @@ import { Brand, LevelLadder, ModeToggle, WorkflowSidebar } from "@/components/sh
 import { GuidedHeader, WorkflowNav } from "@/components/shell/Guided";
 import { ExploreMetrics, ExploreNavOptions } from "@/components/shell/Explore";
 import { CoreCard, IntentCard, JourneyCard } from "@/components/shell/Context";
+import {
+  EdgeControls,
+  buildAscendBody,
+  buildDescendBody,
+  defaultEdgeParams,
+  type EdgeParams,
+} from "@/components/shell/EdgeControls";
 import {
   INTENTS,
   LEVEL_COPY,
@@ -69,6 +76,12 @@ export default function SessionPage({ params }: { params: Promise<{ id: string }
   const [toast, setToast] = useState<string | null>(null);
   const [dark, setDark] = useState(false);
   const [showContext, setShowContext] = useState(true);
+
+  // Per-edge transition parameters captured by EdgeControls (replaces the old
+  // hardcoded defaults). Prefilled so "Next" still works one-click.
+  const [edgeParams, setEdgeParams] = useState<EdgeParams>(defaultEdgeParams);
+  const patchEdge = (patch: Partial<EdgeParams>) =>
+    setEdgeParams((p) => ({ ...p, ...patch }));
 
   // theme tweak → :root
   useEffect(() => {
@@ -123,21 +136,36 @@ export default function SessionPage({ params }: { params: Promise<{ id: string }
 
   const canDescend = (session.data?.available_moves?.descend?.length ?? 0) > 0;
   const canAscend = (session.data?.available_moves?.ascend?.length ?? 0) > 0;
+  const ascendMove = session.data?.available_moves?.ascend?.[0] as AscendMove | undefined;
+
+  // Which transition the guided "Next" will run (so EdgeControls shows the
+  // matching inputs) — null on the L0 pivot and final export steps.
+  const guidedEdge: { dir: "descend" | "ascend"; level: number } | null =
+    stepIndex <= 3
+      ? { dir: "descend", level: currentLevel }
+      : stepIndex === 5
+        ? { dir: "ascend", level: 0 }
+        : stepIndex === 6 || stepIndex === 7
+          ? { dir: "ascend", level: currentLevel }
+          : null;
 
   function flash(msg: string) {
     setToast(msg);
     setTimeout(() => setToast(null), 2600);
   }
 
+  // Reset the captured params after a move so the next edge starts clean.
+  const afterMove = { onSuccess: () => setEdgeParams(defaultEdgeParams()) };
+
   // ---- guided transitions ----
   function guidedNext() {
     if (stepIndex < 4) {
-      descend.mutate(descendParams(currentLevel));
+      descend.mutate(buildDescendBody(currentLevel, edgeParams, session.data?.options), afterMove);
     } else if (stepIndex === 4) {
       setIntentPivot(true); // L0 reached → reveal the intent pivot (no backend move)
     } else if (stepIndex >= 5 && stepIndex < TOTAL_STEPS - 1) {
       setIntentPivot(false);
-      ascend.mutate({});
+      ascend.mutate(buildAscendBody(currentLevel, edgeParams), afterMove);
     } else {
       void exportDataset();
     }
@@ -158,11 +186,11 @@ export default function SessionPage({ params }: { params: Promise<{ id: string }
   // ---- explore transitions ----
   function exploreDescend() {
     setStepsTaken((s) => s + 1);
-    descend.mutate(descendParams(currentLevel));
+    descend.mutate(buildDescendBody(currentLevel, edgeParams, session.data?.options), afterMove);
   }
   function exploreAscend() {
     setStepsTaken((s) => s + 1);
-    ascend.mutate({});
+    ascend.mutate(buildAscendBody(currentLevel, edgeParams), afterMove);
   }
 
   function switchMode(m: "guided" | "explore") {
@@ -299,6 +327,16 @@ export default function SessionPage({ params }: { params: Promise<{ id: string }
                     <LevelView node={node.data} level={currentLevel} />
                   )}
                 </div>
+                {guidedEdge && (
+                  <EdgeControls
+                    dir={guidedEdge.dir}
+                    level={guidedEdge.level}
+                    options={session.data?.options}
+                    ascendMove={ascendMove}
+                    params={edgeParams}
+                    onChange={patchEdge}
+                  />
+                )}
                 <WorkflowNav
                   stepIndex={stepIndex}
                   total={TOTAL_STEPS}
@@ -331,6 +369,24 @@ export default function SessionPage({ params }: { params: Promise<{ id: string }
                   onAscend={exploreAscend}
                   pending={pending}
                 />
+                {canDescend && (
+                  <EdgeControls
+                    dir="descend"
+                    level={currentLevel}
+                    options={session.data?.options}
+                    params={edgeParams}
+                    onChange={patchEdge}
+                  />
+                )}
+                {canAscend && (
+                  <EdgeControls
+                    dir="ascend"
+                    level={currentLevel}
+                    ascendMove={ascendMove}
+                    params={edgeParams}
+                    onChange={patchEdge}
+                  />
+                )}
                 <div style={{ height: "var(--gap)" }} />
                 <div className="divider" />
                 <div style={{ padding: "18px 0 6px", display: "flex", alignItems: "center", gap: 9 }}>
@@ -432,22 +488,6 @@ function StagePlaceholder() {
       <span className="t-meta">Loading the current level…</span>
     </div>
   );
-}
-
-/** Per-edge descend params (defaults proven against the demo datasets). */
-function descendParams(level: number): DescendRequest {
-  switch (level) {
-    case 4:
-      return { builder: "rows_as_nodes" };
-    case 3:
-      return { domains: ["high score", "low score"] };
-    case 2:
-      return { column: "value" };
-    case 1:
-      return { aggregation: "mean" };
-    default:
-      return {};
-  }
 }
 
 /** The L0 value, as a display string — from the current node or the tree's L0 node. */

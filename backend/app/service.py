@@ -19,8 +19,11 @@ from intuitiveness.navigation.exceptions import NavigationError, SessionNotFound
 from intuitiveness.persistence.durable_backend import get_durable_backend
 from intuitiveness.persistence.session_export import export_session, import_session
 
-from .builders import resolve_builder
+from .builders import DESCENT_BUILDERS, resolve_builder
 from .demo import load_demo
+
+# Aggregations the L1→L0 step offers (all are pandas Series reducers).
+_AGGREGATIONS = ["mean", "sum", "count", "min", "max", "median", "std"]
 
 
 def _json_safe(value: Any) -> Any:
@@ -77,7 +80,46 @@ class SessionService:
             "current_node_id": session.navigation_tree.current_id,
             "summary": self._summary(session),
             "available_moves": session.get_available_moves(),
+            "options": self._options(session),
         }
+
+    def _options(self, session: NavigationSession) -> Dict[str, Any]:
+        """Introspection for the UI's per-edge controls: the real choices
+        available for the NEXT transition from the current node. Ascent option
+        lists (enrichment functions, dimensions) already ride on
+        `available_moves`; this fills the descent gaps (builders, columns,
+        aggregations) the engine honors but the API didn't expose.
+        """
+        level = session.current_level.value
+        ds = session.current_dataset
+        data = ds.get_data()
+        opts: Dict[str, Any] = {
+            "builders": list(DESCENT_BUILDERS.keys()),   # L4→L3
+            "aggregations": _AGGREGATIONS,               # L1→L0
+            "columns": [],                               # context-dependent (see below)
+            "sources": [],                               # L4 source filenames
+        }
+        try:
+            if level == 4 and isinstance(data, dict) and data:
+                opts["sources"] = list(data.keys())
+                first = next(iter(data.values()))
+                opts["columns"] = [str(c) for c in getattr(first, "columns", [])]
+            elif level == 3:
+                # Graph node attributes become the table's columns at L2.
+                if hasattr(data, "nodes"):
+                    keys: set = set()
+                    for _, attrs in list(data.nodes(data=True))[:100]:
+                        keys.update(attrs.keys())
+                    opts["columns"] = sorted(str(k) for k in keys)
+                elif hasattr(data, "columns"):
+                    opts["columns"] = [str(c) for c in data.columns]
+            elif level == 2 and hasattr(data, "columns"):
+                opts["columns"] = [str(c) for c in data.columns]
+            elif level == 1:
+                opts["columns"] = [str(getattr(ds, "name", "value"))]
+        except Exception:  # never let introspection break the state read
+            pass
+        return opts
 
     def _summary(self, session: NavigationSession) -> Dict[str, Any]:
         ds = session.current_dataset

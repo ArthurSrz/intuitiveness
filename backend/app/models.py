@@ -40,6 +40,14 @@ class SessionState(BaseModel):
         default_factory=dict,
         description="{'descend': [...], 'ascend': [...]} valid next transitions.",
     )
+    options: Dict[str, Any] = Field(
+        default_factory=dict,
+        description=(
+            "Introspection for per-edge controls: builders, aggregations, the "
+            "current node's columns, and source names. Ascent option lists "
+            "(enrichment_functions, dimensions) ride on available_moves."
+        ),
+    )
 
 
 class SessionSummary(BaseModel):
