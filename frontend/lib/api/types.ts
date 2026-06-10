@@ -18,23 +18,8 @@ export type BranchFromRequest = components["schemas"]["BranchFromRequest"];
 export type MutationCount = components["schemas"]["MutationCount"];
 export type HealthResponse = components["schemas"]["HealthResponse"];
 
-/** Demo datasets the landing page offers. */
-export const DEMO_SOURCES = [
-  { id: "demo:school_scores", label: "School Scores" },
-  { id: "demo:ademe", label: "ADEME Fundings" },
-  { id: "demo:energy", label: "Energy Prices" },
-] as const;
-
-export type DemoSource = (typeof DEMO_SOURCES)[number]["id"];
-
-/** Human labels per abstraction level (L4 raw -> L0 datum). */
-export const LEVEL_NAMES: Record<number, string> = {
-  4: "Sources",
-  3: "Graph",
-  2: "Table",
-  1: "Vector",
-  0: "Datum",
-};
+/** Demo dataset sources the landing page can start a session from. */
+export type DemoSource = "demo:school_scores" | "demo:ademe" | "demo:energy";
 
 /** A single node in the move tree (`GET /tree` returns these flat). */
 export interface TreeNode {
@@ -80,17 +65,4 @@ export interface NodeDetail {
   edge_decision?: unknown;
   output_snapshot?: Record<string, unknown>;
   summary?: Record<string, unknown>;
-}
-
-/** node-link JSON shape (NetworkX) we expect for an L3 graph payload. */
-export interface GraphPayload {
-  directed?: boolean;
-  multigraph?: boolean;
-  graph?: Record<string, unknown>;
-  nodes: Array<{ id: string | number; [key: string]: unknown }>;
-  links: Array<{
-    source: string | number;
-    target: string | number;
-    [key: string]: unknown;
-  }>;
 }

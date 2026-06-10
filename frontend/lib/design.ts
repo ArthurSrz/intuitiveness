@@ -5,8 +5,6 @@
  * guided-workflow steps, and per-level narrative copy are static design data;
  * the *values* shown in each view come from the live backend session.
  */
-import type { IconName } from "@/components/ui/Icon";
-
 export type Phase = "descent" | "ascent" | "pivot";
 
 /** The five granularity levels, top (L4 raw) → bottom (L0 datum). */
@@ -127,9 +125,4 @@ export function gradientColor(t: number): string {
 export function scoreColor(value: number, min = 0, max = 100): string {
   const span = max - min || 1;
   return gradientColor((value - min) / span);
-}
-
-/** The icon glyph for a level number. */
-export function glyphForLevel(level: number): IconName {
-  return (LEVELS.find((l) => l.n === level)?.glyph ?? "dot") as IconName;
 }
