@@ -1,19 +1,42 @@
 """Session lifecycle endpoints (spec 017, T010).
 
-POST create / GET state / GET list / DELETE — all delegate to `SessionService`.
+POST create / POST upload / GET state / GET list / DELETE — all delegate to `SessionService`.
 """
 
 from __future__ import annotations
 
+import csv
+import io
 from typing import List
 
-from fastapi import APIRouter, Depends, status
+import pandas as pd
+from fastapi import APIRouter, Depends, HTTPException, UploadFile, status
 
 from ..deps import get_session_service
 from ..models import CreateSessionRequest, SessionState, SessionSummary
 from ..service import SessionService
 
 router = APIRouter(prefix="/sessions", tags=["sessions"])
+
+
+def _parse_csv(upload: UploadFile) -> pd.DataFrame:
+    """Read a CSV UploadFile into a DataFrame — tries utf-8 then latin-1."""
+    raw = upload.file.read()
+    for enc in ("utf-8-sig", "utf-8", "latin-1"):
+        try:
+            text = raw.decode(enc)
+            break
+        except UnicodeDecodeError:
+            continue
+    else:
+        raise HTTPException(status_code=422, detail=f"Cannot decode '{upload.filename}' — try saving it as UTF-8.")
+    # Sniff delimiter (comma, semicolon, tab, pipe)
+    try:
+        dialect = csv.Sniffer().sniff(text[:4096], delimiters=",;\t|")
+        sep = dialect.delimiter
+    except csv.Error:
+        sep = ","
+    return pd.read_csv(io.StringIO(text), sep=sep)
 
 
 @router.post("", response_model=SessionState, status_code=status.HTTP_201_CREATED)
@@ -23,6 +46,27 @@ def create_session(
 ) -> SessionState:
     """Create a new session at L4 from a named demo dataset."""
     return svc.create(body.source)
+
+
+@router.post("/upload", response_model=SessionState, status_code=status.HTTP_201_CREATED)
+def upload_csv(
+    files: List[UploadFile],
+    svc: SessionService = Depends(get_session_service),
+) -> SessionState:
+    """Create a session from one or more uploaded CSV files.
+
+    Each file becomes one source table in the L4 dataset.  Encoding (utf-8 /
+    latin-1) and delimiter (, ; \\t |) are detected automatically.
+    """
+    if not files:
+        raise HTTPException(status_code=422, detail="At least one CSV file is required.")
+    tables: dict = {}
+    for upload in files:
+        name = upload.filename or f"table_{len(tables) + 1}"
+        if name in tables:
+            name = f"{name}_{len(tables)}"
+        tables[name] = _parse_csv(upload)
+    return svc.create_from_tables(tables)
 
 
 @router.get("", response_model=List[SessionSummary])

@@ -13,7 +13,7 @@ import {
   useQueryClient,
   type UseQueryResult,
 } from "@tanstack/react-query";
-import { apiDelete, apiGet, apiPost } from "./client";
+import { apiDelete, apiGet, apiPost, apiUpload } from "./client";
 import type {
   AscendRequest,
   BranchFromRequest,
@@ -103,6 +103,17 @@ export function useCreateSession() {
   return useMutation({
     mutationFn: (body: CreateSessionRequest) =>
       apiPost<SessionState>("/sessions", body),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: queryKeys.sessions });
+    },
+  });
+}
+
+export function useUploadCsv() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (files: File[]) =>
+      apiUpload<SessionState>("/sessions/upload", files),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: queryKeys.sessions });
     },

@@ -14,6 +14,8 @@ from __future__ import annotations
 
 from typing import Any, Dict, List, Optional
 
+import pandas as pd
+from intuitiveness.complexity import Level4Dataset
 from intuitiveness.navigation.session import NavigationSession
 from intuitiveness.navigation.exceptions import NavigationError, SessionNotFoundError
 from intuitiveness.persistence.durable_backend import get_durable_backend
@@ -136,6 +138,13 @@ class SessionService:
     # ------------------------------------------------------------------ #
     def create(self, source: str) -> Dict[str, Any]:
         l4 = load_demo(source)
+        session = NavigationSession(l4)
+        self._save(session)
+        return self.state_of(session)
+
+    def create_from_tables(self, tables: Dict[str, "pd.DataFrame"]) -> Dict[str, Any]:
+        """Create a session from caller-supplied DataFrames (CSV upload path)."""
+        l4 = Level4Dataset(tables)
         session = NavigationSession(l4)
         self._save(session)
         return self.state_of(session)

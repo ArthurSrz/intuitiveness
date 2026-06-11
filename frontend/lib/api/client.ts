@@ -100,3 +100,14 @@ export function apiPost<T>(path: string, body?: unknown): Promise<T> {
 export function apiDelete<T = void>(path: string): Promise<T> {
   return request<T>(path, { method: "DELETE" });
 }
+
+export async function apiUpload<T>(path: string, files: File[]): Promise<T> {
+  const form = new FormData();
+  for (const f of files) form.append("files", f);
+  const response = await fetch(`${API_BASE_URL}${path}`, { method: "POST", body: form });
+  if (!response.ok) {
+    const text = await response.text().catch(() => response.statusText);
+    throw new ApiError(response.status, text, text);
+  }
+  return response.json() as Promise<T>;
+}

@@ -1,8 +1,8 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useEffect, useState } from "react";
-import { useCreateSession } from "@/lib/api/hooks";
+import { useEffect, useRef, useState } from "react";
+import { useCreateSession, useUploadCsv } from "@/lib/api/hooks";
 import { ApiError } from "@/lib/api/client";
 import type { DemoSource } from "@/lib/api/types";
 import { Icon } from "@/components/ui/Icon";
@@ -20,7 +20,10 @@ import { gradientColor } from "@/lib/design";
 export default function HomePage() {
   const router = useRouter();
   const createSession = useCreateSession();
+  const uploadCsv = useUploadCsv();
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const [pendingSource, setPendingSource] = useState<DemoSource | null>(null);
+  const [uploadError, setUploadError] = useState<string | null>(null);
 
   // First visit plays the animated descent–ascent intro (served from
   // /public/intro). Once "Enter the app" / "Skip intro" is clicked it sets the
@@ -50,8 +53,20 @@ export default function HomePage() {
     );
   }
 
-  const busy = createSession.isPending;
-  const error = createSession.error as ApiError | null;
+  function handleUpload(e: React.ChangeEvent<HTMLInputElement>) {
+    const files = Array.from(e.target.files ?? []);
+    if (!files.length) return;
+    setUploadError(null);
+    uploadCsv.mutate(files, {
+      onSuccess: (state) => router.push(`/session/${state.session_id}`),
+      onError: (err) => setUploadError(err instanceof ApiError ? err.displayMessage : String(err)),
+    });
+    // reset so re-selecting the same file fires onChange again
+    if (fileInputRef.current) fileInputRef.current.value = "";
+  }
+
+  const busy = createSession.isPending || uploadCsv.isPending;
+  const error = (createSession.error ?? uploadError) as ApiError | string | null;
 
   // Hold the landing back until the intro check runs (avoids a flash before the
   // first-visit redirect to /intro).
@@ -291,8 +306,16 @@ export default function HomePage() {
           </div>
 
           {/* bring your own */}
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept=".csv,text/csv"
+            multiple
+            style={{ display: "none" }}
+            onChange={handleUpload}
+          />
           <button
-            onClick={() => start("demo:ademe")}
+            onClick={() => !busy && fileInputRef.current?.click()}
             disabled={busy}
             style={{
               marginTop: "var(--gap)",
@@ -305,9 +328,10 @@ export default function HomePage() {
               borderRadius: "var(--radius-xl)",
               border: "2px dashed var(--border-strong)",
               background: "var(--bg)",
+              cursor: busy ? "wait" : "pointer",
               transition: "border-color .15s",
             }}
-            onMouseEnter={(e) => (e.currentTarget.style.borderColor = "var(--blue)")}
+            onMouseEnter={(e) => !busy && (e.currentTarget.style.borderColor = "var(--blue)")}
             onMouseLeave={(e) => (e.currentTarget.style.borderColor = "var(--border-strong)")}
           >
             <span
@@ -320,7 +344,7 @@ export default function HomePage() {
                 alignItems: "center",
                 justifyContent: "center",
                 background: "var(--surface)",
-                color: "var(--text-2)",
+                color: uploadCsv.isPending ? "var(--blue)" : "var(--text-2)",
               }}
             >
               <Icon name="export" size={21} stroke={1.9} />
@@ -330,12 +354,13 @@ export default function HomePage() {
                 Bring your own data
               </div>
               <div className="t-meta">
-                Upload one or more CSV files — encoding and delimiter are detected for you, then we
-                build the raw view to begin.
+                {uploadCsv.isPending
+                  ? "Uploading…"
+                  : "Upload one or more CSV files — encoding and delimiter are detected for you, then we build the raw view to begin."}
               </div>
             </div>
             <span className="pill-btn ghost" style={{ height: 40, flex: "none", pointerEvents: "none" }}>
-              Choose files <Icon name="export" size={16} stroke={2.1} />
+              {uploadCsv.isPending ? "Uploading…" : <>Choose files <Icon name="export" size={16} stroke={2.1} /></>}
             </span>
           </button>
 
@@ -348,7 +373,8 @@ export default function HomePage() {
                 paddingLeft: 4,
               }}
             >
-              Could not start a session: {error.displayMessage}
+              Could not start a session:{" "}
+              {typeof error === "string" ? error : (error as ApiError).displayMessage}
             </p>
           )}
         </div>
