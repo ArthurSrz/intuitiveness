@@ -258,103 +258,103 @@ export default function HomePage() {
           <div style={{ marginBottom: 20 }}>
             <form
               onSubmit={handleSearch}
-              className=”card”
+              className="card"
               style={{
-                display: “flex”,
-                alignItems: “center”,
+                display: "flex",
+                alignItems: "center",
                 gap: 6,
-                padding: “6px 6px 6px 18px”,
-                borderRadius: “var(--pill)”,
-                background: “var(--bg)”,
-                boxShadow: “var(--shadow-1)”,
+                padding: "6px 6px 6px 18px",
+                borderRadius: "var(--pill)",
+                background: "var(--bg)",
+                boxShadow: "var(--shadow-1)",
               }}
             >
-              <Icon name=”search” size={20} style={{ color: searchBusy ? “var(--blue)” : “var(--text-2)”, flex: “none” }} />
+              <Icon name="search" size={20} style={{ color: searchBusy ? "var(--blue)" : "var(--text-2)", flex: "none" }} />
               <input
-                type=”text”
+                type="text"
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                placeholder={`Search open data — “résultats du brevet”, “GDP per capita”…`}
+                placeholder={`Search open data — "résultats du brevet", "GDP per capita"…`}
                 style={{
                   flex: 1,
                   minWidth: 0,
-                  border: “none”,
-                  background: “transparent”,
-                  outline: “none”,
-                  color: “var(--text)”,
-                  fontFamily: “var(--font)”,
+                  border: "none",
+                  background: "transparent",
+                  outline: "none",
+                  color: "var(--text)",
+                  fontFamily: "var(--font)",
                   fontSize: 15,
-                  padding: “11px 8px”,
+                  padding: "11px 8px",
                 }}
               />
               <button
-                type=”submit”
-                className=”pill-btn primary”
-                style={{ height: 42, flex: “none” }}
+                type="submit"
+                className="pill-btn primary"
+                style={{ height: 42, flex: "none" }}
                 disabled={searchBusy || !searchQuery.trim()}
               >
-                {searchBusy ? “Searching…” : <>Search <Icon name=”arrowRight” size={16} stroke={2.1} /></>}
+                {searchBusy ? "Searching…" : <>Search <Icon name="arrowRight" size={16} stroke={2.1} /></>}
               </button>
             </form>
             <div
               style={{
-                display: “flex”,
-                alignItems: “center”,
+                display: "flex",
+                alignItems: "center",
                 gap: 8,
                 marginTop: 11,
                 paddingLeft: 4,
-                flexWrap: “wrap”,
+                flexWrap: "wrap",
               }}
             >
-              <span className=”t-meta”>Searches across</span>
-              <span className=”chip mono” style={{ whiteSpace: “nowrap” }}>
-                <Icon name=”dataset” size={13} /> data.gouv.fr
+              <span className="t-meta">Searches across</span>
+              <span className="chip mono" style={{ whiteSpace: "nowrap" }}>
+                <Icon name="dataset" size={13} /> data.gouv.fr
               </span>
-              <span className=”t-meta” style={{ whiteSpace: “nowrap” }}>
+              <span className="t-meta" style={{ whiteSpace: "nowrap" }}>
                 · hundreds of thousands of public datasets
               </span>
             </div>
 
             {/* search results */}
             {searchError && (
-              <p className=”t-meta” style={{ color: “var(--error)”, marginTop: 10, paddingLeft: 4 }}>
+              <p className="t-meta" style={{ color: "var(--error)", marginTop: 10, paddingLeft: 4 }}>
                 {searchError}
               </p>
             )}
             {searchResults && searchResults.length > 0 && (
-              <div style={{ marginTop: 12, display: “flex”, flexDirection: “column”, gap: 8 }}>
+              <div style={{ marginTop: 12, display: "flex", flexDirection: "column", gap: 8 }}>
                 {searchResults.map((ds) => (
                   <div
                     key={ds.id}
-                    className=”card”
+                    className="card"
                     style={{
-                      display: “flex”,
-                      alignItems: “flex-start”,
+                      display: "flex",
+                      alignItems: "flex-start",
                       gap: 14,
-                      padding: “12px 16px”,
-                      borderRadius: “var(--radius-xl)”,
+                      padding: "12px 16px",
+                      borderRadius: "var(--radius-xl)",
                     }}
                   >
                     <div style={{ flex: 1, minWidth: 0 }}>
-                      <div className=”t-name” style={{ fontSize: 14.5, marginBottom: 2 }}>{ds.title}</div>
-                      <div className=”t-meta” style={{ marginBottom: 4 }}>{ds.organization}</div>
+                      <div className="t-name" style={{ fontSize: 14.5, marginBottom: 2 }}>{ds.title}</div>
+                      <div className="t-meta" style={{ marginBottom: 4 }}>{ds.organization}</div>
                       {ds.description && (
-                        <div className=”t-meta” style={{ color: “var(--text-2)”, fontSize: 12.5, lineHeight: 1.45 }}>
+                        <div className="t-meta" style={{ color: "var(--text-2)", fontSize: 12.5, lineHeight: 1.45 }}>
                           {ds.description}
                         </div>
                       )}
                     </div>
                     <button
-                      className=”pill-btn ghost”
-                      style={{ height: 34, flex: “none”, fontSize: 13, whiteSpace: “nowrap” }}
+                      className="pill-btn ghost"
+                      style={{ height: 34, flex: "none", fontSize: 13, whiteSpace: "nowrap" }}
                       disabled={!!importingId || !ds.has_csv}
                       onClick={() => handleImportDataset(ds)}
                     >
                       {importingId === ds.id
-                        ? “Importing…”
+                        ? "Importing…"
                         : ds.has_csv
-                          ? <>Import <Icon name=”arrowRight” size={13} stroke={2.1} /></>
-                          : “No CSV”}
+                          ? <>Import <Icon name="arrowRight" size={13} stroke={2.1} /></>
+                          : "No CSV"}
                     </button>
                   </div>
                 ))}
