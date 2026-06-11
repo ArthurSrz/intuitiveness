@@ -2,11 +2,26 @@
 
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
-import { useCreateSession, useUploadCsv } from "@/lib/api/hooks";
-import { ApiError } from "@/lib/api/client";
+import { useCreateSession, useUploadCsv, useImportUrl } from "@/lib/api/hooks";
+import { apiGet, ApiError } from "@/lib/api/client";
 import type { DemoSource } from "@/lib/api/types";
 import { Icon } from "@/components/ui/Icon";
 import { gradientColor } from "@/lib/design";
+
+interface DatasetResult {
+  id: string;
+  title: string;
+  description: string;
+  organization: string;
+  has_csv: boolean;
+  resource_count: number;
+}
+
+interface SearchResponse {
+  datasets: DatasetResult[];
+  total: number;
+  has_more: boolean;
+}
 
 /*
  * Landing — the "Interactive Data Redesign Method" entry screen, recreated from
@@ -21,9 +36,15 @@ export default function HomePage() {
   const router = useRouter();
   const createSession = useCreateSession();
   const uploadCsv = useUploadCsv();
+  const importUrl = useImportUrl();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [pendingSource, setPendingSource] = useState<DemoSource | null>(null);
   const [uploadError, setUploadError] = useState<string | null>(null);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [searchResults, setSearchResults] = useState<DatasetResult[] | null>(null);
+  const [searchBusy, setSearchBusy] = useState(false);
+  const [searchError, setSearchError] = useState<string | null>(null);
+  const [importingId, setImportingId] = useState<string | null>(null);
 
   // First visit plays the animated descent–ascent intro (served from
   // /public/intro). Once "Enter the app" / "Skip intro" is clicked it sets the
@@ -53,6 +74,39 @@ export default function HomePage() {
     );
   }
 
+  async function handleSearch(e: React.FormEvent) {
+    e.preventDefault();
+    if (!searchQuery.trim()) return;
+    setSearchBusy(true);
+    setSearchError(null);
+    setSearchResults(null);
+    try {
+      const res = await apiGet<SearchResponse>(`/search?q=${encodeURIComponent(searchQuery)}&size=8`);
+      setSearchResults(res.datasets);
+      if (res.datasets.length === 0) setSearchError("No datasets found — try different keywords.");
+    } catch (err) {
+      setSearchError(err instanceof ApiError ? err.displayMessage : "Search unavailable.");
+    } finally {
+      setSearchBusy(false);
+    }
+  }
+
+  function handleImportDataset(ds: DatasetResult) {
+    setImportingId(ds.id);
+    // We import the dataset page URL; the backend resolves its first CSV resource.
+    const datagouv_page = `https://www.data.gouv.fr/fr/datasets/${ds.id}/`;
+    importUrl.mutate(
+      { url: datagouv_page, filename: ds.title + ".csv" },
+      {
+        onSuccess: (state) => router.push(`/session/${state.session_id}`),
+        onError: (err) => {
+          setSearchError(err instanceof ApiError ? err.displayMessage : String(err));
+          setImportingId(null);
+        },
+      },
+    );
+  }
+
   function handleUpload(e: React.ChangeEvent<HTMLInputElement>) {
     const files = Array.from(e.target.files ?? []);
     if (!files.length) return;
@@ -65,7 +119,7 @@ export default function HomePage() {
     if (fileInputRef.current) fileInputRef.current.value = "";
   }
 
-  const busy = createSession.isPending || uploadCsv.isPending;
+  const busy = createSession.isPending || uploadCsv.isPending || importUrl.isPending;
   const error = (createSession.error ?? uploadError) as ApiError | string | null;
 
   // Hold the landing back until the intro check runs (avoids a flash before the
@@ -200,65 +254,112 @@ export default function HomePage() {
             <span className="divider" style={{ flex: 1 }} />
           </div>
 
-          {/* federated open-data search (data.gouv.fr + World Bank via the app) */}
+          {/* federated open-data search (data.gouv.fr via the backend) */}
           <div style={{ marginBottom: 20 }}>
             <form
-              onSubmit={(e) => {
-                e.preventDefault();
-                start("demo:school_scores");
-              }}
-              className="card"
+              onSubmit={handleSearch}
+              className=”card”
               style={{
-                display: "flex",
-                alignItems: "center",
+                display: “flex”,
+                alignItems: “center”,
                 gap: 6,
-                padding: "6px 6px 6px 18px",
-                borderRadius: "var(--pill)",
-                background: "var(--bg)",
-                boxShadow: "var(--shadow-1)",
+                padding: “6px 6px 6px 18px”,
+                borderRadius: “var(--pill)”,
+                background: “var(--bg)”,
+                boxShadow: “var(--shadow-1)”,
               }}
             >
-              <Icon name="search" size={20} style={{ color: "var(--text-2)", flex: "none" }} />
+              <Icon name=”search” size={20} style={{ color: searchBusy ? “var(--blue)” : “var(--text-2)”, flex: “none” }} />
               <input
-                type="text"
-                placeholder="Search open data in plain language — “résultats du brevet”, “GDP per capita”…"
+                type=”text”
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                placeholder={`Search open data — “résultats du brevet”, “GDP per capita”…`}
                 style={{
                   flex: 1,
                   minWidth: 0,
-                  border: "none",
-                  background: "transparent",
-                  outline: "none",
-                  color: "var(--text)",
-                  fontFamily: "var(--font)",
+                  border: “none”,
+                  background: “transparent”,
+                  outline: “none”,
+                  color: “var(--text)”,
+                  fontFamily: “var(--font)”,
                   fontSize: 15,
-                  padding: "11px 8px",
+                  padding: “11px 8px”,
                 }}
               />
-              <button type="submit" className="pill-btn primary" style={{ height: 42, flex: "none" }} disabled={busy}>
-                Search <Icon name="arrowRight" size={16} stroke={2.1} />
+              <button
+                type=”submit”
+                className=”pill-btn primary”
+                style={{ height: 42, flex: “none” }}
+                disabled={searchBusy || !searchQuery.trim()}
+              >
+                {searchBusy ? “Searching…” : <>Search <Icon name=”arrowRight” size={16} stroke={2.1} /></>}
               </button>
             </form>
             <div
               style={{
-                display: "flex",
-                alignItems: "center",
+                display: “flex”,
+                alignItems: “center”,
                 gap: 8,
                 marginTop: 11,
                 paddingLeft: 4,
-                flexWrap: "wrap",
+                flexWrap: “wrap”,
               }}
             >
-              <span className="t-meta">Searches across</span>
-              <span className="chip mono" style={{ whiteSpace: "nowrap" }}>
-                <Icon name="dataset" size={13} /> data.gouv.fr
+              <span className=”t-meta”>Searches across</span>
+              <span className=”chip mono” style={{ whiteSpace: “nowrap” }}>
+                <Icon name=”dataset” size={13} /> data.gouv.fr
               </span>
-              <span className="chip mono" style={{ whiteSpace: "nowrap" }}>
-                <Icon name="core" size={13} /> World Bank
-              </span>
-              <span className="t-meta" style={{ whiteSpace: "nowrap" }}>
-                · tens of thousands of public datasets, in one query
+              <span className=”t-meta” style={{ whiteSpace: “nowrap” }}>
+                · hundreds of thousands of public datasets
               </span>
             </div>
+
+            {/* search results */}
+            {searchError && (
+              <p className=”t-meta” style={{ color: “var(--error)”, marginTop: 10, paddingLeft: 4 }}>
+                {searchError}
+              </p>
+            )}
+            {searchResults && searchResults.length > 0 && (
+              <div style={{ marginTop: 12, display: “flex”, flexDirection: “column”, gap: 8 }}>
+                {searchResults.map((ds) => (
+                  <div
+                    key={ds.id}
+                    className=”card”
+                    style={{
+                      display: “flex”,
+                      alignItems: “flex-start”,
+                      gap: 14,
+                      padding: “12px 16px”,
+                      borderRadius: “var(--radius-xl)”,
+                    }}
+                  >
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div className=”t-name” style={{ fontSize: 14.5, marginBottom: 2 }}>{ds.title}</div>
+                      <div className=”t-meta” style={{ marginBottom: 4 }}>{ds.organization}</div>
+                      {ds.description && (
+                        <div className=”t-meta” style={{ color: “var(--text-2)”, fontSize: 12.5, lineHeight: 1.45 }}>
+                          {ds.description}
+                        </div>
+                      )}
+                    </div>
+                    <button
+                      className=”pill-btn ghost”
+                      style={{ height: 34, flex: “none”, fontSize: 13, whiteSpace: “nowrap” }}
+                      disabled={!!importingId || !ds.has_csv}
+                      onClick={() => handleImportDataset(ds)}
+                    >
+                      {importingId === ds.id
+                        ? “Importing…”
+                        : ds.has_csv
+                          ? <>Import <Icon name=”arrowRight” size={13} stroke={2.1} /></>
+                          : “No CSV”}
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
 
           {/* the paper's two demo use-cases */}

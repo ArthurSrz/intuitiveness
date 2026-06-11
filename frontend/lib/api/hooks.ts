@@ -109,6 +109,17 @@ export function useCreateSession() {
   });
 }
 
+export function useImportUrl() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (body: { url: string; filename?: string }) =>
+      apiPost<SessionState>("/sessions/import-url", body),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: queryKeys.sessions });
+    },
+  });
+}
+
 export function useUploadCsv() {
   const queryClient = useQueryClient();
   return useMutation({
