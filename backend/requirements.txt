@@ -1,0 +1,16 @@
+# Backend (spec 017) — FastAPI adapter over the headless `intuitiveness` core.
+# The core itself (engine/navigation/persistence) is installed editable from the
+# repo root with its postgres + graph extras, so no business logic is duplicated.
+
+fastapi>=0.110
+uvicorn[standard]>=0.29
+pydantic>=2.6
+httpx>=0.27            # ASGI test client + outbound calls
+python-multipart>=0.0.9  # form/file uploads (future L4 upload)
+
+# The existing package, with the durable Postgres store + Memgraph graph extras.
+# `-e` keeps it editable so backend and core stay in lockstep in the monorepo.
+-e ..[postgres,graph]
+
+# Test-only (kept here so the Railway build can run them if desired)
+pytest>=8.0

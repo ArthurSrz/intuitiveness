@@ -1,0 +1,312 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ============================================================================
+   Blue Pulse global styles — ported verbatim from the Intuitiveness design
+   handoff (Intuitiveness.html <style>). These helper classes are the design's
+   shared vocabulary; the redesigned components lean on them so the React build
+   matches the prototype pixel-for-pixel.
+   ============================================================================ */
+
+* {
+  box-sizing: border-box;
+}
+html,
+body {
+  margin: 0;
+  padding: 0;
+  min-height: 100%;
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font);
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+button {
+  font-family: inherit;
+  cursor: pointer;
+}
+a {
+  color: var(--blue);
+  text-decoration: none;
+}
+::selection {
+  background: rgba(29, 161, 242, 0.22);
+}
+
+/* scrollbars */
+*::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+*::-webkit-scrollbar-thumb {
+  background: var(--border-strong);
+  border-radius: var(--pill);
+  border: 3px solid var(--bg);
+}
+*::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+/* ===================== Type scale ===================== */
+.t-display {
+  font-size: 32px;
+  line-height: 40px;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+}
+.t-title {
+  font-size: 20px;
+  line-height: 24px;
+  font-weight: 800;
+  letter-spacing: -0.01em;
+}
+.t-section {
+  font-size: 20px;
+  line-height: 24px;
+  font-weight: 700;
+}
+.t-body {
+  font-size: 15px;
+  line-height: 20px;
+  font-weight: 400;
+}
+.t-name {
+  font-size: 15px;
+  line-height: 20px;
+  font-weight: 700;
+}
+.t-small {
+  font-size: 13px;
+  line-height: 16px;
+  font-weight: 400;
+}
+.t-label {
+  font-size: 13px;
+  line-height: 16px;
+  font-weight: 700;
+}
+.t-meta {
+  font-size: 13px;
+  line-height: 16px;
+  font-weight: 400;
+  color: var(--text-2);
+}
+.mono {
+  font-family: var(--mono);
+  font-variant-ligatures: none;
+}
+
+/* ===================== Reusable bits ===================== */
+.pill-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  height: 36px;
+  padding: 0 18px;
+  border: none;
+  background: none;
+  color: inherit;
+  border-radius: var(--pill);
+  font-size: 15px;
+  font-weight: 700;
+  line-height: 1;
+  white-space: nowrap;
+  transition: background 0.15s ease, color 0.15s ease, border-color 0.15s ease,
+    transform 0.08s ease, opacity 0.15s ease;
+}
+.pill-btn:active {
+  transform: translateY(1px);
+}
+.pill-btn.primary {
+  background: var(--blue);
+  color: #fff;
+}
+.pill-btn.primary:hover {
+  background: var(--blue-hover);
+}
+.pill-btn.dark {
+  background: var(--ink);
+  color: var(--bg);
+}
+.pill-btn.dark:hover {
+  opacity: 0.88;
+}
+.pill-btn.ghost {
+  border: 1px solid var(--border-strong);
+  color: var(--text);
+}
+.pill-btn.ghost:hover {
+  background: var(--surface);
+}
+.pill-btn.lg {
+  height: 48px;
+  padding: 0 26px;
+  font-size: 16px;
+}
+.pill-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.icon-btn {
+  width: 36px;
+  height: 36px;
+  border: none;
+  background: none;
+  border-radius: var(--pill);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-2);
+  transition: background 0.15s ease, color 0.15s ease;
+}
+.icon-btn:hover {
+  background: var(--surface);
+  color: var(--text);
+}
+
+.card {
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-xl);
+  padding: var(--pad);
+}
+.card.surface {
+  background: var(--surface);
+}
+
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 12px;
+  border-radius: var(--pill);
+  background: var(--surface);
+  color: var(--text);
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.avatar {
+  border-radius: var(--pill);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 800;
+  color: #fff;
+  flex: none;
+  letter-spacing: -0.02em;
+}
+
+.divider {
+  height: 1px;
+  background: var(--border);
+  width: 100%;
+}
+
+/* focus ring */
+:focus-visible {
+  outline: 2px solid var(--blue);
+  outline-offset: 2px;
+}
+
+/* fade/slide for stage transitions — resting state is VISIBLE; entrance
+   animates transform only (never opacity) so content can't freeze invisible. */
+@keyframes stageIn {
+  from {
+    transform: translateY(7px);
+  }
+  to {
+    transform: translateY(0);
+  }
+}
+@keyframes stageInUp {
+  from {
+    transform: translateY(-7px);
+  }
+  to {
+    transform: translateY(0);
+  }
+}
+.stage-anim-down,
+.stage-anim-up {
+  opacity: 1;
+}
+.stage-anim-down {
+  animation: stageIn 0.34s cubic-bezier(0.22, 0.61, 0.36, 1);
+}
+.stage-anim-up {
+  animation: stageInUp 0.34s cubic-bezier(0.22, 0.61, 0.36, 1);
+}
+
+@keyframes popIn {
+  from {
+    opacity: 0;
+    transform: scale(0.94);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+@keyframes countGlow {
+  0%,
+  100% {
+    filter: none;
+  }
+  50% {
+    filter: drop-shadow(0 0 14px rgba(29, 161, 242, 0.35));
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .stage-anim-down,
+  .stage-anim-up {
+    animation: none !important;
+  }
+}
+
+/* node hover */
+.gnode {
+  transition: transform 0.18s ease;
+  cursor: default;
+}
+.gnode:hover {
+  transform: scale(1.08);
+}
+
+/* table row hover */
+.rawrow {
+  transition: background 0.12s ease;
+}
+.rawrow:hover {
+  background: var(--surface);
+}
+
+.app-fade {
+  animation: stageIn 0.4s ease both;
+}
+
+kbd {
+  font-family: var(--mono);
+}
+
+/* ===================== responsive ===================== */
+@media (max-width: 1200px) {
+  .aside-col {
+    display: none !important;
+  }
+}
+@media (max-width: 960px) {
+  :root {
+    --nav-w: 248px;
+  }
+}
+@media (max-width: 720px) {
+  .nav-col {
+    display: none !important;
+  }
+}

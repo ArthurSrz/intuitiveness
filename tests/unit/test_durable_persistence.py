@@ -45,11 +45,12 @@ def test_durable_backend_missing_raises(tmp_path):
 
 
 def test_factory_falls_back_to_files_without_database_url(monkeypatch):
-    # No DATABASE_URL / POSTGRES_URL configured → file backend (offline-safe).
-    for var in ("SESSION_DATABASE_URL", "DATABASE_URL", "POSTGRES_URL"):
-        monkeypatch.delenv(var, raising=False)
-    backend = get_durable_backend()
-    assert isinstance(backend, FileDurableBackend)
+    # With NO database configured (neither env nor st.secrets), the factory must
+    # fall back to the file backend. We neutralize the resolver directly so the
+    # test holds even when a real URL is present in a local .streamlit/secrets.toml.
+    import intuitiveness.persistence.durable_backend as db
+    monkeypatch.setattr(db, "get_database_url", lambda: None)
+    assert isinstance(db.get_durable_backend(), FileDurableBackend)
 
 
 def test_file_backend_session_index(tmp_path):

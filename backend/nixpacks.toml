@@ -1,0 +1,16 @@
+# Nixpacks build for the FastAPI backend (spec 017, T023).
+# Service "Root Directory" on Railway is `backend/`, but the whole repo is
+# checked out, so `pip install -r requirements.txt` can resolve `-e ..[postgres,graph]`
+# against the repo root (the `intuitiveness` core package).
+
+[phases.setup]
+nixPkgs = ["python311", "gcc"]
+
+[phases.install]
+cmds = [
+  "python -m venv --copies /opt/venv",
+  ". /opt/venv/bin/activate && pip install --upgrade pip && pip install -r requirements.txt"
+]
+
+[start]
+cmd = "uvicorn app.main:app --host 0.0.0.0 --port $PORT"

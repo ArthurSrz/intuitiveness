@@ -34,7 +34,10 @@ from intuitiveness.persistence.serializers import (
 
 # Bump the MAJOR component only on incompatible changes. Consumers fail-closed
 # on an unknown major (see import_session).
-SCHEMA_VERSION = "1.0.0"
+# 1.1.0: L0 nodes also carry their parent vector (l0_parent/l0_aggregation) so a
+#        round-tripped datum can still be unfolded back to L1 (additive; old 1.0
+#        records read fine — the fields are simply absent).
+SCHEMA_VERSION = "1.1.0"
 
 
 class SchemaVersionError(ValueError):
@@ -75,10 +78,17 @@ def _decode_payload(kind: str, payload: Any) -> Any:
     raise ValueError(f"Unknown payload_kind: {kind!r}")
 
 
-def _rebuild_dataset(level: int, kind: str, payload: Any, lineage: DataLineage) -> Dataset:
+def _rebuild_dataset(level: int, kind: str, payload: Any, lineage: DataLineage,
+                     l0_parent: Any = None, l0_aggregation: Any = None) -> Dataset:
     data = _decode_payload(kind, payload)
-    cls = {0: Level0Dataset, 1: Level1Dataset, 2: Level2Dataset,
-           3: Level3Dataset, 4: Level4Dataset}[level]
+    if level == 0:
+        parent_series = None
+        if l0_parent is not None:
+            parent_series = deserialize_dataframe(l0_parent).iloc[:, 0]
+        ds = Level0Dataset(data, parent_data=parent_series, aggregation_method=l0_aggregation)
+        ds.lineage = lineage
+        return ds
+    cls = {1: Level1Dataset, 2: Level2Dataset, 3: Level3Dataset, 4: Level4Dataset}[level]
     ds = cls(data)
     ds.lineage = lineage
     return ds
@@ -94,7 +104,7 @@ def export_session(tree, metadata: Optional[Dict[str, Any]] = None) -> Dict[str,
     for node_id, node in tree.nodes.items():
         ds = node.dataset_snapshot
         kind, payload = _encode_payload(ds.get_data())
-        nodes_out[node_id] = {
+        entry = {
             "id": node_id,
             "level": node.level.value,
             "parent_id": node.parent_id,
@@ -104,6 +114,15 @@ def export_session(tree, metadata: Optional[Dict[str, Any]] = None) -> Dict[str,
             "payload_kind": kind,
             "payload": payload,
         }
+        # L0 fidelity: keep the parent vector so the datum can be unfolded to L1
+        # after a round-trip (the in-memory datum carries it; the scalar payload
+        # alone would lose it).
+        if node.level.value == 0 and getattr(ds, "has_parent", False):
+            parent = ds.get_parent_data()
+            entry["l0_parent"] = serialize_dataframe(
+                parent.to_frame(name=parent.name or "value"))
+            entry["l0_aggregation"] = ds.aggregation_method
+        nodes_out[node_id] = entry
 
     meta = dict(metadata or {})
     meta.setdefault("root_id", tree.root_id)
@@ -136,7 +155,9 @@ def import_session(record: Dict[str, Any]):
     for node_id, n in nodes_in.items():
         lineage = DataLineage()
         lineage.operations = [SourceReference.from_dict(r) for r in n.get("lineage", [])]
-        ds = _rebuild_dataset(n["level"], n["payload_kind"], n["payload"], lineage)
+        ds = _rebuild_dataset(n["level"], n["payload_kind"], n["payload"], lineage,
+                              l0_parent=n.get("l0_parent"),
+                              l0_aggregation=n.get("l0_aggregation"))
         rebuilt[node_id] = NavigationTreeNode(
             id=node_id,
             level=ComplexityLevel(n["level"]),
