@@ -131,6 +131,15 @@ export function useUploadCsv() {
   });
 }
 
+export function useAddSource(sessionId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (files: File[]) =>
+      apiUpload<SessionState>(`/sessions/${sessionId}/add-source`, files),
+    onSuccess: () => invalidateSession(queryClient, sessionId),
+  });
+}
+
 export function useDeleteSession() {
   const queryClient = useQueryClient();
   return useMutation({

@@ -1,8 +1,9 @@
 "use client";
 
-import { use, useEffect, useMemo, useState } from "react";
+import { use, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import {
+  useAddSource,
   useAscend,
   useDescend,
   useNode,
@@ -65,6 +66,8 @@ export default function SessionPage({ params }: { params: Promise<{ id: string }
   const descend = useDescend(id);
   const ascend = useAscend(id);
   const timeTravel = useTimeTravel(id);
+  const addSource = useAddSource(id);
+  const addSourceRef = useRef<HTMLInputElement>(null);
   const pending =
     descend.isPending || ascend.isPending || timeTravel.isPending || node.isFetching;
 
@@ -152,6 +155,15 @@ export default function SessionPage({ params }: { params: Promise<{ id: string }
   function flash(msg: string) {
     setToast(msg);
     setTimeout(() => setToast(null), 2600);
+  }
+
+  function handleAddSource(e: React.ChangeEvent<HTMLInputElement>) {
+    const files = Array.from(e.target.files ?? []);
+    if (!files.length) return;
+    addSource.mutate(files, {
+      onSuccess: () => flash(`Added ${files.length} source${files.length === 1 ? "" : "s"}`),
+    });
+    if (addSourceRef.current) addSourceRef.current.value = "";
   }
 
   // Reset the captured params after a move so the next edge starts clean.
@@ -324,7 +336,30 @@ export default function SessionPage({ params }: { params: Promise<{ id: string }
                   ) : node.isLoading || !node.data ? (
                     <StagePlaceholder />
                   ) : (
-                    <LevelView node={node.data} level={currentLevel} />
+                    <>
+                      <LevelView node={node.data} level={currentLevel} />
+                      {currentLevel === 4 && (
+                        <div style={{ marginTop: 12, display: "flex", alignItems: "center", gap: 10 }}>
+                          <input
+                            ref={addSourceRef}
+                            type="file"
+                            accept=".csv,text/csv"
+                            multiple
+                            style={{ display: "none" }}
+                            onChange={handleAddSource}
+                          />
+                          <button
+                            className="pill-btn ghost"
+                            onClick={() => addSourceRef.current?.click()}
+                            disabled={addSource.isPending}
+                            style={{ height: 36 }}
+                          >
+                            {addSource.isPending ? "Adding…" : "+ Add another dataset"}
+                          </button>
+                          <span className="t-meta">Each table stays unlinked at L4 — the descent joins them</span>
+                        </div>
+                      )}
+                    </>
                   )}
                 </div>
                 {guidedEdge && (

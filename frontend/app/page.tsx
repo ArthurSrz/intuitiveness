@@ -457,7 +457,7 @@ export default function HomePage() {
               <div className="t-meta">
                 {uploadCsv.isPending
                   ? "Uploading…"
-                  : "Upload one or more CSV files — encoding and delimiter are detected for you, then we build the raw view to begin."}
+                  : "Upload two unlinked tables — or one to start. Encoding and delimiter are auto-detected. You can add more sources once the session opens."}
               </div>
             </div>
             <span className="pill-btn ghost" style={{ height: 40, flex: "none", pointerEvents: "none" }}>

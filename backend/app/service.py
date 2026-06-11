@@ -149,6 +149,26 @@ class SessionService:
         self._save(session)
         return self.state_of(session)
 
+    def add_source(self, session_id: str, tables: Dict[str, "pd.DataFrame"]) -> Dict[str, Any]:
+        """Merge additional tables into an existing L4 session.
+
+        Only valid when the session is still at L4 (no descent started). Raises
+        NavigationError (→ 409) if the session has already descended.
+        """
+        session = self._load(session_id)
+        if session.current_level.value != 4:
+            raise NavigationError("Cannot add sources after the descent has started.")
+        existing: Dict = session.current_dataset.get_data() or {}
+        merged = {**existing, **tables}
+        new_l4 = Level4Dataset(merged)
+        new_session = NavigationSession(new_l4)
+        # Preserve the original session_id (mirrors _from_tree logic).
+        new_session.__class__._sessions.pop(new_session._session_id, None)
+        new_session._session_id = session_id
+        new_session.__class__._sessions[session_id] = new_session
+        self._save(new_session)
+        return self.state_of(new_session)
+
     def get(self, session_id: str) -> Dict[str, Any]:
         return self.state_of(self._load(session_id))
 

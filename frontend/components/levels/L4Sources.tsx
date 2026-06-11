@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import type { NodeDetail } from "@/lib/api/types";
 import { decodeDataframe, type DecodedTable } from "@/lib/payload";
 import { Icon } from "@/components/ui/Icon";
@@ -22,8 +22,9 @@ export function L4Sources({ node }: { node: NodeDetail }) {
   }, [payload]);
 
   const shapes = (node.summary?.shapes as Record<string, unknown> | undefined) ?? undefined;
-  const primary = sources.find((s) => s.table) ?? sources[0];
-  const table: DecodedTable | null = primary?.table ?? null;
+  const [selectedName, setSelectedName] = useState<string>(() => sources[0]?.name ?? "");
+  const selected = sources.find((s) => s.name === selectedName) ?? sources[0];
+  const table: DecodedTable | null = selected?.table ?? null;
   const previewCols = table ? table.columns.slice(0, 8) : [];
   const previewRows = table ? table.rows.slice(0, 12) : [];
 
@@ -45,16 +46,34 @@ export function L4Sources({ node }: { node: NodeDetail }) {
           Raw sources
         </span>
         {sources.map((s) => (
-          <span key={s.name} className="chip mono" style={{ whiteSpace: "nowrap" }}>
+          <button
+            key={s.name}
+            className={`chip mono ${s.name === selectedName ? "chip--active" : ""}`}
+            style={{
+              whiteSpace: "nowrap",
+              cursor: "pointer",
+              border: s.name === selectedName ? "1.5px solid var(--blue)" : undefined,
+              background: s.name === selectedName ? "var(--blue-soft)" : undefined,
+              color: s.name === selectedName ? "var(--blue)" : undefined,
+            }}
+            onClick={() => setSelectedName(s.name)}
+          >
             {s.name}
             {shapes?.[s.name] != null && (
               <span className="t-meta" style={{ fontWeight: 400 }}>
                 {String(shapes[s.name])}
               </span>
             )}
-          </span>
+          </button>
         ))}
-        <span className="t-meta mono" style={{ marginLeft: "auto" }}>
+        <span
+          className="t-meta mono"
+          style={{
+            marginLeft: "auto",
+            color: sources.length > 1 ? "var(--blue)" : undefined,
+            fontWeight: sources.length > 1 ? 700 : undefined,
+          }}
+        >
           {sources.length} source{sources.length === 1 ? "" : "s"}
         </span>
       </div>
@@ -105,7 +124,7 @@ export function L4Sources({ node }: { node: NodeDetail }) {
             }}
           >
             <span className="t-meta mono">
-              {primary.name} — {table.rows.length} rows × {table.columns.length} cols
+              {selected.name} — {table.rows.length} rows × {table.columns.length} cols
             </span>
             {table.columns.length > previewCols.length && (
               <span
