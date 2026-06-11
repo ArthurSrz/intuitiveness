@@ -26,7 +26,9 @@ export interface EdgeParams {
   entityColumn: string;
   attributeColumn: string;
   valueColumn: string;
-  domains: string; // comma-separated
+  domains: string; // comma-separated (lowest bin → first)
+  useSemantic: boolean; // L3→L2 text match via embeddings
+  threshold: number; // L3→L2 semantic similarity cutoff
   column: string; // L2→L1
   filterQuery: string;
   aggregation: string;
@@ -43,7 +45,9 @@ export function defaultEdgeParams(): EdgeParams {
     entityColumn: "",
     attributeColumn: "",
     valueColumn: "",
-    domains: "high, low",
+    domains: "low, high",
+    useSemantic: false,
+    threshold: 0.6,
     column: "",
     filterQuery: "",
     aggregation: "mean",
@@ -83,7 +87,10 @@ export function buildDescendBody(
       return { builder: p.builder, config };
     }
     case 3:
-      return { domains: splitList(p.domains) };
+      return {
+        domains: splitList(p.domains),
+        ...(p.useSemantic ? { use_semantic: true, threshold: p.threshold } : {}),
+      };
     case 2:
       return {
         column: p.column || defaultColumn(columns),
@@ -165,12 +172,39 @@ export function EdgeControls({
       }
       if (level === 3) {
         return (
-          <Text
-            label="Domain categories (comma-separated)"
-            value={params.domains}
-            placeholder="e.g. high, low"
-            onChange={(v) => onChange({ domains: v })}
-          />
+          <>
+            <Text
+              label="Domain categories (comma-separated)"
+              value={params.domains}
+              placeholder="e.g. low, high"
+              onChange={(v) => onChange({ domains: v })}
+            />
+            <div style={{ gridColumn: "1 / -1", display: "flex", alignItems: "center", gap: 14, flexWrap: "wrap" }}>
+              <Toggle
+                label="Semantic matching (text)"
+                checked={params.useSemantic}
+                onChange={(v) => onChange({ useSemantic: v })}
+              />
+              {params.useSemantic && (
+                <label style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                  <span style={{ ...fieldLabel, marginBottom: 0 }}>Threshold</span>
+                  <input
+                    type="range"
+                    min={0.1}
+                    max={0.9}
+                    step={0.05}
+                    value={params.threshold}
+                    onChange={(e) => onChange({ threshold: Number(e.target.value) })}
+                  />
+                  <span className="mono t-meta">{params.threshold.toFixed(2)}</span>
+                </label>
+              )}
+              <span className="t-meta" style={{ flexBasis: "100%" }}>
+                Numeric columns split into ordered bins (first category = lowest). Semantic
+                matching applies to text columns via the embeddings API.
+              </span>
+            </div>
+          </>
         );
       }
       if (level === 2) {
@@ -353,6 +387,51 @@ function Text({
         onChange={(e) => onChange(e.target.value)}
       />
     </Field>
+  );
+}
+
+function Toggle({
+  label,
+  checked,
+  onChange,
+}: {
+  label: string;
+  checked: boolean;
+  onChange: (v: boolean) => void;
+}) {
+  return (
+    <button
+      onClick={() => onChange(!checked)}
+      style={{ display: "inline-flex", alignItems: "center", gap: 8, border: "none", background: "none" }}
+    >
+      <span
+        style={{
+          width: 34,
+          height: 20,
+          borderRadius: 999,
+          background: checked ? "var(--blue)" : "var(--border-strong)",
+          position: "relative",
+          transition: "background .15s",
+          flex: "none",
+        }}
+      >
+        <span
+          style={{
+            position: "absolute",
+            top: 2,
+            left: checked ? 16 : 2,
+            width: 16,
+            height: 16,
+            borderRadius: 999,
+            background: "#fff",
+            transition: "left .15s",
+          }}
+        />
+      </span>
+      <span className="t-body" style={{ fontSize: 13, fontWeight: 600 }}>
+        {label}
+      </span>
+    </button>
   );
 }
 

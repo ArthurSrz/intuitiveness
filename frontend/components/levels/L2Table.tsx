@@ -52,21 +52,35 @@ export function L2Table({
         <table style={{ borderCollapse: "collapse", width: "100%", minWidth: 480 }}>
           <thead>
             <tr>
-              {table.columns.map((col) => (
-                <th key={col} className="mono" style={thStyle}>
-                  {col}
-                </th>
-              ))}
+              {table.columns.map((col) => {
+                const cat = isCategory(col);
+                return (
+                  <th
+                    key={col}
+                    className="mono"
+                    style={cat ? { ...thStyle, color: "var(--blue)" } : thStyle}
+                  >
+                    {col}
+                  </th>
+                );
+              })}
             </tr>
           </thead>
           <tbody>
             {previewRows.map((row, i) => (
               <tr key={i} className="rawrow">
-                {table.columns.map((col) => (
-                  <td key={col} className="mono" style={tdStyle}>
-                    {formatCell(row[col])}
-                  </td>
-                ))}
+                {table.columns.map((col) => {
+                  const cat = isCategory(col);
+                  return (
+                    <td
+                      key={col}
+                      className="mono"
+                      style={cat ? { ...tdStyle, color: "var(--blue)", fontWeight: 700 } : tdStyle}
+                    >
+                      {formatCell(row[col])}
+                    </td>
+                  );
+                })}
               </tr>
             ))}
           </tbody>
@@ -161,6 +175,11 @@ const tdStyle: React.CSSProperties = {
   color: "var(--text)",
   whiteSpace: "nowrap",
 };
+
+/** The categorization column the L3→L2 step adds, highlighted in blue. */
+function isCategory(col: string): boolean {
+  return col === "category" || col === "domain";
+}
 
 function formatCell(value: unknown): string {
   if (value == null) return "";

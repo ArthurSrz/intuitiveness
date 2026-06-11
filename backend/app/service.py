@@ -20,6 +20,7 @@ from intuitiveness.persistence.durable_backend import get_durable_backend
 from intuitiveness.persistence.session_export import export_session, import_session
 
 from .builders import DESCENT_BUILDERS, resolve_builder
+from .categorizers import categorize
 from .demo import load_demo
 
 # Aggregations the L1→L0 step offers (all are pandas Series reducers).
@@ -157,13 +158,25 @@ class SessionService:
     def descend(self, session_id: str, params: Optional[Dict[str, Any]]) -> Dict[str, Any]:
         session = self._load(session_id)
         kwargs = dict(params or {})
-        if session.current_level.value == 4:
+        level = session.current_level.value
+        if level == 4:
             # L4→L3 needs a graph builder callable; default to rows_as_nodes.
             builder_name = kwargs.pop("builder", "rows_as_nodes")
             config = kwargs.pop("config", {}) or {}
             kwargs["builder_func"] = resolve_builder(builder_name, config)
-        # L3→L2 (domains), L2→L1 (column/filter_query), L1→L0 (aggregation)
-        # pass straight through to the session's param adapter.
+        elif level == 3 and kwargs.get("domains"):
+            # L3→L2: actually categorize rows into the named domains (the engine
+            # only labels). We pass a query_func whose categorized table the
+            # engine wraps as the L2 dataset (the `prebuilt_table` seam).
+            domains = kwargs.get("domains") or []
+            use_semantic = bool(kwargs.pop("use_semantic", False))
+            threshold = float(kwargs.pop("threshold", 0.6) or 0.6)
+            cat_column = kwargs.pop("category_column", None)
+            kwargs["query_func"] = lambda data: categorize(
+                data, domains, use_semantic=use_semantic,
+                threshold=threshold, column=cat_column,
+            )
+        # L2→L1 (column/filter_query), L1→L0 (aggregation) pass straight through.
         session.descend(**kwargs)
         self._save(session)
         return self.state_of(session)
