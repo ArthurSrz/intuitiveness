@@ -5,13 +5,10 @@ DataGouv Search Service
 Wrapper around the DataGouvAPI library providing a simplified interface for the
 Streamlit UI. Handles search, dataset resource listing, and CSV loading.
 
-Enhanced with SmolLM3-3B natural language understanding for French queries.
-Flow: User NL query → SmolLM3-3B extracts keywords → REST API search
+Enhanced with NL understanding (Qwen2.5-72B) for French queries.
+Flow: User NL query → Qwen2.5-72B extracts keywords → MCP search (with REST fallback)
 
-This service follows the contract defined in:
-  specs/008-datagouv-search/contracts/datagouv-search-api.md
-
-Feature: 008-datagouv-mcp
+Feature: 014-datagouv-mcp-search (upgraded from 008-datagouv-mcp)
 """
 
 from dataclasses import dataclass
@@ -23,8 +20,11 @@ import logging
 # Import NL query engine for natural language understanding
 from intuitiveness.data_sources.nl_query import NLQueryEngine, NLQueryResult
 
-# Import DataGouvAPI from local copy
+# Import DataGouvAPI from local copy (now used as fallback)
 from intuitiveness.services.datagouv_api import DataGouvAPI
+
+# Import MCP service adapter (primary search backend)
+from intuitiveness.services.datagouv_mcp import DataGouvMCPService, MCPServiceError
 
 # Import consolidated utilities (Phase 2 - 011-code-simplification)
 from intuitiveness.utils import format_filesize, parse_iso_datetime, truncate_text
@@ -148,6 +148,13 @@ class DataGouvSearchService:
         self._hf_token = hf_token
         self._nl_engine: Optional[NLQueryEngine] = None
         self._last_nl_result: Optional[NLQueryResult] = None
+        self._mcp_service: Optional[DataGouvMCPService] = None
+
+    def _get_mcp_service(self) -> DataGouvMCPService:
+        """Lazy-load MCP service. (T011)"""
+        if self._mcp_service is None:
+            self._mcp_service = DataGouvMCPService(timeout=5)
+        return self._mcp_service
 
     def _get_nl_engine(self) -> Optional[NLQueryEngine]:
         """Lazy-load NL engine (only when needed)."""
@@ -261,7 +268,11 @@ class DataGouvSearchService:
         """
         Search for datasets matching the query.
 
-        Automatically detects natural language queries and uses SmolLM3-3B
+        Strategy: MCP-first with transparent REST API fallback.
+        1. Try MCP server (if not in fallback mode)
+        2. On MCP failure, set session-level fallback flag and use REST API
+
+        Automatically detects natural language queries and uses Qwen2.5-72B
         to extract keywords for better search results.
 
         Args:
@@ -274,69 +285,112 @@ class DataGouvSearchService:
             SearchResult containing datasets and pagination info
 
         Raises:
-            DataGouvAPIError: If API call fails
+            DataGouvAPIError: If all search backends fail
         """
         self._last_nl_result = None
 
         if not query or not query.strip():
             return SearchResult(
-                datasets=[],
-                total=0,
-                page=page,
-                page_size=page_size,
-                has_more=False
+                datasets=[], total=0, page=page,
+                page_size=page_size, has_more=False
             )
 
         # Clamp page_size to reasonable limits
         page_size = min(max(1, page_size), 20)
 
-        # Determine if we should use NL processing
+        # Extract keywords from NL queries (used by both MCP and REST)
         should_use_nl = use_nl if use_nl is not None else self._is_natural_language(query)
+        search_query = query.strip()
 
+        if should_use_nl:
+            nl_engine = self._get_nl_engine()
+            if nl_engine:
+                logger.info(f"NL query detected: '{query}'")
+                nl_result = nl_engine.parse_query(query)
+                self._last_nl_result = nl_result
+                logger.info(f"Extracted keywords: {nl_result.keywords}")
+                search_query = " ".join(nl_result.keywords)
+
+        # T013: MCP-first search with REST fallback
         try:
-            if should_use_nl:
-                # Use SmolLM3-3B to extract keywords from natural language
-                nl_engine = self._get_nl_engine()
-                if nl_engine:
-                    logger.info(f"NL query detected: '{query}'")
-                    nl_result = nl_engine.parse_query(query)
-                    self._last_nl_result = nl_result
-                    logger.info(f"Extracted keywords: {nl_result.keywords}")
+            import streamlit as st
+            mcp_fallback = st.session_state.get("datagouv_mcp_fallback", False)
+        except Exception:
+            mcp_fallback = False
 
-                    # Search with extracted keywords
-                    raw_data, total = self._search_with_keywords(
-                        nl_result.keywords, page, page_size
-                    )
-                    raw_results = {'data': raw_data, 'total': total}
-                else:
-                    # No NL engine - fall back to direct search
-                    raw_results = self._api.search_datasets(
-                        query=query.strip(),
-                        page_size=page_size,
-                        page=page
-                    )
+        if not mcp_fallback:
+            try:
+                mcp_service = self._get_mcp_service()
+                if mcp_service.is_available():
+                    result = mcp_service.search_datasets(search_query, page, page_size)
+
+                    # T016: If MCP returns 0 results for a multi-word query,
+                    # try broader search with fewer keywords
+                    if not result.datasets and self._last_nl_result and len(self._last_nl_result.keywords) > 2:
+                        fewer_keywords = " ".join(self._last_nl_result.keywords[:2])
+                        result = mcp_service.search_datasets(fewer_keywords, page, page_size)
+
+                    # T014: Store backend indicator
+                    try:
+                        st.session_state["datagouv_search_backend"] = "mcp"
+                    except Exception:
+                        pass
+
+                    return result
+            except MCPServiceError as e:
+                logger.warning(f"MCP search failed, falling back to REST: {e}")
+                try:
+                    st.session_state["datagouv_mcp_fallback"] = True
+                except Exception:
+                    pass
+            except Exception as e:
+                logger.warning(f"MCP unavailable, falling back to REST: {e}")
+                try:
+                    st.session_state["datagouv_mcp_fallback"] = True
+                except Exception:
+                    pass
+
+        # T012/T014: REST API fallback path
+        try:
+            import streamlit as st
+            st.session_state["datagouv_search_backend"] = "rest"
+        except Exception:
+            pass
+
+        return self._search_rest(query, page, page_size, search_query)
+
+    def _search_rest(
+        self,
+        original_query: str,
+        page: int,
+        page_size: int,
+        search_query: str
+    ) -> SearchResult:
+        """REST API search path (original implementation, now used as fallback). (T012)"""
+        try:
+            if self._last_nl_result and self._last_nl_result.keywords:
+                raw_data, total = self._search_with_keywords(
+                    self._last_nl_result.keywords, page, page_size
+                )
+                raw_results = {'data': raw_data, 'total': total}
             else:
-                # Direct keyword search
                 raw_results = self._api.search_datasets(
-                    query=query.strip(),
+                    query=search_query,
                     page_size=page_size,
                     page=page
                 )
         except Exception as e:
-            logger.error(f"API search failed: {e}")
+            logger.error(f"REST API search failed: {e}")
             raise DataGouvAPIError(f"Search failed: {str(e)}")
 
         # Transform raw API response to our data classes
         datasets = []
         for raw_dataset in raw_results.get('data', []):
-            # Check if dataset has CSV resources
             resources = raw_dataset.get('resources', [])
             has_csv = any(
                 (r.get('format') or '').lower() == 'csv'
                 for r in resources
             )
-
-            # Get organization name
             org = raw_dataset.get('organization')
             org_name = org.get('name', 'Unknown') if org else 'Unknown'
 
@@ -355,11 +409,8 @@ class DataGouvSearchService:
         has_more = (page * page_size) < total
 
         return SearchResult(
-            datasets=datasets,
-            total=total,
-            page=page,
-            page_size=page_size,
-            has_more=has_more
+            datasets=datasets, total=total, page=page,
+            page_size=page_size, has_more=has_more
         )
 
     def get_dataset_resources(

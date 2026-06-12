@@ -15,9 +15,11 @@ import { L0Datum } from "./L0Datum";
 export function LevelView({
   node,
   level,
+  onAddSource,
 }: {
   node?: NodeDetail;
   level?: number;
+  onAddSource?: () => void;
 }) {
   if (!node) {
     return (
@@ -30,7 +32,7 @@ export function LevelView({
   const resolved = node.level ?? level;
   switch (resolved) {
     case 4:
-      return <L4Sources node={node} />;
+      return <L4Sources node={node} onAddSource={onAddSource} />;
     case 3:
       // Descent L3 is a graph; the L2→L3 ascent rebuilds a dataframe (the
       // "purpose-built dataset"), so render that as a table.

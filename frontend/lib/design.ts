@@ -49,7 +49,7 @@ export interface Step {
 
 export const STEPS: Step[] = [
   /* ---- descent: strip complexity to the core ---- */
-  { id: "upload", glyph: "dataset", title: "Upload Data", level: "L4", phase: "descent", stageLevel: 4, question: "Upload your raw data files to begin" },
+  { id: "upload", glyph: "dataset", title: "Your Raw Dataset", level: "L4", phase: "descent", stageLevel: 4, question: "This is your data as-is — every column, every row. The descent will strip it down to its core." },
   { id: "entities", glyph: "graph", title: "Define Entities", level: "L4 → L3", phase: "descent", stageLevel: 3, question: "What are the main entities you want in your knowledge graph?" },
   { id: "domains", glyph: "categories", title: "Isolate Domains", level: "L3 → L2", phase: "descent", stageLevel: 2, question: "Query the graph to isolate domain-specific subsets" },
   { id: "features", glyph: "vector", title: "Extract Features", level: "L2 → L1", phase: "descent", stageLevel: 1, question: "Extract a column to create vectors for analysis" },

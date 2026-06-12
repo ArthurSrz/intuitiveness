@@ -11,6 +11,7 @@ from typing import List
 
 import pandas as pd
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, status
+from intuitiveness.navigation.exceptions import NavigationError
 
 from ..deps import get_session_service
 from ..models import CreateSessionRequest, SessionState, SessionSummary
@@ -67,6 +68,31 @@ def upload_csv(
             name = f"{name}_{len(tables)}"
         tables[name] = _parse_csv(upload)
     return svc.create_from_tables(tables)
+
+
+@router.post("/{session_id}/add-source", response_model=SessionState)
+def add_source(
+    session_id: str,
+    files: List[UploadFile],
+    svc: SessionService = Depends(get_session_service),
+) -> SessionState:
+    """Merge additional CSV tables into an existing L4 session.
+
+    Only valid before the descent has started. Returns 409 if the session
+    has already descended below L4.
+    """
+    if not files:
+        raise HTTPException(status_code=422, detail="At least one CSV file is required.")
+    tables: dict = {}
+    for upload in files:
+        name = upload.filename or f"table_{len(tables) + 1}"
+        if name in tables:
+            name = f"{name}_{len(tables)}"
+        tables[name] = _parse_csv(upload)
+    try:
+        return svc.add_source(session_id, tables)
+    except NavigationError as exc:
+        raise HTTPException(status_code=409, detail=str(exc))
 
 
 @router.get("", response_model=List[SessionSummary])

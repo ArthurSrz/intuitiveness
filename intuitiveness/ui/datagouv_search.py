@@ -25,6 +25,7 @@ from intuitiveness.services.datagouv_client import (
     DataGouvAPIError,
     DataGouvLoadError,
 )
+from intuitiveness.services.datagouv_mcp import DataGouvMCPService, MCPServiceError
 from intuitiveness.styles.search import get_search_styles
 from intuitiveness.styles.layout import LAYOUT_CSS
 from intuitiveness.styles.palette import PALETTE_CSS, COLORS
@@ -663,6 +664,79 @@ def _get_minimal_landing_css() -> str:
     """
 
 
+def _render_metrics_chips(dataset: DatasetInfo) -> None:
+    """Render download/visit metrics as small chips on a dataset card (MCP only). (T024-T026)"""
+    try:
+        # T026: Cache metrics in session state
+        metrics_key = f"mcp_metrics_{dataset.id}"
+        if metrics_key not in st.session_state:
+            mcp_service = DataGouvMCPService(timeout=5)
+            metrics = mcp_service.get_metrics(dataset.id)
+            st.session_state[metrics_key] = metrics
+        else:
+            metrics = st.session_state[metrics_key]
+
+        # T025: Only show if we got actual data
+        if metrics and (metrics.monthly_downloads > 0 or metrics.monthly_visits > 0):
+            dl_text = f"{metrics.monthly_downloads:,}" if metrics.monthly_downloads else "—"
+            vis_text = f"{metrics.monthly_visits:,}" if metrics.monthly_visits else "—"
+            st.markdown(
+                f"<div style='font-size: 0.7rem; color: {COLORS['text_muted']}; margin: 4px 0;'>"
+                f"📥 {dl_text} downloads · 👁 {vis_text} visits (monthly)"
+                f"</div>",
+                unsafe_allow_html=True,
+            )
+    except Exception:
+        pass  # T025: Silently skip on error
+
+
+def _render_preview_section(dataset: DatasetInfo, card_idx: int) -> None:
+    """Render data preview and resource listing inside a dataset card (MCP only). (T019-T022)"""
+    try:
+        mcp_service = DataGouvMCPService(timeout=10)
+
+        # T022: Show resources when expanded
+        resources_key = f"mcp_resources_{dataset.id}"
+        if resources_key not in st.session_state:
+            resources = mcp_service.get_dataset_resources(dataset.id)
+            st.session_state[resources_key] = resources
+        else:
+            resources = st.session_state[resources_key]
+
+        if resources:
+            csv_resources = [r for r in resources if r.format in ("csv", "xlsx")]
+            if csv_resources:
+                st.markdown(f"<div style='font-size: 0.75rem; color: {COLORS['text_muted']}; margin: 4px 0;'>📁 {len(csv_resources)} data file(s)</div>", unsafe_allow_html=True)
+
+                # T019/T020: Preview button for first CSV resource
+                first_csv = csv_resources[0]
+                preview_key = f"preview_{card_idx}_{first_csv.id}"
+                preview_data_key = f"preview_data_{first_csv.id}"
+
+                if st.button("👁 Preview Data", key=preview_key, use_container_width=True):
+                    try:
+                        preview = mcp_service.preview_resource(first_csv.id)
+                        st.session_state[preview_data_key] = preview
+                    except MCPServiceError:
+                        # T021: Tabular API not available
+                        st.session_state[preview_data_key] = None
+                        st.info("Preview not available for this resource — try downloading the CSV directly.")
+
+                # Show preview if already loaded
+                if preview_data_key in st.session_state:
+                    preview = st.session_state[preview_data_key]
+                    if preview and preview.columns and preview.rows:
+                        df_preview = pd.DataFrame(preview.rows, columns=preview.columns)
+                        st.dataframe(df_preview, use_container_width=True, height=200)
+                        if preview.total_rows:
+                            st.caption(f"Showing {len(preview.rows)} of {preview.total_rows} rows")
+            else:
+                # T021: No CSV resources
+                st.caption("No tabular data files available")
+    except Exception:
+        pass  # Silently skip preview on any error
+
+
 def render_dataset_card(
     dataset: DatasetInfo,
     service: DataGouvSearchService,
@@ -700,6 +774,15 @@ def render_dataset_card(
 
         # Metadata row
         st.markdown(f"<div style='font-size: 0.75rem; color: {COLORS['text_muted']}; margin-top: 8px;'>📦 {org} · 📅 {date_str}</div>", unsafe_allow_html=True)
+
+        # T024-T026: Metrics display (MCP only)
+        search_backend = st.session_state.get("datagouv_search_backend", "rest")
+        if search_backend == "mcp":
+            _render_metrics_chips(dataset)
+
+        # T019-T022: Preview and resource listing (MCP only)
+        if search_backend == "mcp":
+            _render_preview_section(dataset, card_idx)
 
         # Action button
         if dataset.has_csv:
@@ -940,8 +1023,16 @@ def render_search_interface() -> Optional[pd.DataFrame]:
                     else:
                         st.session_state["datagouv_nl_fallback"] = False
 
-            except DataGouvAPIError:
-                st.session_state[SESSION_KEYS["error"]] = t("search_failed")
+            except DataGouvAPIError as e:
+                # T027: Graceful MCP error messages
+                error_msg = str(e)
+                if "MCP" in error_msg:
+                    st.session_state[SESSION_KEYS["error"]] = (
+                        "Search service temporarily unavailable. "
+                        "Try again or use simpler keywords."
+                    )
+                else:
+                    st.session_state[SESSION_KEYS["error"]] = t("search_failed")
                 st.session_state[SESSION_KEYS["results"]] = None
 
         st.rerun()
@@ -964,7 +1055,7 @@ def render_search_interface() -> Optional[pd.DataFrame]:
             # Warn if NL engine was expected but unavailable
             if st.session_state.get("datagouv_nl_fallback"):
                 st.warning(
-                    "Semantic search (SmolLM3-3B) is unavailable — "
+                    "Semantic search (Qwen2.5-72B) is unavailable — "
                     "using basic keyword search instead. "
                     "Set `HF_TOKEN` in your `.env` or `.streamlit/secrets.toml` "
                     "to enable natural language understanding."
@@ -978,6 +1069,11 @@ def render_search_interface() -> Optional[pd.DataFrame]:
                     st.success(f"**{t('datasets_found', count=csv_count)}** with CSV ({total_count} total) — {t('click_to_add')}")
                 else:
                     st.success(f"**{t('datasets_found', count=csv_count)}** — {t('click_to_add')}")
+
+            # T015: Subtle backend indicator
+            search_backend = st.session_state.get("datagouv_search_backend", "rest")
+            backend_label = "via MCP" if search_backend == "mcp" else "via data.gouv.fr API"
+            st.caption(f"Search {backend_label}")
 
             # Render dataset cards with direct load (CSV-only datasets)
             result = render_dataset_grid(csv_datasets, service)

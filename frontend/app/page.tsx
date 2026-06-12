@@ -2,7 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
-import { useCreateSession, useUploadCsv, useImportUrl } from "@/lib/api/hooks";
+import { useCreateSession, useUploadCsv, useImportUrl, useImportWorldBank } from "@/lib/api/hooks";
 import { apiGet, ApiError } from "@/lib/api/client";
 import type { DemoSource } from "@/lib/api/types";
 import { Icon } from "@/components/ui/Icon";
@@ -23,6 +23,18 @@ interface SearchResponse {
   has_more: boolean;
 }
 
+interface WBIndicator {
+  id: string;
+  name: string;
+  source: string;
+  topics: string[];
+}
+
+interface WBSearchResponse {
+  indicators: WBIndicator[];
+  total: number;
+}
+
 /*
  * Landing — the "Interactive Data Redesign Method" entry screen, recreated from
  * the Blue Pulse design (landing.jsx): hero + descent/ascent diagram, a
@@ -37,14 +49,24 @@ export default function HomePage() {
   const createSession = useCreateSession();
   const uploadCsv = useUploadCsv();
   const importUrl = useImportUrl();
+  const importWB = useImportWorldBank();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [pendingSource, setPendingSource] = useState<DemoSource | null>(null);
   const [uploadError, setUploadError] = useState<string | null>(null);
+  // which source panel is expanded: "datagouv" | "worldbank" | "upload" | null
+  const [activePanel, setActivePanel] = useState<"datagouv" | "worldbank" | "upload" | null>(null);
+  // data.gouv.fr search
   const [searchQuery, setSearchQuery] = useState("");
   const [searchResults, setSearchResults] = useState<DatasetResult[] | null>(null);
   const [searchBusy, setSearchBusy] = useState(false);
   const [searchError, setSearchError] = useState<string | null>(null);
   const [importingId, setImportingId] = useState<string | null>(null);
+  // World Bank search
+  const [wbQuery, setWbQuery] = useState("");
+  const [wbResults, setWbResults] = useState<WBIndicator[] | null>(null);
+  const [wbBusy, setWbBusy] = useState(false);
+  const [wbError, setWbError] = useState<string | null>(null);
+  const [wbImportingId, setWbImportingId] = useState<string | null>(null);
 
   // First visit plays the animated descent–ascent intro (served from
   // /public/intro). Once "Enter the app" / "Skip intro" is clicked it sets the
@@ -107,6 +129,37 @@ export default function HomePage() {
     );
   }
 
+  async function handleWbSearch(e: React.FormEvent) {
+    e.preventDefault();
+    if (!wbQuery.trim()) return;
+    setWbBusy(true);
+    setWbError(null);
+    setWbResults(null);
+    try {
+      const res = await apiGet<WBSearchResponse>(`/search/worldbank?q=${encodeURIComponent(wbQuery)}&size=8`);
+      setWbResults(res.indicators);
+      if (res.indicators.length === 0) setWbError("No indicators found — try different keywords.");
+    } catch (err) {
+      setWbError(err instanceof ApiError ? err.displayMessage : "World Bank search unavailable.");
+    } finally {
+      setWbBusy(false);
+    }
+  }
+
+  function handleWbImport(indicator: WBIndicator) {
+    setWbImportingId(indicator.id);
+    importWB.mutate(
+      { indicator_id: indicator.id, indicator_name: indicator.name },
+      {
+        onSuccess: (state) => router.push(`/session/${state.session_id}`),
+        onError: (err) => {
+          setWbError(err instanceof ApiError ? err.displayMessage : String(err));
+          setWbImportingId(null);
+        },
+      },
+    );
+  }
+
   function handleUpload(e: React.ChangeEvent<HTMLInputElement>) {
     const files = Array.from(e.target.files ?? []);
     if (!files.length) return;
@@ -119,7 +172,7 @@ export default function HomePage() {
     if (fileInputRef.current) fileInputRef.current.value = "";
   }
 
-  const busy = createSession.isPending || uploadCsv.isPending || importUrl.isPending;
+  const busy = createSession.isPending || uploadCsv.isPending || importUrl.isPending || importWB.isPending;
   const error = (createSession.error ?? uploadError) as ApiError | string | null;
 
   // Hold the landing back until the intro check runs (avoids a flash before the
@@ -227,11 +280,9 @@ export default function HomePage() {
             <div style={{ display: "flex", alignItems: "center", gap: 18, flexWrap: "wrap" }}>
               <button
                 className="pill-btn primary lg"
-                onClick={() => start("demo:school_scores")}
-                disabled={busy}
+                onClick={() => document.getElementById("entry-options")?.scrollIntoView({ behavior: "smooth" })}
               >
-                {busy && pendingSource === "demo:school_scores" ? "Starting…" : "Start the descent"}{" "}
-                <Icon name="arrowRight" size={18} stroke={2.1} />
+                Start the descent <Icon name="arrowRight" size={18} stroke={2.1} />
               </button>
             </div>
           </div>
@@ -245,235 +296,151 @@ export default function HomePage() {
           </div>
         </div>
 
-        {/* entry choice */}
-        <div style={{ marginTop: 10 }}>
+        {/* entry choice — 3 options */}
+        <div id="entry-options" style={{ marginTop: 10 }}>
           <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 16 }}>
             <span className="t-section" style={{ fontSize: 18 }}>
-              Begin with your data
+              Where is your data?
             </span>
             <span className="divider" style={{ flex: 1 }} />
           </div>
 
-          {/* federated open-data search (data.gouv.fr via the backend) */}
-          <div style={{ marginBottom: 20 }}>
-            <form
-              onSubmit={handleSearch}
-              className="card"
-              style={{
-                display: "flex",
-                alignItems: "center",
-                gap: 6,
-                padding: "6px 6px 6px 18px",
-                borderRadius: "var(--pill)",
-                background: "var(--bg)",
-                boxShadow: "var(--shadow-1)",
-              }}
-            >
-              <Icon name="search" size={20} style={{ color: searchBusy ? "var(--blue)" : "var(--text-2)", flex: "none" }} />
-              <input
-                type="text"
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                placeholder={`Search open data — "résultats du brevet", "GDP per capita"…`}
-                style={{
-                  flex: 1,
-                  minWidth: 0,
-                  border: "none",
-                  background: "transparent",
-                  outline: "none",
-                  color: "var(--text)",
-                  fontFamily: "var(--font)",
-                  fontSize: 15,
-                  padding: "11px 8px",
-                }}
-              />
-              <button
-                type="submit"
-                className="pill-btn primary"
-                style={{ height: 42, flex: "none" }}
-                disabled={searchBusy || !searchQuery.trim()}
-              >
-                {searchBusy ? "Searching…" : <>Search <Icon name="arrowRight" size={16} stroke={2.1} /></>}
-              </button>
-            </form>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: "var(--gap)", alignItems: "start" }}>
+
+            {/* Option 1 — data.gouv.fr */}
             <div
-              style={{
-                display: "flex",
-                alignItems: "center",
-                gap: 8,
-                marginTop: 11,
-                paddingLeft: 4,
-                flexWrap: "wrap",
-              }}
+              className="card"
+              style={{ padding: 20, display: "flex", flexDirection: "column", gap: 14, cursor: activePanel === "datagouv" ? "default" : "pointer", borderColor: activePanel === "datagouv" ? "var(--blue)" : undefined }}
+              onClick={() => activePanel !== "datagouv" && setActivePanel("datagouv")}
             >
-              <span className="t-meta">Searches across</span>
-              <span className="chip mono" style={{ whiteSpace: "nowrap" }}>
-                <Icon name="dataset" size={13} /> data.gouv.fr
-              </span>
-              <span className="t-meta" style={{ whiteSpace: "nowrap" }}>
-                · hundreds of thousands of public datasets
-              </span>
-            </div>
-
-            {/* search results */}
-            {searchError && (
-              <p className="t-meta" style={{ color: "var(--error)", marginTop: 10, paddingLeft: 4 }}>
-                {searchError}
-              </p>
-            )}
-            {searchResults && searchResults.length > 0 && (
-              <div style={{ marginTop: 12, display: "flex", flexDirection: "column", gap: 8 }}>
-                {searchResults.map((ds) => (
-                  <div
-                    key={ds.id}
-                    className="card"
-                    style={{
-                      display: "flex",
-                      alignItems: "flex-start",
-                      gap: 14,
-                      padding: "12px 16px",
-                      borderRadius: "var(--radius-xl)",
-                    }}
-                  >
-                    <div style={{ flex: 1, minWidth: 0 }}>
-                      <div className="t-name" style={{ fontSize: 14.5, marginBottom: 2 }}>{ds.title}</div>
-                      <div className="t-meta" style={{ marginBottom: 4 }}>{ds.organization}</div>
-                      {ds.description && (
-                        <div className="t-meta" style={{ color: "var(--text-2)", fontSize: 12.5, lineHeight: 1.45 }}>
-                          {ds.description}
-                        </div>
-                      )}
-                    </div>
-                    <button
-                      className="pill-btn ghost"
-                      style={{ height: 34, flex: "none", fontSize: 13, whiteSpace: "nowrap" }}
-                      disabled={!!importingId || !ds.has_csv}
-                      onClick={() => handleImportDataset(ds)}
-                    >
-                      {importingId === ds.id
-                        ? "Importing…"
-                        : ds.has_csv
-                          ? <>Import <Icon name="arrowRight" size={13} stroke={2.1} /></>
-                          : "No CSV"}
+              <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                <span style={{ width: 36, height: 36, borderRadius: 9, flex: "none", display: "inline-flex", alignItems: "center", justifyContent: "center", background: activePanel === "datagouv" ? "var(--blue)" : "var(--blue-soft)", color: activePanel === "datagouv" ? "#fff" : "var(--blue)" }}>
+                  <Icon name="search" size={18} />
+                </span>
+                <div>
+                  <div className="t-label" style={{ color: "var(--text-2)", fontSize: 10.5 }}>OPTION 1</div>
+                  <div className="t-name" style={{ fontSize: 15 }}>data.gouv.fr</div>
+                </div>
+              </div>
+              <p className="t-meta" style={{ margin: 0 }}>Hundreds of thousands of French open datasets.</p>
+              {activePanel === "datagouv" && (
+                <>
+                  <form onSubmit={handleSearch} style={{ display: "flex", flexDirection: "column", gap: 8 }} onClick={(e) => e.stopPropagation()}>
+                    <input
+                      autoFocus
+                      type="text"
+                      value={searchQuery}
+                      onChange={(e) => setSearchQuery(e.target.value)}
+                      placeholder={`"résultats du brevet", "énergie"…`}
+                      style={{ width: "100%", boxSizing: "border-box", border: "1px solid var(--border)", borderRadius: "var(--radius)", background: "var(--surface)", outline: "none", color: "var(--text)", fontFamily: "var(--font)", fontSize: 14, padding: "9px 12px" }}
+                    />
+                    <button type="submit" className="pill-btn primary" style={{ width: "100%", justifyContent: "center" }} disabled={searchBusy || !searchQuery.trim()}>
+                      {searchBusy ? "Searching…" : <>Search <Icon name="arrowRight" size={15} stroke={2.1} /></>}
                     </button>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-
-          {/* the paper's two demo use-cases */}
-          <div
-            style={{
-              display: "flex",
-              alignItems: "center",
-              gap: 8,
-              margin: "2px 0 12px",
-              paddingLeft: 4,
-              flexWrap: "wrap",
-            }}
-          >
-            <span className="t-label" style={{ color: "var(--text-2)", whiteSpace: "nowrap" }}>
-              READY-MADE DEMOS
-            </span>
-            <span className="t-meta" style={{ whiteSpace: "nowrap" }}>
-              — the paper&apos;s two use-cases
-            </span>
-          </div>
-
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "var(--gap)" }}>
-            <EntryCard
-              glyph="dataset"
-              kicker="DEMO · FRANCE"
-              title="French collèges"
-              desc="Two unrelated data.gouv.fr tables joined into one raw dataset — run the full descent, then the ascent."
-              sources={["DNB brevet results", "Collège effectifs"]}
-              meta="data.gouv.fr"
-              cta="Open French demo"
-              busy={busy && pendingSource === "demo:school_scores"}
-              onClick={() => start("demo:school_scores")}
-            />
-            <EntryCard
-              glyph="core"
-              kicker="DEMO · WORLD BANK"
-              title="World Bank indicators"
-              desc="Two unrelated World Bank tables joined into one raw dataset — the same cycle on global development data."
-              sources={["GDP per capita", "Life expectancy"]}
-              meta="data.worldbank.org"
-              cta="Open World Bank demo"
-              busy={busy && pendingSource === "demo:energy"}
-              onClick={() => start("demo:energy")}
-            />
-          </div>
-
-          {/* bring your own */}
-          <input
-            ref={fileInputRef}
-            type="file"
-            accept=".csv,text/csv"
-            multiple
-            style={{ display: "none" }}
-            onChange={handleUpload}
-          />
-          <button
-            onClick={() => !busy && fileInputRef.current?.click()}
-            disabled={busy}
-            style={{
-              marginTop: "var(--gap)",
-              width: "100%",
-              textAlign: "left",
-              display: "flex",
-              alignItems: "center",
-              gap: 16,
-              padding: "16px 20px",
-              borderRadius: "var(--radius-xl)",
-              border: "2px dashed var(--border-strong)",
-              background: "var(--bg)",
-              cursor: busy ? "wait" : "pointer",
-              transition: "border-color .15s",
-            }}
-            onMouseEnter={(e) => !busy && (e.currentTarget.style.borderColor = "var(--blue)")}
-            onMouseLeave={(e) => (e.currentTarget.style.borderColor = "var(--border-strong)")}
-          >
-            <span
-              style={{
-                width: 42,
-                height: 42,
-                borderRadius: 11,
-                flex: "none",
-                display: "inline-flex",
-                alignItems: "center",
-                justifyContent: "center",
-                background: "var(--surface)",
-                color: uploadCsv.isPending ? "var(--blue)" : "var(--text-2)",
-              }}
-            >
-              <Icon name="export" size={21} stroke={1.9} />
-            </span>
-            <div style={{ flex: 1, minWidth: 0 }}>
-              <div className="t-name" style={{ fontSize: 15.5 }}>
-                Bring your own data
-              </div>
-              <div className="t-meta">
-                {uploadCsv.isPending
-                  ? "Uploading…"
-                  : "Upload one or more CSV files — encoding and delimiter are detected for you, then we build the raw view to begin."}
-              </div>
+                  </form>
+                  {searchError && <p className="t-meta" style={{ color: "var(--error)", margin: 0 }}>{searchError}</p>}
+                  {searchResults && searchResults.length > 0 && (
+                    <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+                      {searchResults.map((ds) => (
+                        <div key={ds.id} style={{ display: "flex", alignItems: "center", gap: 10, padding: "8px 0", borderBottom: "1px solid var(--border)" }}>
+                          <div style={{ flex: 1, minWidth: 0 }}>
+                            <div className="t-name" style={{ fontSize: 13, marginBottom: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{ds.title}</div>
+                            <div className="t-meta" style={{ fontSize: 11.5 }}>{ds.organization}</div>
+                          </div>
+                          <button className="pill-btn ghost" style={{ height: 30, flex: "none", fontSize: 12 }} disabled={!!importingId || !ds.has_csv} onClick={() => handleImportDataset(ds)}>
+                            {importingId === ds.id ? "…" : ds.has_csv ? <>Import <Icon name="arrowRight" size={12} /></> : "No CSV"}
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </>
+              )}
             </div>
-            <span className="pill-btn ghost" style={{ height: 40, flex: "none", pointerEvents: "none" }}>
-              {uploadCsv.isPending ? "Uploading…" : <>Choose files <Icon name="export" size={16} stroke={2.1} /></>}
-            </span>
-          </button>
+
+            {/* Option 2 — World Bank */}
+            <div
+              className="card"
+              style={{ padding: 20, display: "flex", flexDirection: "column", gap: 14, cursor: activePanel === "worldbank" ? "default" : "pointer", borderColor: activePanel === "worldbank" ? "var(--blue)" : undefined }}
+              onClick={() => activePanel !== "worldbank" && setActivePanel("worldbank")}
+            >
+              <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                <span style={{ width: 36, height: 36, borderRadius: 9, flex: "none", display: "inline-flex", alignItems: "center", justifyContent: "center", background: activePanel === "worldbank" ? "var(--blue)" : "var(--blue-soft)", color: activePanel === "worldbank" ? "#fff" : "var(--blue)" }}>
+                  <Icon name="core" size={18} />
+                </span>
+                <div>
+                  <div className="t-label" style={{ color: "var(--text-2)", fontSize: 10.5 }}>OPTION 2</div>
+                  <div className="t-name" style={{ fontSize: 15 }}>World Bank</div>
+                </div>
+              </div>
+              <p className="t-meta" style={{ margin: 0 }}>Search global development indicators across all countries.</p>
+              {activePanel === "worldbank" && (
+                <>
+                  <form onSubmit={handleWbSearch} style={{ display: "flex", flexDirection: "column", gap: 8 }} onClick={(e) => e.stopPropagation()}>
+                    <input
+                      autoFocus
+                      type="text"
+                      value={wbQuery}
+                      onChange={(e) => setWbQuery(e.target.value)}
+                      placeholder={`"GDP per capita", "life expectancy"…`}
+                      style={{ width: "100%", boxSizing: "border-box", border: "1px solid var(--border)", borderRadius: "var(--radius)", background: "var(--surface)", outline: "none", color: "var(--text)", fontFamily: "var(--font)", fontSize: 14, padding: "9px 12px" }}
+                    />
+                    <button type="submit" className="pill-btn primary" style={{ width: "100%", justifyContent: "center" }} disabled={wbBusy || !wbQuery.trim()}>
+                      {wbBusy ? "Searching…" : <>Search <Icon name="arrowRight" size={15} stroke={2.1} /></>}
+                    </button>
+                  </form>
+                  {wbError && <p className="t-meta" style={{ color: "var(--error)", margin: 0 }}>{wbError}</p>}
+                  {wbResults && wbResults.length > 0 && (
+                    <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+                      {wbResults.map((ind) => (
+                        <div key={ind.id} style={{ display: "flex", alignItems: "center", gap: 10, padding: "8px 0", borderBottom: "1px solid var(--border)" }}>
+                          <div style={{ flex: 1, minWidth: 0 }}>
+                            <div className="t-name" style={{ fontSize: 13, marginBottom: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{ind.name}</div>
+                            <div className="t-meta mono" style={{ fontSize: 11 }}>{ind.id}</div>
+                          </div>
+                          <button className="pill-btn ghost" style={{ height: 30, flex: "none", fontSize: 12 }} disabled={!!wbImportingId} onClick={() => handleWbImport(ind)}>
+                            {wbImportingId === ind.id ? "Loading…" : <>Load <Icon name="arrowRight" size={12} /></>}
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </>
+              )}
+            </div>
+
+            {/* Option 3 — Upload */}
+            <div
+              className="card"
+              style={{ padding: 20, display: "flex", flexDirection: "column", gap: 14, cursor: activePanel === "upload" ? "default" : "pointer", borderColor: activePanel === "upload" ? "var(--blue)" : undefined }}
+              onClick={() => { if (activePanel !== "upload") { setActivePanel("upload"); setTimeout(() => fileInputRef.current?.click(), 50); } }}
+            >
+              <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                <span style={{ width: 36, height: 36, borderRadius: 9, flex: "none", display: "inline-flex", alignItems: "center", justifyContent: "center", background: activePanel === "upload" ? "var(--blue)" : "var(--blue-soft)", color: activePanel === "upload" ? "#fff" : "var(--blue)" }}>
+                  <Icon name="export" size={18} />
+                </span>
+                <div>
+                  <div className="t-label" style={{ color: "var(--text-2)", fontSize: 10.5 }}>OPTION 3</div>
+                  <div className="t-name" style={{ fontSize: 15 }}>Upload your data</div>
+                </div>
+              </div>
+              <p className="t-meta" style={{ margin: 0 }}>Upload one or more CSV files. Encoding and delimiter are auto-detected.</p>
+              <input ref={fileInputRef} type="file" accept=".csv,text/csv" multiple style={{ display: "none" }} onChange={handleUpload} />
+              {activePanel === "upload" && (
+                <button
+                  className="pill-btn primary"
+                  style={{ width: "100%", justifyContent: "center" }}
+                  disabled={busy}
+                  onClick={(e) => { e.stopPropagation(); !busy && fileInputRef.current?.click(); }}
+                >
+                  {uploadCsv.isPending ? "Uploading…" : <>Choose CSV files <Icon name="export" size={15} stroke={2.1} /></>}
+                </button>
+              )}
+            </div>
+          </div>
 
           {error && (
-            <p
-              className="t-meta"
-              style={{
-                color: "var(--error)",
-                marginTop: 14,
-                paddingLeft: 4,
-              }}
-            >
+            <p className="t-meta" style={{ color: "var(--error)", marginTop: 14, paddingLeft: 4 }}>
               Could not start a session:{" "}
               {typeof error === "string" ? error : (error as ApiError).displayMessage}
             </p>
