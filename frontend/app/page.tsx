@@ -227,10 +227,10 @@ export default function HomePage() {
             <div style={{ display: "flex", alignItems: "center", gap: 18, flexWrap: "wrap" }}>
               <button
                 className="pill-btn primary lg"
-                onClick={() => start("demo:school_scores")}
+                onClick={() => !busy && fileInputRef.current?.click()}
                 disabled={busy}
               >
-                {busy && pendingSource === "demo:school_scores" ? "Starting…" : "Start the descent"}{" "}
+                {uploadCsv.isPending ? "Uploading…" : "Start the descent"}{" "}
                 <Icon name="arrowRight" size={18} stroke={2.1} />
               </button>
             </div>
