@@ -131,6 +131,17 @@ export function useUploadCsv() {
   });
 }
 
+export function useImportWorldBank() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (body: { indicator_id: string; indicator_name: string; mrv?: number }) =>
+      apiPost<SessionState>("/sessions/import-worldbank", body),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: queryKeys.sessions });
+    },
+  });
+}
+
 export function useAddSource(sessionId: string) {
   const queryClient = useQueryClient();
   return useMutation({

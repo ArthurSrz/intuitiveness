@@ -1,7 +1,9 @@
 """Search and import-from-URL endpoints (spec 017, P4).
 
-GET  /search          — federated open-data search (data.gouv.fr)
-POST /sessions/import-url — download a CSV by URL and create a session
+GET  /search                   — federated open-data search (data.gouv.fr)
+GET  /search/worldbank         — World Bank indicator search
+POST /sessions/import-url      — download a CSV by URL and create a session
+POST /sessions/import-worldbank — fetch WB indicator data and create a session
 """
 
 from __future__ import annotations
@@ -150,3 +152,94 @@ def import_from_url(
 
     df = pd.read_csv(io.StringIO(text), sep=sep)
     return svc.create_from_tables({filename: df})
+
+
+# --------------------------------------------------------------------------- #
+# World Bank search + import
+# --------------------------------------------------------------------------- #
+
+class WBIndicator(BaseModel):
+    id: str
+    name: str
+    source: str
+    topics: List[str]
+
+
+class WBSearchResponse(BaseModel):
+    indicators: List[WBIndicator]
+    total: int
+
+
+@router.get("/search/worldbank", response_model=WBSearchResponse)
+def search_worldbank(
+    q: str = Query(..., description="Indicator name or keyword"),
+    size: int = Query(default=8, ge=1, le=20),
+) -> WBSearchResponse:
+    """Search World Bank indicators by keyword."""
+    try:
+        resp = requests.get(
+            "https://api.worldbank.org/v2/indicator",
+            params={"search": q, "format": "json", "per_page": size},
+            timeout=10,
+        )
+        resp.raise_for_status()
+        payload = resp.json()
+        meta, items = payload[0], payload[1] if len(payload) > 1 else []
+        indicators = [
+            WBIndicator(
+                id=item["id"],
+                name=item["name"],
+                source=item.get("source", {}).get("value", "World Bank"),
+                topics=[t.get("value", "") for t in item.get("topics", []) if t.get("value")],
+            )
+            for item in (items or [])
+        ]
+        return WBSearchResponse(indicators=indicators, total=meta.get("total", len(indicators)))
+    except Exception as exc:
+        logger.warning("WB search failed: %s", exc)
+        raise HTTPException(status_code=502, detail=f"World Bank search unavailable: {exc}") from exc
+
+
+class ImportWBRequest(BaseModel):
+    indicator_id: str
+    indicator_name: str
+    mrv: int = 10  # most recent values (years)
+
+
+@router.post("/sessions/import-worldbank", response_model=SessionState, status_code=201)
+def import_worldbank(
+    body: ImportWBRequest,
+    svc: SessionService = Depends(get_session_service),
+) -> SessionState:
+    """Fetch World Bank indicator data for all countries and create a session."""
+    try:
+        resp = requests.get(
+            f"https://api.worldbank.org/v2/country/all/indicator/{body.indicator_id}",
+            params={"format": "json", "per_page": 500, "mrv": body.mrv},
+            timeout=20,
+        )
+        resp.raise_for_status()
+        payload = resp.json()
+        rows = payload[1] if len(payload) > 1 and payload[1] else []
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail=f"World Bank API error: {exc}") from exc
+
+    if not rows:
+        raise HTTPException(status_code=404, detail=f"No data found for indicator '{body.indicator_id}'.")
+
+    records = [
+        {
+            "country": r["country"]["value"],
+            "country_code": r["countryiso3code"],
+            "year": r["date"],
+            "value": r["value"],
+        }
+        for r in rows
+        if r.get("value") is not None
+    ]
+    if not records:
+        raise HTTPException(status_code=404, detail=f"All values are null for '{body.indicator_id}'.")
+
+    df = pd.DataFrame(records)
+    safe_name = body.indicator_name[:40].replace("/", "-").replace(" ", "_") + ".csv"
+    return svc.create_from_tables({safe_name: df})
