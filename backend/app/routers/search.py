@@ -46,6 +46,22 @@ class SearchResponse(BaseModel):
     has_more: bool
 
 
+def _hosted_csv_resources(resources: list) -> list:
+    """CSV resources hosted on data.gouv.fr — the only ones import accepts.
+
+    Search and import MUST share this predicate: anything search counts as a
+    CSV here is something import-url will actually download. External hosts
+    are excluded everywhere (unreliable; frequently reject programmatic
+    downloads), so datasets without a hosted CSV never appear in results.
+    """
+    return [
+        r
+        for r in resources
+        if ((r.get("format") or "").lower() == "csv" or str(r.get("url", "")).endswith(".csv"))
+        and "data.gouv.fr" in str(r.get("url", ""))
+    ]
+
+
 # --------------------------------------------------------------------------- #
 # Search endpoint
 # --------------------------------------------------------------------------- #
@@ -72,7 +88,7 @@ def search_datasets(
 
     datasets = []
     for ds in data.get("data", []):
-        csv_resources = [r for r in ds.get("resources", []) if (r.get("format") or "").lower() == "csv" or str(r.get("url", "")).endswith(".csv")]
+        csv_resources = _hosted_csv_resources(ds.get("resources", []))
         if not csv_resources:
             continue
         org = ds.get("organization") or {}
@@ -124,19 +140,13 @@ def _resolve_csv_candidates(url: str) -> list[tuple[str, str]]:
             data = api_resp.json()
         except requests.exceptions.RequestException as exc:
             raise HTTPException(status_code=502, detail=f"Could not resolve CSV for dataset '{dataset_id}': {exc}") from exc
-        all_csv = [
-            (res["url"], (res.get("title") or dataset_id) + ".csv")
-            for res in data.get("resources", [])
-            if (res.get("format") or "").upper() == "CSV" or str(res.get("url", "")).endswith(".csv")
-        ]
-        # Only use resources hosted on data.gouv.fr — external hosts are unreliable
-        preferred = [c for c in all_csv if "data.gouv.fr" in c[0]]
-        if not preferred:
+        hosted = _hosted_csv_resources(data.get("resources", []))
+        if not hosted:
             raise HTTPException(
                 status_code=404,
                 detail=f"No data.gouv.fr-hosted CSV found for dataset '{dataset_id}'. Try another dataset.",
             )
-        return preferred
+        return [(res["url"], (res.get("title") or dataset_id) + ".csv") for res in hosted]
     return [(url, url.split("/")[-1].split("?")[0] or "dataset.csv")]
 
 
