@@ -122,11 +122,14 @@ def _resolve_csv_candidates(url: str) -> list[tuple[str, str]]:
             )
             api_resp.raise_for_status()
             data = api_resp.json()
-            candidates = [
+            all_csv = [
                 (res["url"], (res.get("title") or dataset_id) + ".csv")
                 for res in data.get("resources", [])
                 if (res.get("format") or "").upper() == "CSV" or str(res.get("url", "")).endswith(".csv")
             ]
+            # Prefer resources hosted on data.gouv.fr itself (more reliable)
+            preferred = [c for c in all_csv if "data.gouv.fr" in c[0]]
+            candidates = preferred + [c for c in all_csv if c not in preferred]
             if candidates:
                 return candidates
         except Exception as exc:
