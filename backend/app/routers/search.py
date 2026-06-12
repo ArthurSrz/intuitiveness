@@ -69,10 +69,10 @@ def search_datasets(
         DatasetResult(
             id=ds.id,
             title=ds.title,
-            description=ds.description[:200],
-            organization=ds.organization_name,
-            has_csv=ds.has_csv,
-            resource_count=ds.resource_count,
+            description=(ds.description or "")[:200],
+            organization=ds.organization_name or "",
+            has_csv=bool(ds.has_csv),
+            resource_count=ds.resource_count or 0,
         )
         for ds in result.datasets
     ]
