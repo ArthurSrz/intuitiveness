@@ -336,30 +336,11 @@ export default function SessionPage({ params }: { params: Promise<{ id: string }
                   ) : node.isLoading || !node.data ? (
                     <StagePlaceholder />
                   ) : (
-                    <>
-                      <LevelView node={node.data} level={currentLevel} />
-                      {currentLevel === 4 && (
-                        <div style={{ marginTop: 12, display: "flex", alignItems: "center", gap: 10 }}>
-                          <input
-                            ref={addSourceRef}
-                            type="file"
-                            accept=".csv,text/csv"
-                            multiple
-                            style={{ display: "none" }}
-                            onChange={handleAddSource}
-                          />
-                          <button
-                            className="pill-btn ghost"
-                            onClick={() => addSourceRef.current?.click()}
-                            disabled={addSource.isPending}
-                            style={{ height: 36 }}
-                          >
-                            {addSource.isPending ? "Adding…" : "+ Add another dataset"}
-                          </button>
-                          <span className="t-meta">Each table stays unlinked at L4 — the descent joins them</span>
-                        </div>
-                      )}
-                    </>
+                    <LevelView
+                      node={node.data}
+                      level={currentLevel}
+                      onAddSource={currentLevel === 4 ? () => addSourceRef.current?.click() : undefined}
+                    />
                   )}
                 </div>
                 {guidedEdge && (
@@ -445,7 +426,11 @@ export default function SessionPage({ params }: { params: Promise<{ id: string }
                   {node.isLoading || !node.data ? (
                     <StagePlaceholder />
                   ) : (
-                    <LevelView node={node.data} level={currentLevel} />
+                    <LevelView
+                      node={node.data}
+                      level={currentLevel}
+                      onAddSource={currentLevel === 4 ? () => addSourceRef.current?.click() : undefined}
+                    />
                   )}
                 </div>
               </>
@@ -486,6 +471,16 @@ export default function SessionPage({ params }: { params: Promise<{ id: string }
           <JourneyCard stats={stats} />
         </aside>
       )}
+
+      {/* hidden file input for add-source (triggered from L4Sources header button) */}
+      <input
+        ref={addSourceRef}
+        type="file"
+        accept=".csv,text/csv"
+        multiple
+        style={{ display: "none" }}
+        onChange={handleAddSource}
+      />
 
       {/* ---------------- toast ---------------- */}
       {toast && (

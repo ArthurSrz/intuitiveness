@@ -11,7 +11,7 @@ import { Icon } from "@/components/ui/Icon";
  * preview the first decodable table in the design's raw-table chrome, framing
  * the "full complexity you didn't ask for" that the descent strips away.
  */
-export function L4Sources({ node }: { node: NodeDetail }) {
+export function L4Sources({ node, onAddSource }: { node: NodeDetail; onAddSource?: () => void }) {
   const payload = node.payload;
   const sources = useMemo(() => {
     if (!payload || typeof payload !== "object") return [];
@@ -76,6 +76,15 @@ export function L4Sources({ node }: { node: NodeDetail }) {
         >
           {sources.length} source{sources.length === 1 ? "" : "s"}
         </span>
+        {onAddSource && (
+          <button
+            className="pill-btn ghost"
+            onClick={onAddSource}
+            style={{ height: 28, fontSize: 12, flex: "none", padding: "0 10px" }}
+          >
+            + Add source
+          </button>
+        )}
       </div>
 
       {/* preview of the primary source */}
