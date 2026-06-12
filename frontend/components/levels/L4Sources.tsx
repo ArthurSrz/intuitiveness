@@ -23,10 +23,11 @@ export function L4Sources({ node, onAddSource }: { node: NodeDetail; onAddSource
 
   const shapes = (node.summary?.shapes as Record<string, unknown> | undefined) ?? undefined;
   const [selectedName, setSelectedName] = useState<string>(() => sources[0]?.name ?? "");
+  const [showAll, setShowAll] = useState(false);
   const selected = sources.find((s) => s.name === selectedName) ?? sources[0];
   const table: DecodedTable | null = selected?.table ?? null;
   const previewCols = table ? table.columns.slice(0, 8) : [];
-  const previewRows = table ? table.rows.slice(0, 12) : [];
+  const previewRows = table ? (showAll ? table.rows : table.rows.slice(0, 50)) : [];
 
   return (
     <div className="card" style={{ padding: 0, overflow: "hidden" }}>
@@ -135,6 +136,15 @@ export function L4Sources({ node, onAddSource }: { node: NodeDetail; onAddSource
             <span className="t-meta mono">
               {selected.name} — {table.rows.length} rows × {table.columns.length} cols
             </span>
+            {table.rows.length > 50 && (
+              <button
+                className="pill-btn ghost"
+                style={{ height: 28, fontSize: 12, flex: "none" }}
+                onClick={() => setShowAll((v) => !v)}
+              >
+                {showAll ? `Show first 50` : `Show all ${table.rows.length} rows`}
+              </button>
+            )}
             {table.columns.length > previewCols.length && (
               <span
                 className="chip"
