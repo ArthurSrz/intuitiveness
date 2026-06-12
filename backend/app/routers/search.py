@@ -97,12 +97,18 @@ class ImportUrlRequest(BaseModel):
     filename: Optional[str] = None
 
 
-def _resolve_csv_url(url: str) -> tuple[str, str]:
-    """Return (download_url, filename).
+_BROWSER_HEADERS = {
+    "User-Agent": "Mozilla/5.0 (compatible; Intuitiveness/1.0; +https://intuitiveness.app)",
+    "Accept": "text/csv,text/plain,*/*",
+}
 
-    Handles two URL shapes:
-    - data.gouv.fr dataset page: resolve via the public API → first CSV resource
-    - direct CSV URL: return as-is
+
+def _resolve_csv_candidates(url: str) -> list[tuple[str, str]]:
+    """Return list of (download_url, filename) candidates to try in order.
+
+    For data.gouv.fr dataset pages: returns ALL csv resources so we can fall
+    back to the next one if a host rejects the connection.
+    For direct URLs: returns a single-item list.
     """
     import re
     m = re.match(r"https?://www\.data\.gouv\.fr/[^/]+/datasets/([^/?#]+)/?", url)
@@ -116,13 +122,31 @@ def _resolve_csv_url(url: str) -> tuple[str, str]:
             )
             api_resp.raise_for_status()
             data = api_resp.json()
-            for res in data.get("resources", []):
-                if res.get("format", "").upper() == "CSV" or str(res.get("url", "")).endswith(".csv"):
-                    return res["url"], res.get("title", dataset_id) + ".csv"
-        except Exception as exc:  # noqa: BLE001
+            candidates = [
+                (res["url"], (res.get("title") or dataset_id) + ".csv")
+                for res in data.get("resources", [])
+                if (res.get("format") or "").upper() == "CSV" or str(res.get("url", "")).endswith(".csv")
+            ]
+            if candidates:
+                return candidates
+        except Exception as exc:
             raise HTTPException(status_code=502, detail=f"Could not resolve CSV for dataset '{dataset_id}': {exc}") from exc
         raise HTTPException(status_code=404, detail=f"No CSV resource found for dataset '{dataset_id}'.")
-    return url, url.split("/")[-1].split("?")[0] or "dataset.csv"
+    return [(url, url.split("/")[-1].split("?")[0] or "dataset.csv")]
+
+
+def _download_csv(candidates: list[tuple[str, str]]) -> tuple[bytes, str]:
+    """Try each candidate URL with a browser User-Agent; return (raw_bytes, filename)."""
+    last_exc: Exception = RuntimeError("No candidates")
+    for csv_url, filename in candidates:
+        try:
+            resp = requests.get(csv_url, timeout=30, headers=_BROWSER_HEADERS)
+            resp.raise_for_status()
+            return resp.content, filename
+        except Exception as exc:
+            logger.warning("Failed to download %s: %s", csv_url, exc)
+            last_exc = exc
+    raise HTTPException(status_code=502, detail=f"Could not download any CSV resource: {last_exc}")
 
 
 @router.post("/sessions/import-url", response_model=SessionState, status_code=201)
@@ -131,17 +155,11 @@ def import_from_url(
     svc: SessionService = Depends(get_session_service),
 ) -> SessionState:
     """Download a CSV from a public URL (or a data.gouv.fr dataset page) and create a session."""
-    csv_url, auto_filename = _resolve_csv_url(body.url)
+    candidates = _resolve_csv_candidates(body.url)
+    raw, auto_filename = _download_csv(candidates)
     filename = body.filename or auto_filename
     if not filename.lower().endswith(".csv"):
         filename += ".csv"
-
-    try:
-        resp = requests.get(csv_url, timeout=30)
-        resp.raise_for_status()
-        raw = resp.content
-    except Exception as exc:  # noqa: BLE001
-        raise HTTPException(status_code=502, detail=f"Could not download '{csv_url}': {exc}") from exc
 
     for enc in ("utf-8-sig", "utf-8", "latin-1"):
         try:
