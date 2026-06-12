@@ -6,11 +6,14 @@ import {
   useAddSource,
   useAscend,
   useDescend,
+  useImportWorldBank,
+  useImportUrl,
   useNode,
   useSession,
   useTimeTravel,
   useTree,
 } from "@/lib/api/hooks";
+import { apiGet } from "@/lib/api/client";
 import { API_BASE_URL, ApiError } from "@/lib/api/client";
 import { decodeValue } from "@/lib/payload";
 import type { AscendMove, SessionState, TreeResponse } from "@/lib/api/types";
@@ -67,7 +70,21 @@ export default function SessionPage({ params }: { params: Promise<{ id: string }
   const ascend = useAscend(id);
   const timeTravel = useTimeTravel(id);
   const addSource = useAddSource(id);
+  const importWB = useImportWorldBank();
+  const importUrl = useImportUrl();
   const addSourceRef = useRef<HTMLInputElement>(null);
+  const [addSourcePanel, setAddSourcePanel] = useState(false);
+  const [addSourceTab, setAddSourceTab] = useState<"datagouv" | "worldbank" | "upload">("datagouv");
+  const [dgQuery, setDgQuery] = useState("");
+  const [dgResults, setDgResults] = useState<Array<{id:string;title:string;organization:string;has_csv:boolean}> | null>(null);
+  const [dgBusy, setDgBusy] = useState(false);
+  const [dgError, setDgError] = useState<string|null>(null);
+  const [dgImportingId, setDgImportingId] = useState<string|null>(null);
+  const [wbQuery, setWbQuery] = useState("");
+  const [wbResults, setWbResults] = useState<Array<{id:string;name:string}> | null>(null);
+  const [wbBusy, setWbBusy] = useState(false);
+  const [wbError, setWbError] = useState<string|null>(null);
+  const [wbImportingId, setWbImportingId] = useState<string|null>(null);
   const pending =
     descend.isPending || ascend.isPending || timeTravel.isPending || node.isFetching;
 
@@ -161,9 +178,49 @@ export default function SessionPage({ params }: { params: Promise<{ id: string }
     const files = Array.from(e.target.files ?? []);
     if (!files.length) return;
     addSource.mutate(files, {
-      onSuccess: () => flash(`Added ${files.length} source${files.length === 1 ? "" : "s"}`),
+      onSuccess: () => { flash(`Added ${files.length} source${files.length === 1 ? "" : "s"}`); setAddSourcePanel(false); },
     });
     if (addSourceRef.current) addSourceRef.current.value = "";
+  }
+
+  async function handleDgSearch(e: React.FormEvent) {
+    e.preventDefault();
+    if (!dgQuery.trim()) return;
+    setDgBusy(true); setDgError(null); setDgResults(null);
+    try {
+      const res = await apiGet<{datasets: Array<{id:string;title:string;organization:string;has_csv:boolean}>}>(`/search?q=${encodeURIComponent(dgQuery)}&size=8`);
+      setDgResults(res.datasets);
+      if (!res.datasets.length) setDgError("No CSV datasets found.");
+    } catch { setDgError("Search unavailable."); }
+    finally { setDgBusy(false); }
+  }
+
+  function handleDgImport(ds: {id:string;title:string}) {
+    setDgImportingId(ds.id);
+    importUrl.mutate({ url: `https://www.data.gouv.fr/fr/datasets/${ds.id}/`, filename: ds.title + ".csv" }, {
+      onSuccess: (state) => { router.push(`/session/${state.session_id}`); setAddSourcePanel(false); },
+      onError: () => { setDgError("Import failed."); setDgImportingId(null); },
+    });
+  }
+
+  async function handleWbSearch(e: React.FormEvent) {
+    e.preventDefault();
+    if (!wbQuery.trim()) return;
+    setWbBusy(true); setWbError(null); setWbResults(null);
+    try {
+      const res = await apiGet<{indicators: Array<{id:string;name:string}>}>(`/search/worldbank?q=${encodeURIComponent(wbQuery)}&size=8`);
+      setWbResults(res.indicators);
+      if (!res.indicators.length) setWbError("No indicators found.");
+    } catch { setWbError("Search unavailable."); }
+    finally { setWbBusy(false); }
+  }
+
+  function handleWbImport(ind: {id:string;name:string}) {
+    setWbImportingId(ind.id);
+    importWB.mutate({ indicator_id: ind.id, indicator_name: ind.name }, {
+      onSuccess: (state) => { router.push(`/session/${state.session_id}`); setAddSourcePanel(false); },
+      onError: () => { setWbError("Import failed."); setWbImportingId(null); },
+    });
   }
 
   // Reset the captured params after a move so the next edge starts clean.
@@ -339,7 +396,7 @@ export default function SessionPage({ params }: { params: Promise<{ id: string }
                     <LevelView
                       node={node.data}
                       level={currentLevel}
-                      onAddSource={currentLevel === 4 ? () => addSourceRef.current?.click() : undefined}
+                      onAddSource={currentLevel === 4 ? () => setAddSourcePanel(true) : undefined}
                     />
                   )}
                 </div>
@@ -429,7 +486,7 @@ export default function SessionPage({ params }: { params: Promise<{ id: string }
                     <LevelView
                       node={node.data}
                       level={currentLevel}
-                      onAddSource={currentLevel === 4 ? () => addSourceRef.current?.click() : undefined}
+                      onAddSource={currentLevel === 4 ? () => setAddSourcePanel(true) : undefined}
                     />
                   )}
                 </div>
@@ -472,15 +529,74 @@ export default function SessionPage({ params }: { params: Promise<{ id: string }
         </aside>
       )}
 
-      {/* hidden file input for add-source (triggered from L4Sources header button) */}
-      <input
-        ref={addSourceRef}
-        type="file"
-        accept=".csv,text/csv"
-        multiple
-        style={{ display: "none" }}
-        onChange={handleAddSource}
-      />
+      <input ref={addSourceRef} type="file" accept=".csv,text/csv" multiple style={{ display: "none" }} onChange={handleAddSource} />
+
+      {/* ---------------- add-source panel ---------------- */}
+      {addSourcePanel && (
+        <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.45)", zIndex: 200, display: "flex", alignItems: "center", justifyContent: "center" }} onClick={() => setAddSourcePanel(false)}>
+          <div className="card" style={{ width: 480, maxWidth: "94vw", padding: 24, display: "flex", flexDirection: "column", gap: 16 }} onClick={(e) => e.stopPropagation()}>
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+              <span className="t-name" style={{ fontSize: 16 }}>Add a source</span>
+              <button className="pill-btn ghost" style={{ height: 28, fontSize: 12 }} onClick={() => setAddSourcePanel(false)}>Close</button>
+            </div>
+            {/* tabs */}
+            <div style={{ display: "flex", gap: 6 }}>
+              {(["datagouv","worldbank","upload"] as const).map((t) => (
+                <button key={t} className={`pill-btn ${addSourceTab === t ? "primary" : "ghost"}`} style={{ height: 30, fontSize: 12 }} onClick={() => setAddSourceTab(t)}>
+                  {t === "datagouv" ? "data.gouv.fr" : t === "worldbank" ? "World Bank" : "Upload CSV"}
+                </button>
+              ))}
+            </div>
+
+            {addSourceTab === "datagouv" && (
+              <form onSubmit={handleDgSearch} style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+                <input autoFocus type="text" value={dgQuery} onChange={(e) => setDgQuery(e.target.value)} placeholder={`"énergie", "résultats brevet"…`} style={{ border: "1px solid var(--border)", borderRadius: "var(--radius)", background: "var(--surface)", padding: "9px 12px", fontFamily: "var(--font)", fontSize: 14, color: "var(--text)", outline: "none" }} />
+                <button type="submit" className="pill-btn primary" style={{ justifyContent: "center" }} disabled={dgBusy || !dgQuery.trim()}>{dgBusy ? "Searching…" : "Search"}</button>
+                {dgError && <p className="t-meta" style={{ color: "var(--error)", margin: 0 }}>{dgError}</p>}
+                {dgResults && dgResults.map((ds) => (
+                  <div key={ds.id} style={{ display: "flex", alignItems: "center", gap: 10, padding: "8px 0", borderBottom: "1px solid var(--border)" }}>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div className="t-name" style={{ fontSize: 13, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{ds.title}</div>
+                      <div className="t-meta" style={{ fontSize: 11.5 }}>{ds.organization}</div>
+                    </div>
+                    <button className="pill-btn ghost" style={{ height: 28, fontSize: 12, flex: "none" }} disabled={!!dgImportingId} onClick={() => handleDgImport(ds)}>
+                      {dgImportingId === ds.id ? "…" : "Import"}
+                    </button>
+                  </div>
+                ))}
+              </form>
+            )}
+
+            {addSourceTab === "worldbank" && (
+              <form onSubmit={handleWbSearch} style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+                <input autoFocus type="text" value={wbQuery} onChange={(e) => setWbQuery(e.target.value)} placeholder={`"GDP", "fertility rate"…`} style={{ border: "1px solid var(--border)", borderRadius: "var(--radius)", background: "var(--surface)", padding: "9px 12px", fontFamily: "var(--font)", fontSize: 14, color: "var(--text)", outline: "none" }} />
+                <button type="submit" className="pill-btn primary" style={{ justifyContent: "center" }} disabled={wbBusy || !wbQuery.trim()}>{wbBusy ? "Searching…" : "Search"}</button>
+                {wbError && <p className="t-meta" style={{ color: "var(--error)", margin: 0 }}>{wbError}</p>}
+                {wbResults && wbResults.map((ind) => (
+                  <div key={ind.id} style={{ display: "flex", alignItems: "center", gap: 10, padding: "8px 0", borderBottom: "1px solid var(--border)" }}>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div className="t-name" style={{ fontSize: 13, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{ind.name}</div>
+                      <div className="t-meta mono" style={{ fontSize: 11 }}>{ind.id}</div>
+                    </div>
+                    <button className="pill-btn ghost" style={{ height: 28, fontSize: 12, flex: "none" }} disabled={!!wbImportingId} onClick={() => handleWbImport(ind)}>
+                      {wbImportingId === ind.id ? "…" : "Load"}
+                    </button>
+                  </div>
+                ))}
+              </form>
+            )}
+
+            {addSourceTab === "upload" && (
+              <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+                <p className="t-meta" style={{ margin: 0 }}>Upload one or more CSV files to add to this session.</p>
+                <button className="pill-btn primary" style={{ justifyContent: "center" }} onClick={() => addSourceRef.current?.click()}>
+                  {addSource.isPending ? "Uploading…" : "Choose CSV files"}
+                </button>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
 
       {/* ---------------- toast ---------------- */}
       {toast && (
