@@ -122,19 +122,21 @@ def _resolve_csv_candidates(url: str) -> list[tuple[str, str]]:
             )
             api_resp.raise_for_status()
             data = api_resp.json()
-            all_csv = [
-                (res["url"], (res.get("title") or dataset_id) + ".csv")
-                for res in data.get("resources", [])
-                if (res.get("format") or "").upper() == "CSV" or str(res.get("url", "")).endswith(".csv")
-            ]
-            # Prefer resources hosted on data.gouv.fr itself (more reliable)
-            preferred = [c for c in all_csv if "data.gouv.fr" in c[0]]
-            candidates = preferred + [c for c in all_csv if c not in preferred]
-            if candidates:
-                return candidates
-        except Exception as exc:
+        except requests.exceptions.RequestException as exc:
             raise HTTPException(status_code=502, detail=f"Could not resolve CSV for dataset '{dataset_id}': {exc}") from exc
-        raise HTTPException(status_code=404, detail=f"No CSV resource found for dataset '{dataset_id}'.")
+        all_csv = [
+            (res["url"], (res.get("title") or dataset_id) + ".csv")
+            for res in data.get("resources", [])
+            if (res.get("format") or "").upper() == "CSV" or str(res.get("url", "")).endswith(".csv")
+        ]
+        # Only use resources hosted on data.gouv.fr — external hosts are unreliable
+        preferred = [c for c in all_csv if "data.gouv.fr" in c[0]]
+        if not preferred:
+            raise HTTPException(
+                status_code=404,
+                detail=f"No data.gouv.fr-hosted CSV found for dataset '{dataset_id}'. Try another dataset.",
+            )
+        return preferred
     return [(url, url.split("/")[-1].split("?")[0] or "dataset.csv")]
 
 
@@ -209,7 +211,7 @@ def search_worldbank(
     try:
         resp = requests.get(
             "https://api.worldbank.org/v2/indicator",
-            params={"search": q, "format": "json", "per_page": size},
+            params={"q": q, "format": "json", "per_page": size},
             timeout=10,
         )
         resp.raise_for_status()
