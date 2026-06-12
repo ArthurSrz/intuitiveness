@@ -103,12 +103,18 @@ class MCPClient:
             payload["params"] = params
 
         try:
+            # Use data= with explicit UTF-8 encoding to preserve
+            # non-ASCII characters (French accents) in MCP queries
+            import json as _json
+            encoded_body = _json.dumps(payload, ensure_ascii=False).encode("utf-8")
+
             response = requests.post(
                 self.endpoint,
                 headers=self._get_headers(),
-                json=payload,
+                data=encoded_body,
                 timeout=self.timeout
             )
+            response.encoding = "utf-8"
 
             # Check for session ID in response
             if "Mcp-Session-Id" in response.headers:

@@ -63,7 +63,7 @@
   \vspace*{0.4in}
 
 \begin{abstract}
-Open data platforms face a critical challenge: datasets designed for expert users remain inaccessible to citizens and professionals with varying data literacy levels. This paper addresses the need for intuitive datasets whose complexity can adapt to user needs and capabilities, enabling broader value extraction from open data. We develop a conceptual meta-design framework grounded in design science research methodology and hierarchical design patterns. The framework defines five levels of data abstraction (L0-L4), from atomic datums to unlinkable multi-level datasets. We introduce the concept of dataset complexity mathematically and demonstrate that transitions between abstraction levels achieve 75-100\% complexity reduction. The framework is implemented as the open-source \texttt{intuitiveness} Python package, featuring AI-assisted entity discovery, semantic domain matching, and interactive navigation. We validate the approach through a case study with a major international logistics operator managing 8,368 indicators across multiple data sources. The descent phase (L4$\to$L0) transformed fragmented datasets into a clear atomic metric, revealing 40,279 relationships and enabling systematic identification of redundancy clusters. The ascent phase (L0$\to$L3) reconstructed intuitive multi-level tables that directly answered business questions about indicator consolidation. The accompanying Streamlit interface integrates with France's data.gouv.fr platform, making 45,000+ datasets accessible through guided workflows supporting both descent and ascent operations. The framework provides a principled method for designing intuitive datasets that serve diverse data users: from citizens seeking single facts to data scientists building complex products. By formalizing complexity levels and reduction mechanisms, we enable open data platforms to move beyond one-size-fits-all presentations toward adaptive, user-responsive dataset designs. Future work includes formal user studies across literacy levels and extension to streaming data contexts.
+Open data platforms face a critical challenge: datasets designed for expert users remain inaccessible to citizens and professionals with varying data literacy levels. This paper addresses the need for intuitive datasets whose complexity can adapt to user needs and capabilities, enabling broader value extraction from open data. We develop a conceptual meta-design framework grounded in design science research methodology and hierarchical design patterns. The framework defines five data granularity levels (L0-L4), from atomic datums to unlinkable multi-level datasets. We introduce the concept of dataset complexity mathematically and demonstrate that transitions between granularity levels achieve 55--100\% complexity reduction (lower bound 54.5\% on the L3$\to$L2 transition; see Table~\ref{tab:reduction_summary}). The framework is implemented as the open-source \texttt{intuitiveness} Python package, featuring AI-assisted entity discovery, semantic domain matching, and interactive navigation. We validate the approach through a case study with a major international logistics operator managing 8,368 indicators across multiple data sources. The descent phase (L4$\to$L0) transformed fragmented datasets into a clear atomic metric, revealing 40,279 relationships and enabling systematic identification of redundancy clusters. The ascent phase (L0$\to$L3) reconstructed intuitive multi-level tables that directly answered business questions about indicator consolidation. The accompanying Streamlit interface integrates with France's data.gouv.fr platform, making 45,000+ datasets accessible through guided workflows supporting both descent and ascent operations. The framework provides a principled method for designing intuitive datasets that serve diverse data users: from citizens seeking single facts to data scientists building complex products. By formalizing complexity levels and reduction mechanisms, we enable open data platforms to move beyond one-size-fits-all presentations toward adaptive, user-responsive dataset designs. Future work includes formal user studies across literacy levels and extension to streaming data contexts.
 \end{abstract}
 \end{center}
 
@@ -100,8 +100,8 @@ The conceptual meta-design framework meets the need for a method to design intui
 
 In this paper, we make the following contributions:
 \begin{enumerate}
-    \item We propose a conceptual meta-design framework based on five levels of data abstraction, enabling dataset designers to adapt complexity to user needs.
-    \item We provide a formal definition of dataset complexity and demonstrate mathematically how transitions between abstraction levels reduce complexity.
+    \item We propose a conceptual meta-design framework based on five data granularity levels, enabling dataset designers to adapt complexity to user needs.
+    \item We provide a formal definition of dataset complexity and demonstrate mathematically how transitions between granularity levels reduce complexity.
     \item We implement this framework as a Python library (\texttt{intuitiveness}) and validate it through a real-world case study with a major international logistics operator.
     \item We propose an interface that demonstrate the value of the \texttt{intuitiveness} package by making all CSVs files from the french public open data platform data.gouv.fr accessible to the package. 
     \item We offer practical guidelines for open data platforms to design intuitive datasets that address societal issues such as global warming, health, and public transparency.
@@ -109,7 +109,7 @@ In this paper, we make the following contributions:
 
 \subsection{Paper organization}
 
-The remainder of this paper is organized as follows. Section~\ref{sec:related-work} reviews related work on data literacy, open data reuse, and human-data interaction. Section~\ref{sec:framework} presents our conceptual meta-design framework with five levels of abstraction. Section~\ref{sec:complexity} provides the corresponding formal complexity analysis. Section~\ref{sec:case-study} describes the implementation and case study. Section~\ref{sec:discussion} discusses implications and limitations. Finally, Section~\ref{sec:conclusion} concludes the paper and outlines future work.
+The remainder of this paper is organized as follows. Section~\ref{sec:related-work} reviews related work on data literacy, open data reuse, and human-data interaction. Section~\ref{sec:framework} presents our conceptual meta-design framework with five granularity levels. Section~\ref{sec:complexity} provides the corresponding formal complexity analysis. Section~\ref{sec:case-study} describes the implementation and case study. Section~\ref{sec:discussion} discusses implications and limitations. Finally, Section~\ref{sec:conclusion} concludes the paper and outlines future work.
 
 %==================================
 % SECTION 2: RELATED WORK
@@ -121,7 +121,7 @@ Our work on intuitive datasets draws from several research streams: adaptive dat
 
 \subsection{Adaptive data visualization}
 
-A growing body of research addresses the challenge of adapting visualizations to users with varying levels of expertise. \citet{poetzsch2020towardataxonomy} propose a taxonomy for adaptive data visualization in analytics applications, distinguishing between user traits (e.g., statistical expertise, graphical literacy) and user states (e.g., monitoring vs. analysis tasks). Their empirical evaluation reveals that monitoring tasks with higher data complexity receive better suitability ratings, while analysis tasks require richer interactive features such as filtering, brushing, and drill-down capabilities. This suggests that different abstraction levels may be appropriate for different analytical intents, a principle we formalize in our framework.
+A growing body of research addresses the challenge of adapting visualizations to users with varying levels of expertise. \citet{poetzsch2020towardataxonomy} propose a taxonomy for adaptive data visualization in analytics applications, distinguishing between user traits (e.g., statistical expertise, graphical literacy) and user states (e.g., monitoring vs. analysis tasks). Their empirical evaluation reveals that monitoring tasks with higher data complexity receive better suitability ratings, while analysis tasks require richer interactive features such as filtering, brushing, and drill-down capabilities. This suggests that different granularity levels may be appropriate for different analytical intents, a principle we formalize in our framework.
 \vspace{1em}
 \noindent \citet{steichen2013useradaptiveinformationvisualisation} demonstrate that eye gaze data can predict users' current visualization tasks and cognitive abilities, including perceptual speed, visual working memory, and verbal working memory. Their work enables real-time adaptive interventions such as highlighting relevant elements or de-emphasizing non-relevant data to reduce cognitive load. Notably, they find that users with low perceptual speed particularly benefit from adaptive assistance, reinforcing the need for interfaces that can dynamically adjust complexity.
 
@@ -155,7 +155,7 @@ Selecting appropriate visualizations poses significant challenges for non-expert
 
 \subsection{Positioning Our Contribution}
 
-\noindent Existing work focuses predominantly on adapting \textit{visualizations} and \textit{interfaces} to user characteristics. However, comparatively little attention has been paid to adapting the \textit{underlying dataset structure} itself. Our framework addresses this gap by proposing that datasets can be designed with multiple levels of abstraction, enabling not just different visual presentations but fundamentally different data structures optimized for users at different literacy levels.
+\noindent Existing work focuses predominantly on adapting \textit{visualizations} and \textit{interfaces} to user characteristics. However, comparatively little attention has been paid to adapting the \textit{underlying dataset structure} itself. Our framework addresses this gap by proposing that datasets can be designed with multiple granularity levels, enabling not just different visual presentations but fundamentally different data structures optimized for users at different literacy levels.
 
 \vspace{1em}
 
@@ -167,15 +167,32 @@ Selecting appropriate visualizations poses significant challenges for non-expert
 \section{Conceptual Meta-Design Framework}
 \label{sec:framework}
 
-To create the conceptual meta-design framework we used the design science research methodology \citep{hevner2004} and applied the Hierarchical design pattern \citep{vaishnavi2015}. This pattern uses the divide and conquer strategy to design a complex system. It designs a system (the conceptual meta-design framework) by decomposing it into subsystems (five conceptual design frameworks to design each of the five levels of abstraction of one dataset), designing each of them before designing the interactions between them.
+To create the conceptual meta-design framework we used the design science research methodology \citep{hevner2004} and applied the Hierarchical design pattern \citep{vaishnavi2015}. This pattern uses the divide and conquer strategy to design a complex system. It designs a system (the conceptual meta-design framework) by decomposing it into subsystems (five conceptual design frameworks to design each of the five granularity levels of one dataset), designing each of them before designing the interactions between them.
 
-We also ensured, following the recursive principle of granular computing that secures a high level of human-data interaction \citep{wilke2016}, that datasets of an upper level of abstraction could be constructed by human extrapolation of datasets of lower levels of abstraction.
+We also ensured, following the recursive principle of granular computing that secures a high level of human-data interaction \citep{wilke2016}, that datasets of an upper granularity level could be constructed by human extrapolation of datasets of lower granularity levels.
 
-We consider five levels of abstraction for every dataset, hence five conceptual design frameworks. At the highest level, \textbf{Level 4} encompasses data made of unlinkable and multi-level datasets. Descending to \textbf{Level 3}, we find data made of linkable and multi-level datasets. \textbf{Level 2} represents data made of a single dataset with several entities and attributes. Moving further down, \textbf{Level 1} consists of data made of a single entity and several attributes, or alternatively of a single attribute and several entities. Finally, at the most granular level, \textbf{Level 0} comprises data made of a single entity, a single attribute, and a single value: corresponding to the classical definition of data as a triplet entity-value-attribute \citep{redman1997}, also considered as the fundamental information granule.
+We consider five \emph{data granularity levels} for every dataset, hence five conceptual design frameworks. By \emph{data granularity level} we mean the size of the informational unit treated as a single object in a representation: a value (L0), a vector (L1), a table (L2), a linked graph (L3), or an unlinked collection of artefacts (L4). The term is drawn from the granular-computing tradition \citep{wilke2016}, where granules are the elementary units of human--data interaction. We prefer it to the more common ``level of data abstraction'' because the latter is heavily overloaded in computer science---denoting variously the interface-hiding of abstract data types in object-oriented programming, the view layers of the ANSI/SPARC database architecture, category formation in artificial intelligence and knowledge representation, and the task-driven re-description of datasets in visualization research---none of which coincides with the granularity hierarchy we describe.
+
+At the highest level, \textbf{Level 4} encompasses data made of unlinkable and multi-level datasets. Descending to \textbf{Level 3}, we find data made of linkable and multi-level datasets. \textbf{Level 2} represents data made of a single dataset with several entities and attributes. Moving further down, \textbf{Level 1} consists of data made of a single entity and several attributes, or alternatively of a single attribute and several entities. Finally, at the most granular level, \textbf{Level 0} comprises data made of a single entity, a single attribute, and a single value: corresponding to the classical definition of data as a triplet entity-value-attribute \citep{redman1997}, also considered as the fundamental information granule.
 
 These five levels were designed according to the five stages of an intuitive process \citep{csikszentmihalyi1997flow}. \textbf{Level 0} corresponds to the \emph{preparation} stage, where the user becomes interested in some datum (for example, discovering that 65 percent of the population uses ChatGPT on a daily basis). \textbf{Level 1} corresponds to the \emph{incubation} stage, where the user unfolds the datum and makes unusual connections (for instance, hypothesizing that the people using ChatGPT on a daily basis should be the youngest). \textbf{Level 2} corresponds to the \emph{insight} stage, where the user starts to put pieces together (such as comparing the `age' and the `daily GPT use' columns inside a data table to see if there is a pattern between the two). \textbf{Level 3} corresponds to the \emph{evaluation} stage, where the user puts their insight on trial (for example, the user challenges their intuition that people using ChatGPT must be the youngest by collecting a different dataset with the probability of being a ChatGPT daily user depending on age class). Finally, \textbf{Level 4} corresponds to the \emph{elaboration} stage where the user will use other logical mechanisms than data aggregation to make sense of different datasets (for instance, the user might look for demographic distributions to see what proportion the youngest represent out of an entire population and then specify that if 65 percent of the population are daily users of ChatGPT, the users are mostly the youngest, showing the technology has not spread yet to the entire population).
 
 According to these definitions, data will be qualified as \emph{intuitive} if it allows users to ascend the level ladder in order to elaborate from a single value or, in the opposite direction, descend the level ladder to uncover an insight that will trigger curiosity or decision-making.
+
+To name what is at stake at each step, we adopt the vocabulary of Bruno Latour's analysis of scientific reference \citep{latour1999}. In \textit{Pandora's Hope}, Latour shows that every link in a chain of reference performs a controlled trade: a \textbf{reduction} of one property of the represented world is exchanged for an \textbf{amplification} of another. Travelling down a chain (a sample of soil becomes a labelled jar, then a colour-coded chart, then a number in a report) trades situatedness for transferability; travelling up reverses the trade. The descent phase of our framework is, in these terms, a chain of four reductions, each one purchasing a specific amplification:
+\begin{itemize}[leftmargin=2em,itemsep=0.2em]
+\item L4$\to$L3 reduces \textit{artefactual heterogeneity} in exchange for \textit{relational structure};
+\item L3$\to$L2 reduces \textit{domain breadth} in exchange for \textit{domain coherence};
+\item L2$\to$L1 reduces \textit{attribute dimensionality} in exchange for \textit{feature legibility};
+\item L1$\to$L0 reduces \textit{observational extent} in exchange for \textit{atomic certainty}.
+\end{itemize}
+The ascent phase reverses the polarity, chaining three amplifications that repay what was bought during the descent:
+\begin{itemize}[leftmargin=2em,itemsep=0.2em]
+\item L0$\to$L1 amplifies \textit{variation along a dimension} at the cost of atomic isolation;
+\item L1$\to$L2 amplifies \textit{attribute coverage} at the cost of feature isolation;
+\item L2$\to$L3 amplifies \textit{inter-domain linkage} at the cost of domain isolation.
+\end{itemize}
+Under this vocabulary, the user is not ``navigating'' through a fixed space but engaging in a sequence of \emph{deliberate commitments}: each transition is a contract whose terms can later be renegotiated. ``Intuitive data'' is then data for which both directions of the chain---reductions and amplifications---can be traversed without loss of provenance, so that every commitment made at a transition remains visible, comparable across alternatives, and reversible.
 
 All in all, this paper sets forth a meta-design framework that will enable data modelers, architects, analysts and data platform editors to put data users in a position of experiencing the ``flow'', that is a mental state ``expected to occur when individuals perceive greater opportunities for action than they encounter on average in their daily lives, and have skills adequate to engage them'' \citep{nakamura2014concept}.
 
@@ -195,7 +212,7 @@ We begin with the fundamental building block of all data structures.
     \label{fig:level0}
 \end{figure}
 
-\noindent At the lowest abstraction level, Level 0, data has no complexity as no interpretation is required for its comprehension. This type of data is commonly referred to as ``raw data.'' For instance, in our example, Michael weighs 45~kg, which is a fact. The datum can be expressed as the triple:
+\noindent At the lowest granularity level, Level 0, data has no complexity as no interpretation is required for its comprehension. This type of data is commonly referred to as ``raw data.'' For instance, in our example, Michael weighs 45~kg, which is a fact. The datum can be expressed as the triple:
 \[
 d = (\texttt{Michael}, \texttt{Weight (kg)}, 45)
 \]
@@ -205,7 +222,7 @@ d = (\texttt{Michael}, \texttt{Weight (kg)}, 45)
 %----------------------------------
 \subsection{Level 1: Single Entity or Single Attribute}
 
-To move from Level 0 to Level 1 of abstraction, we need to find a common element among several data. It can be a common attribute (`weight'), a common entity (`Michael'), or a common value.
+To move from Level 0 to Level 1 of granularity, we need to find a common element among several data. It can be a common attribute (`weight'), a common entity (`Michael'), or a common value.
 
 As a result, we can obtain a table with a single entity defined by multiple attributes, or a table with a single attribute and multiple entities (see Figure~\ref{fig:level1}). These tables are the primary form of what we call `data' (plural of `datum').
 
@@ -256,7 +273,7 @@ D_2 = \left\{
 %----------------------------------
 \subsection{Level 3: Linkable Multi-Level Datasets}
 
-At a higher level of abstraction, data transition from one to many linkable datasets and from one to many levels of entities and/or attributes.
+At a higher granularity level, data transition from one to many linkable datasets and from one to many levels of entities and/or attributes.
 
 \begin{figure}[h!]
     \centering
@@ -272,15 +289,15 @@ At a higher level of abstraction, data transition from one to many linkable data
 %----------------------------------
 \subsection{Level 4: Unlinkable Multi-Level Datasets}
 
-At the highest level of abstraction, data exist as disconnected collections without established relationships.
+At the highest granularity level, data exist as disconnected collections without established relationships.
 
 It has become commonplace to state that there is an ever-increasing amount of data available, which implies an underlying structure of extreme intelligence that can link data together. This structure would enable the discovery of fascinating knowledge and the creation of innovative applications. In this article, we assume that the reality of newly available data is quite different: there is no apparent structure to link them together, or if it does exist, it is undiscovered based on current knowledge. From our conceptual meta-design framework's perspective, \emph{all newly available datasets begin as Level 4 data}.
 
 Indeed, the available data, in their vast majority, do not share any attributes or common elements that would allow them to be linked together. For example, the link between daily shopping baskets in supermarkets and monthly water consumption in surrounding households has not been established. It may not exist, but certainly the connection remains undiscovered based on current scientific knowledge.
 
-Level 0 and Level 4 serve as boundary conditions: Level 0 represents the atomic unit of information with zero complexity, while Level 4 represents the default state of newly encountered data before relationships are established. Our main focus is to establish the conceptual framework of \emph{intuitive data}, which are defined as data whose level of abstraction and complexity can adapt to the data literacy level of the user.
+Level 0 and Level 4 serve as boundary conditions: Level 0 represents the atomic unit of information with zero complexity, while Level 4 represents the default state of newly encountered data before relationships are established. Our main focus is to establish the conceptual framework of \emph{intuitive data}, which are defined as data whose granularity level and complexity can adapt to the data literacy level of the user.
 
-In the following section, we formally demonstrate that transitioning from a higher abstraction level to a lower level decreases the complexity of the data, and we determine precise bounds on this complexity reduction.
+In the following section, we formally demonstrate that transitioning from a higher granularity level to a lower level decreases the complexity of the data, and we determine precise bounds on this complexity reduction.
 
 %==================================
 % SECTION 4: FORMAL COMPLEXITY ANALYSIS (REVISED)
@@ -288,7 +305,7 @@ In the following section, we formally demonstrate that transitioning from a high
 \section{Formal Complexity Analysis}
 \label{sec:complexity}
 
-In this section, we formalize the intuition that transitioning between abstraction levels reduces dataset complexity. We first establish rigorous definitions, then derive complexity measures for each level, and finally prove bounds on complexity reduction during level transitions.
+In this section, we formalize the intuition that transitioning between granularity levels reduces dataset complexity. We first establish rigorous definitions, then derive complexity measures for each level, and finally prove bounds on complexity reduction during level transitions.
 
 \subsection{Foundational Definitions}
 
@@ -366,7 +383,7 @@ where $\mathcal{R}(D)$ is the set of all extractable atomic relationships.
 
 \subsection{Complexity at Each Level}
 
-We now derive the complexity for each abstraction level.
+We now derive the complexity for each granularity level.
 
 \begin{proposition}[Level 0 Complexity]
 \label{prop:level0}
@@ -458,7 +475,7 @@ Level 4 does not possess ``infinite'' complexity. Rather, it exhibits \emph{frag
 
 \subsection{Complexity Reduction During Level Transitions}
 
-We now examine how complexity changes when transitioning between levels.
+We now examine how complexity changes when transitioning between levels. The closed-form bounds derived below quantify the \emph{reduction} side of each descent transition---how much structural complexity is shed in moving from one granularity level to the next. In the vocabulary of \S\ref{sec:framework}, each numerical $\Delta C$ must be read against the qualitative \emph{amplification} it purchases (relational structure at L4$\to$L3, domain coherence at L3$\to$L2, feature legibility at L2$\to$L1, atomic certainty at L1$\to$L0), which the framework articulates but does not attempt to quantify here.
 
 \begin{definition}[Complexity Reduction Ratio]
 \label{def:reduction}
@@ -473,7 +490,9 @@ The \emph{percentage reduction} is:
 \end{equation}
 \end{definition}
 
-\subsubsection{Level 1 to Level 0}
+\subsubsection{Level 1 to Level 0 --- reduction of observational extent}
+
+The amplification purchased by this reduction is \emph{atomic certainty}: the feature vector collapses to a single value with the highest possible transferability across contexts.
 
 \begin{theorem}[L1$\to$L0 Reduction]
 \label{thm:l1l0}
@@ -490,7 +509,9 @@ By Propositions~\ref{prop:level0} and~\ref{prop:level1}:
 \]
 \end{proof}
 
-\subsubsection{Level 2 to Level 1}
+\subsubsection{Level 2 to Level 1 --- reduction of attribute dimensionality}
+
+The amplification purchased by this reduction is \emph{feature legibility}: a single attribute (or entity) is isolated as the analytical focus.
 
 \begin{theorem}[L2$\to$L1 Reduction Bounds]
 \label{thm:l2l1}
@@ -521,7 +542,9 @@ C(D_1) = \binom{2}{2} = 1
 The limit is approached but never attained for finite datasets.
 \end{proof}
 
-\subsubsection{Level 3 to Level 2}
+\subsubsection{Level 3 to Level 2 --- reduction of domain breadth}
+
+The amplification purchased by this reduction is \emph{domain coherence}: the multi-entity graph is partitioned into a single domain-scoped table.
 
 \begin{theorem}[L3$\to$L2 Reduction Bounds]
 \label{thm:l3l2}
@@ -551,9 +574,9 @@ C(D_2^{(k^*)}) = 5
 \]
 \end{proof}
 
-\subsubsection{Level 4 to Level 3}
+\subsubsection{Level 4 to Level 3 --- reduction of artefactual heterogeneity}
 
-The L4$\to$L3 transition is qualitatively different from other transitions: it does not reduce \emph{structural} complexity but transforms its character.
+The amplification purchased by this reduction is \emph{relational structure}: previously unlinkable artefacts acquire a shared entity model. The L4$\to$L3 transition is qualitatively different from the other transitions: it does not reduce \emph{structural} complexity but transforms its character.
 
 \begin{theorem}[L4$\to$L3 Structural Transformation]
 \label{thm:l4l3}
@@ -640,10 +663,10 @@ with $C(D_4) = C(D_3) - C_{\mathcal{L}} < C(D_3)$ when links are established.
     \item $C(D_1) = O(n^2) < O(n^2 m^2) = C(D_2)$ for any $m \geq 2$.
     \item $C(D_2) < C(D_3)$ since $D_3$ contains at least one $D_2$ plus linking structure with $C_{\mathcal{L}} > 0$.
 \end{itemize}
-This confirms that the abstraction hierarchy is well-ordered with respect to structural complexity.
+This confirms that the granularity hierarchy is well-ordered with respect to structural complexity.
 \end{proof}
 
-\noindent This analysis demonstrates that each descent through the abstraction levels achieves substantial complexity reduction, with lower bounds of 54.5\%--100\% depending on the transition. These reductions enable datasets to adapt to users with varying data literacy levels, supporting the framework's goal of designing intuitive data experiences.
+\noindent This analysis demonstrates that each descent through the granularity levels achieves substantial complexity reduction, with lower bounds of 54.5\%--100\% depending on the transition. These reductions enable datasets to adapt to users with varying data literacy levels, supporting the framework's goal of designing intuitive data experiences.
 
 
 %==================================
@@ -731,17 +754,19 @@ The \textbf{descent} (L4 $\to$ L0) moved the organization from chaos to a clear 
 We implemented the framework as \texttt{intuitiveness}, an open-source Python package that operationalizes the descent-ascent methodology through three core capabilities: AI-assisted data modeling, semantic domain matching, and interactive navigation.
 
 \subsubsection{Adaptive data structures.}
-The package represents each abstraction level as a typed Python class. Level~4 wraps dictionaries of DataFrames representing disconnected CSV files. Level~3 holds NetworkX graphs or multi-level DataFrames with explicit relationships. Level~2 contains single pandas DataFrames for domain-specific tables. Level~1 stores pandas Series as feature vectors. Level~0 encapsulates scalar values with optional parent references enabling reverse navigation. A unified \texttt{Redesigner} class dispatches transitions between adjacent levels, enforcing the constraint that users cannot return to Level~4 once they descent. This ensures a commitment to the linking decisions that transform chaos into structure.
+The package represents each granularity level as a typed Python class. Level~4 wraps dictionaries of DataFrames representing disconnected CSV files. Level~3 holds NetworkX graphs or multi-level DataFrames with explicit relationships. Level~2 contains single pandas DataFrames for domain-specific tables. Level~1 stores pandas Series as feature vectors. Level~0 encapsulates scalar values with optional parent references enabling reverse navigation. A unified \texttt{Redesigner} class dispatches transitions between adjacent levels, enforcing the constraint that users cannot return to Level~4 once they descent. This ensures a commitment to the linking decisions that transform chaos into structure.
 
 \subsubsection{AI-powered entity discovery.}
 The L4$\to$L3 transition leverages large language models to suggest data models from raw CSVs. The system extracts column names, data types, and sample values, then prompts an LLM (supporting both local models via Ollama and cloud models via OpenAI) to propose entities, key properties, and relationships. Users review suggestions through an interactive schema visualization before graph construction. For users preferring manual control, a rule-based generator creates star schemes from user-specified entity lists. A three-tier relationship discovery system identifies connections between files: name heuristics ($\sim$5\,ms) detect common ID patterns; value overlap analysis ($\sim$100\,ms) computes Jaccard similarity on stratified samples; semantic embeddings ($\sim$2\,s) find conceptually related columns when exact matches fail.
 
 \subsubsection{Semantic domain matching.}
-The L3$\to$L2 transition employs embedding-based categorization using the multilingual-e5-small model\cite{wang2024}. Users specify target domains in natural language; the system first attempts keyword matching against domain-specific vocabularies, then batch-processes unmatched items through semantic similarity computation. This hybrid approach handles multilingual datasets and accommodates users unfamiliar with precise terminology. For instance: a query for ``revenus'' correctly matches columns labeled ``CA'' (\textit{chiffre d'affaires}) or ``income.''
+The L3$\to$L2 transition employs embedding-based categorization using the multilingual-e5-small model \citep{wang2024}. Users specify target domains in natural language; the system first attempts keyword matching against domain-specific vocabularies, then batch-processes unmatched items through semantic similarity computation. This hybrid approach handles multilingual datasets and accommodates users unfamiliar with precise terminology. For instance: a query for ``revenus'' correctly matches columns labeled ``CA'' (\textit{chiffre d'affaires}) or ``income.''
 
 \subsubsection{Navigation and persistence.}
-A \texttt{NavigationSession} class enforces the framework's rules: entry exclusively at L4, vertical-only movement, and no return to L4 once departed. The system tracks accumulated outputs at each visited level, enabling export of complete analysis trails. A branching \texttt{NavigationTree} structure preserves alternative exploration paths, supporting time-travel to previous decision points. Sessions persist across browser restarts through localStorage serialization with version checking and corruption detection.
+A \texttt{NavigationSession} class enforces the framework's rules: entry exclusively at L4, vertical-only movement, and no return to L4 once departed. The system tracks accumulated outputs at each visited level, enabling export of complete analysis trails. Sessions persist across browser restarts through localStorage serialization with version checking and corruption detection.
 
+\subsubsection{Branching exploration and decision-point time-travel.}
+\noindent To enable non-linear yet rule-preserving exploration, the \texttt{NavigationTree} records every transition as a node capturing the granularity level, the inputs available, the decision taken (e.g.\ domains selected at L3$\to$L2, atomic metric chosen at L1$\to$L0), and the resulting outputs. Two capabilities follow: \textbf{time-travel}, returning to any prior node with its full state restored, and \textbf{branching}, taking a different decision from a historical node to produce a sibling trajectory alongside the original. The same raw L4 collection can thus be redesigned into several coherent L0--L3 stacks within a single session, supporting comparative analysis, ``what-if'' reasoning over alternative design choices, and audit-grade provenance via JSON-serialisable decision trails---a level of traceability that flat one-shot pipelines cannot offer. A sidebar in the Streamlit interface visualises the current branch and exposes time-travel as a one-click action on any prior node.
 
 \subsubsection{Interactive interface.}
 \noindent An accompanying Streamlit application provides guided workflows for each transition: file upload with drag-and-drop, entity discovery with confidence indicators, relationship confirmation with sample matches, domain categorisation with keyword/semantic toggles, column extraction with data type handling, and aggregation selection. Ascent-phase forms support enrichment function selection (L0$\to$L1), dimension addition with preview (L1$\to$L2), and drag-and-drop relationship building (L2$\to$L3). A sidebar decision tree visualizes exploration branches; a JSON exporter produces audit trails compatible with visualisation tools. The interface supports French and English with runtime language switching.
@@ -767,7 +792,7 @@ The conceptual meta-design framework and its implementation as the \texttt{intui
 
 \subsubsection{For Open Data Platforms}
 
-International open data platforms such as data.gouv.fr, UIS.stat, or the World Bank Open Data can integrate the framework as a ``data redesign plugin.'' Our interface demonstrates this feasibility by making all CSV files from data.gouv.fr accessible through the \texttt{intuitiveness} package, allowing users to query datasets in natural language and navigate through abstraction levels. Specifically, platforms could adopt three key strategies. First, they could \textbf{expose multiple abstraction levels}, rather than providing a single download option, platforms could offer users the choice to access data at L0 (atomic metrics for quick facts), L1 (feature vectors for trend analysis), L2 (filtered tables for domain exploration), or L3 (linked multi-level datasets for advanced analytics). Second, they could \textbf{implement guided descent workflows}, following our Q\&A approach, platforms could guide users through progressive complexity reduction, asking questions such as ``What is your main indicator of interest?'' and ``Which domains are relevant to your analysis?'' Third, they could \textbf{enable user-driven ascent} once users reach L0 ground truth, platforms could support intentional reconstruction with user-specified analytic dimensions, producing datasets tailored to specific audiences or use cases.
+International open data platforms such as data.gouv.fr, UIS.stat, or the World Bank Open Data can integrate the framework as a ``data redesign plugin.'' Our interface demonstrates this feasibility by making all CSV files from data.gouv.fr accessible through the \texttt{intuitiveness} package, allowing users to query datasets in natural language and navigate through granularity levels. Specifically, platforms could adopt three key strategies. First, they could \textbf{expose multiple granularity levels}, rather than providing a single download option, platforms could offer users the choice to access data at L0 (atomic metrics for quick facts), L1 (feature vectors for trend analysis), L2 (filtered tables for domain exploration), or L3 (linked multi-level datasets for advanced analytics). Second, they could \textbf{implement guided descent workflows}, following our Q\&A approach, platforms could guide users through progressive complexity reduction, asking questions such as ``What is your main indicator of interest?'' and ``Which domains are relevant to your analysis?'' Third, they could \textbf{enable user-driven ascent} once users reach L0 ground truth, platforms could support intentional reconstruction with user-specified analytic dimensions, producing datasets tailored to specific audiences or use cases.
 
 \subsubsection{For Dataset Designers}
 
@@ -775,7 +800,7 @@ Data architects and analysts can apply the framework to redesign existing datase
 
 \subsubsection{For Data Literacy Initiatives}
 
-Educational programs and training initiatives can leverage the framework to scaffold learning through three key mechanisms. First, the framework enables \textbf{progressive skill development}. The five abstraction levels align with increasing data literacy competencies, allowing beginners to start at L0 (understanding single facts) and progressively advance to L3 (working with linked, multi-level structures). Second, it facilitates \textbf{flow-based learning experiences}, drawing on Csikszentmihalyi's flow theory, the framework positions data users to experience optimal challenge-skill balance at each level, reducing frustration and increasing engagement. Third, it supports \textbf{adaptive interfaces} by following recommendations from the visualization literacy literature \citep{alhamadi2022dataqualitymismatched, amyrotos2021adaptivevisualisationsfor}, our Streamlit interface implements progressive disclosure, minimal default visualizations, and contextual guidance that adapts to user actions.
+Educational programs and training initiatives can leverage the framework to scaffold learning through three key mechanisms. First, the framework enables \textbf{progressive skill development}. The five granularity levels align with increasing data literacy competencies, allowing beginners to start at L0 (understanding single facts) and progressively advance to L3 (working with linked, multi-level structures). Second, it facilitates \textbf{flow-based learning experiences}, drawing on Csikszentmihalyi's flow theory, the framework positions data users to experience optimal challenge-skill balance at each level, reducing frustration and increasing engagement. Third, it supports \textbf{adaptive interfaces} by following recommendations from the visualization literacy literature \citep{alhamadi2022dataqualitymismatched, amyrotos2021adaptivevisualisationsfor}, our Streamlit interface implements progressive disclosure, minimal default visualizations, and contextual guidance that adapts to user actions.
 
 \subsubsection{Integration with Knowledge Graphs}
 
@@ -793,7 +818,7 @@ While the framework provides a principled approach to designing intuitive datase
 
 \subsubsection{Theoretical Constraints}
 
-Several theoretical limitations constrain the framework's applicability. First, \textbf{L4 and L0 function as theoretical extremes}. Level 4 (unlinkable datasets) and Level 0 (atomic datums) represent boundary conditions that are more useful as conceptual anchors than practical states. L4 assumes complete disconnection between datasets, which is rarely absolute in practice, as some implicit relationships often exist. Similarly, L0's single-value representation may oversimplify nuanced phenomena. Second, the \textbf{complexity formula makes simplifying assumptions}, the complexity order calculations assume that all possible combinations of rows and columns are equally meaningful. In practice, many combinations may be semantically invalid or analytically irrelevant. The formal bounds represent mathematical upper limits, not guaranteed practical outcomes. Third, the framework maintains a \textbf{tabular data focus}: it was developed primarily for tabular data (CSV files, relational tables). Extension to other data modalities, such as time series, geospatial data, or unstructured text, would require additional abstraction mechanisms.
+Several theoretical limitations constrain the framework's applicability. First, \textbf{L4 and L0 function as theoretical extremes}. Level 4 (unlinkable datasets) and Level 0 (atomic datums) represent boundary conditions that are more useful as conceptual anchors than practical states. L4 assumes complete disconnection between datasets, which is rarely absolute in practice, as some implicit relationships often exist. Similarly, L0's single-value representation may oversimplify nuanced phenomena. Second, the \textbf{complexity formula makes simplifying assumptions}, the complexity order calculations assume that all possible combinations of rows and columns are equally meaningful. In practice, many combinations may be semantically invalid or analytically irrelevant. The formal bounds represent mathematical upper limits, not guaranteed practical outcomes. Third, the framework maintains a \textbf{tabular data focus}: it was developed primarily for tabular data (CSV files, relational tables). Extension to other data modalities, such as time series, geospatial data, or unstructured text, would require additional granularity-design mechanisms.
 
 \subsubsection{Package and interface implementation Constraints}
 
@@ -805,7 +830,7 @@ The validation of the framework remains limited in several respects. Most import
 
 \subsubsection{Scope Boundaries}
 
-Our framework does not assess that input data is reasonably clean and well-structured. It does not address data quality issues such as missing values, inconsistent encodings, or schema drift. Preprocessing steps are the user's responsibility. Second, the implementation operates on \textbf{static snapshots} and the current implementation operates on static dataset snapshots. Real-time or streaming data would require additional mechanisms for incremental updates and complexity recalculation. Finally, the framework provides a \textbf{single-user workflow}: it supports individual users navigating abstraction levels. Collaborative features, such as shared navigation sessions, annotation, or version control of redesigned datasets, are not yet implemented.
+Our framework does not assess that input data is reasonably clean and well-structured. It does not address data quality issues such as missing values, inconsistent encodings, or schema drift. Preprocessing steps are the user's responsibility. Second, the implementation operates on \textbf{static snapshots} and the current implementation operates on static dataset snapshots. Real-time or streaming data would require additional mechanisms for incremental updates and complexity recalculation. Finally, the framework provides a \textbf{single-user workflow}: it supports individual users navigating granularity levels. Collaborative features, such as shared navigation sessions, annotation, or version control of redesigned datasets, are not yet implemented.
 
 %==================================
 % SECTION 7: CONCLUSION
@@ -821,15 +846,15 @@ Our framework does not assess that input data is reasonably clean and well-struc
 
 \subsection{Future Work}
 
-\noindent  Several research directions emerge from this work. First, \textbf{formal user studies} are needed to validate intuitiveness gains across different data literacy levels. We plan to conduct controlled experiments comparing task completion times, error rates, and user satisfaction when working with datasets at different abstraction levels. Such studies would provide empirical evidence for the theoretical complexity reduction bounds derived in Section~\ref{sec:complexity}.
+\noindent  Several research directions emerge from this work. First, \textbf{formal user studies} are needed to validate intuitiveness gains across different data literacy levels. We plan to conduct controlled experiments comparing task completion times, error rates, and user satisfaction when working with datasets at different granularity levels. Such studies would provide empirical evidence for the theoretical complexity reduction bounds derived in Section~\ref{sec:complexity}.
 
 \vspace{1em}
 
-\noindent Second, \textbf{platform integration pilots} with international open data portals would demonstrate scalability. We aim to collaborate with platforms such as the World Bank Open Data, the UNESCO Institute for Statistics (UIS.stat) and the European Data Portal to implement the framework as a ``data redesign plugin,'' enabling millions of users to access datasets at their preferred abstraction level.
+\noindent Second, \textbf{platform integration pilots} with international open data portals would demonstrate scalability. We aim to collaborate with platforms such as the World Bank Open Data, the UNESCO Institute for Statistics (UIS.stat) and the European Data Portal to implement the framework as a ``data redesign plugin,'' enabling millions of users to access datasets at their preferred granularity level.
 
 \vspace{1em}
 
-\noindent Third, \textbf{automated complexity assessment tools} could help dataset publishers evaluate their data's intuitiveness before release. By computing complexity metrics and identifying missing abstraction levels, such tools would guide publishers toward more accessible dataset designs.
+\noindent Third, \textbf{automated complexity assessment tools} could help dataset publishers evaluate their data's intuitiveness before release. By computing complexity metrics and identifying missing granularity levels, such tools would guide publishers toward more accessible dataset designs.
 
 \vspace{1em}
 
