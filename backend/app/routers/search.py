@@ -56,27 +56,36 @@ def search_datasets(
     page: int = Query(default=1, ge=1),
     size: int = Query(default=8, ge=1, le=20),
 ) -> SearchResponse:
-    """Search data.gouv.fr for public datasets matching a query."""
+    """Search data.gouv.fr for datasets that have CSV resources."""
     try:
-        from intuitiveness.services.datagouv_client import DataGouvSearchService
-        svc = DataGouvSearchService()
-        result = svc.search(q, page=page, page_size=size)
-    except Exception as exc:  # noqa: BLE001
-        logger.warning("Search failed: %s", exc)
+        resp = requests.get(
+            "https://www.data.gouv.fr/api/1/datasets/",
+            params={"q": q, "format": "csv", "page": page, "page_size": size},
+            timeout=10,
+            headers={"Accept": "application/json"},
+        )
+        resp.raise_for_status()
+        data = resp.json()
+    except Exception as exc:
+        logger.warning("data.gouv search failed: %s", exc)
         raise HTTPException(status_code=502, detail=f"Search unavailable: {exc}") from exc
 
-    datasets = [
-        DatasetResult(
-            id=ds.id,
-            title=ds.title,
-            description=(ds.description or "")[:200],
-            organization=ds.organization_name or "",
-            has_csv=bool(ds.has_csv),
-            resource_count=ds.resource_count or 0,
-        )
-        for ds in result.datasets
-    ]
-    return SearchResponse(datasets=datasets, total=result.total, has_more=result.has_more)
+    datasets = []
+    for ds in data.get("data", []):
+        csv_resources = [r for r in ds.get("resources", []) if (r.get("format") or "").lower() == "csv" or str(r.get("url", "")).endswith(".csv")]
+        if not csv_resources:
+            continue
+        org = ds.get("organization") or {}
+        datasets.append(DatasetResult(
+            id=ds["id"],
+            title=ds.get("title", "")[:120],
+            description=(ds.get("description") or "")[:200],
+            organization=org.get("name", "") if isinstance(org, dict) else "",
+            has_csv=True,
+            resource_count=len(csv_resources),
+        ))
+    total = data.get("total", len(datasets))
+    return SearchResponse(datasets=datasets, total=total, has_more=data.get("next_page") is not None)
 
 
 # --------------------------------------------------------------------------- #
