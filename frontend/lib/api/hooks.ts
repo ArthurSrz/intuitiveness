@@ -47,6 +47,11 @@ function invalidateSession(
   queryClient.invalidateQueries({ queryKey: ["node", sessionId] });
 }
 
+export function useInvalidateSession(sessionId: string) {
+  const queryClient = useQueryClient();
+  return () => invalidateSession(queryClient, sessionId);
+}
+
 // ---- Reads ----------------------------------------------------------------
 
 export function useSessions(): UseQueryResult<SessionSummary[]> {

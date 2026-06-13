@@ -35,29 +35,33 @@ def _to_frame(data: Any) -> pd.DataFrame:
 
 
 def _pick_column(df: pd.DataFrame, column: Optional[str]) -> Optional[str]:
-    if column and column in df.columns:
+    if column and column in df.columns and df[column].notna().any():
         return column
-    # Prefer a numeric measure column, else the first non-key text column.
-    numeric = [c for c in df.columns if pd.api.types.is_numeric_dtype(df[c])]
+    # Prefer a numeric measure column with actual values.
+    numeric = [c for c in df.columns if pd.api.types.is_numeric_dtype(df[c]) and df[c].notna().any()]
     if numeric:
-        # favour a recognisably-measure-like name
         for c in numeric:
             if any(k in str(c).lower() for k in ("value", "amount", "price", "score", "count")):
                 return c
         return numeric[0]
-    text = [c for c in df.columns if c != "node"]
+    text = [c for c in df.columns if c != "node" and df[c].notna().any()]
     return text[0] if text else (df.columns[0] if len(df.columns) else None)
 
 
 def _quantile_categorize(df: pd.DataFrame, col: str, domains: List[str]) -> pd.Series:
     """Split `col` into len(domains) quantile bins; lowest bin → domains[0]."""
     n = len(domains)
+    mask = df[col].notna()
+    if not mask.any():
+        return pd.Series(UNMATCHED, index=df.index)
+
     try:
-        cats = pd.qcut(df[col].rank(method="first"), q=n, labels=domains)
-        return cats.astype(str)
+        cats = pd.qcut(df.loc[mask, col].rank(method="first"), q=n, labels=domains)
+        result = pd.Series(UNMATCHED, index=df.index)
+        result.loc[mask] = cats.astype(str)
+        return result
     except Exception:
-        # Too few distinct values for n bins — fall back to a rank split.
-        ranks = df[col].rank(method="first")
+        ranks = df.loc[mask, col].rank(method="first")
         edges = [ranks.quantile(i / n) for i in range(1, n)]
 
         def bucket(r: float) -> str:
@@ -66,7 +70,9 @@ def _quantile_categorize(df: pd.DataFrame, col: str, domains: List[str]) -> pd.S
                     return domains[i]
             return domains[-1]
 
-        return ranks.apply(bucket)
+        result = pd.Series(UNMATCHED, index=df.index)
+        result.loc[mask] = ranks.apply(bucket)
+        return result
 
 
 def _keyword_categorize(df: pd.DataFrame, col: str, domains: List[str]) -> pd.Series:

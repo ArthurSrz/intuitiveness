@@ -17,11 +17,11 @@ export interface LevelMeta {
 }
 
 export const LEVELS: LevelMeta[] = [
-  { n: 4, code: "L4", name: "Raw Dataset", glyph: "table", tag: "Original tabular data" },
-  { n: 3, code: "L3", name: "Entity Graph", glyph: "graph", tag: "A graph of relationships" },
-  { n: 2, code: "L2", name: "Domain Categories", glyph: "categories", tag: "Grouped by meaning" },
-  { n: 1, code: "L1", name: "Feature Vector", glyph: "vector", tag: "One number per entity" },
-  { n: 0, code: "L0", name: "Core Datum", glyph: "core", tag: "A single atomic truth" },
+  { n: 4, code: "L4", name: "Heterogeneous Sources", glyph: "table", tag: "Unlinkable, multi-source data" },
+  { n: 3, code: "L3", name: "Knowledge Graph", glyph: "graph", tag: "Entities linked through shared structure" },
+  { n: 2, code: "L2", name: "Domain Table", glyph: "categories", tag: "One coherent domain, categorized" },
+  { n: 1, code: "L1", name: "Feature Vector", glyph: "vector", tag: "One variable per entity" },
+  { n: 0, code: "L0", name: "Atomic Datum", glyph: "core", tag: "A single certain value" },
 ];
 
 /** Free-navigation level identities — the five granularity levels (paper §3). */
@@ -29,11 +29,11 @@ export const NAV_LEVELS: Record<
   number,
   { code: string; name: string; glyph: string; desc: string }
 > = {
-  4: { code: "L4", name: "Unlinkable", glyph: "table", desc: "Unlinkable, multi-level datasets" },
-  3: { code: "L3", name: "Linkable", glyph: "graph", desc: "Linkable, multi-level datasets" },
-  2: { code: "L2", name: "Table", glyph: "categories", desc: "One dataset · several entities & attributes" },
-  1: { code: "L1", name: "Vector", glyph: "vector", desc: "One entity (or attribute) · several values" },
-  0: { code: "L0", name: "Value", glyph: "core", desc: "A single entity-attribute-value triplet" },
+  4: { code: "L4", name: "Sources", glyph: "table", desc: "Heterogeneous, unlinkable datasets" },
+  3: { code: "L3", name: "Graph", glyph: "graph", desc: "Entities linked through shared structure" },
+  2: { code: "L2", name: "Domain", glyph: "categories", desc: "One coherent table · categorized by meaning" },
+  1: { code: "L1", name: "Vector", glyph: "vector", desc: "One variable · one value per entity" },
+  0: { code: "L0", name: "Datum", glyph: "core", desc: "A single atomic value" },
 };
 
 /** Guided-workflow steps — the FULL descent–ascent cycle: L4 → L0, then L0 → L3. */
@@ -48,34 +48,34 @@ export interface Step {
 }
 
 export const STEPS: Step[] = [
-  /* ---- descent: strip complexity to the core ---- */
-  { id: "upload", glyph: "dataset", title: "Your Raw Dataset", level: "L4", phase: "descent", stageLevel: 4, question: "This is your data as-is — every column, every row. The descent will strip it down to its core." },
-  { id: "entities", glyph: "graph", title: "Define Entities", level: "L4 → L3", phase: "descent", stageLevel: 3, question: "What are the main entities you want in your knowledge graph?" },
-  { id: "domains", glyph: "categories", title: "Isolate Domains", level: "L3 → L2", phase: "descent", stageLevel: 2, question: "Query the graph to isolate domain-specific subsets" },
-  { id: "features", glyph: "vector", title: "Extract Features", level: "L2 → L1", phase: "descent", stageLevel: 1, question: "Extract a column to create vectors for analysis" },
-  { id: "metric", glyph: "core", title: "Compute Metric", level: "L1 → L0", phase: "descent", stageLevel: 0, question: "What aggregation metric do you want to compute?" },
+  /* ---- descent: trade away complexity for certainty ---- */
+  { id: "upload", glyph: "dataset", title: "Heterogeneous Sources", level: "L4", phase: "descent", stageLevel: 4, question: "Your data as-is — unlinkable, multi-source. The descent trades away complexity one level at a time." },
+  { id: "entities", glyph: "graph", title: "Match Entities", level: "L4 → L3", phase: "descent", stageLevel: 3, question: "Trade heterogeneity for structure — connect sources through shared entities." },
+  { id: "domains", glyph: "categories", title: "Map Domains", level: "L3 → L2", phase: "descent", stageLevel: 2, question: "Trade domain breadth for coherence — name the categories that carve your data." },
+  { id: "features", glyph: "vector", title: "Select Feature", level: "L2 → L1", phase: "descent", stageLevel: 1, question: "Trade dimensionality for legibility — isolate the one variable that matters." },
+  { id: "metric", glyph: "core", title: "Aggregate", level: "L1 → L0", phase: "descent", stageLevel: 0, question: "Trade extent for certainty — compress to a single atomic value." },
   /* ---- pivot: the core datum + your intent ---- */
   { id: "intent", glyph: "intent", title: "Set Your Intent", level: "L0", phase: "pivot", stageLevel: 0, question: "You've reached the core datum. What question will you rebuild the data to answer?" },
   /* ---- ascent: rebuild only what your intent needs ---- */
-  { id: "rebuild", glyph: "vector", title: "Rebuild Vector", level: "L0 → L1", phase: "ascent", stageLevel: 1, question: "Re-expand the datum into one comparable number per entity" },
-  { id: "split", glyph: "categories", title: "Categorize", level: "L1 → L2", phase: "ascent", stageLevel: 2, question: "Split the vector by the line that answers your question" },
-  { id: "link", glyph: "graph", title: "Link & Build", level: "L2 → L3", phase: "ascent", stageLevel: 3, question: "Add back the one relationship your intent asked for" },
+  { id: "rebuild", glyph: "vector", title: "Enrich", level: "L0 → L1", phase: "ascent", stageLevel: 1, question: "Reconstruct a vector — one comparable number per entity, guided by your intent." },
+  { id: "split", glyph: "categories", title: "Add Dimensions", level: "L1 → L2", phase: "ascent", stageLevel: 2, question: "Add the categorical dimension that answers your question." },
+  { id: "link", glyph: "graph", title: "Link Domains", level: "L2 → L3", phase: "ascent", stageLevel: 3, question: "Link back the one relationship your intent asked for — a dataset built for your question." },
 ];
 
 /** Header copy keyed by phase + level. */
 export const LEVEL_COPY: Record<"descent" | "ascent", Record<number, { title: string; sub: string }>> = {
   descent: {
-    4: { title: "The dataset, exactly as published", sub: "Every column, every row. Most of it isn't what you came for — the descent begins by facing the full complexity." },
-    3: { title: "Keep the entities, drop the noise", sub: "Columns collapse to what matters: each entity, how big it is, and how it scored — now a graph of entities and one relationship." },
-    2: { title: "Name the categories that matter", sub: "Group the entities by a human idea the raw table never stated outright." },
-    1: { title: "Reduce each entity to one number", sub: "Strip the categories. Every entity becomes a single comparable value — the dataset is now one feature vector." },
-    0: { title: "The single truth underneath", sub: "Average everything that's left and one atomic value remains. This is the floor of the descent — the core datum." },
+    4: { title: "Heterogeneous sources", sub: "Multiple unlinkable datasets — every column, every row. The descent trades away complexity to find the core." },
+    3: { title: "Relational structure gained", sub: "Sources are now linked through shared entities. You traded heterogeneity for a knowledge graph." },
+    2: { title: "Domain coherence gained", sub: "The graph is now a single coherent table, sliced by the categories you named. Breadth traded for focus." },
+    1: { title: "Feature legibility gained", sub: "One variable isolated — every entity reduced to a single comparable number. Dimensions traded for clarity." },
+    0: { title: "Atomic certainty", sub: "One value remains. This is the floor — the core datum. Extent traded for certainty." },
   },
   ascent: {
-    0: { title: "Start from the truth — with intent", sub: "The descent found the floor. The ascent rebuilds upward, but this time only the dimensions your question needs." },
-    1: { title: "Re-expand into one number per entity", sub: "Unfold the datum back into a feature vector — every entity, scored — ready to be shaped by your intent." },
-    2: { title: "Split by the line that answers you", sub: "Categorise around the median: results above versus below. A purposeful cut, not an arbitrary one." },
-    3: { title: "A dataset built for your question", sub: "Add back exactly one relationship — the one your intent asked for." },
+    0: { title: "The core datum — with intent", sub: "The descent found the floor. The ascent rebuilds upward, but only the dimensions your question needs." },
+    1: { title: "Vector rebuilt with purpose", sub: "The datum is re-expanded into a feature vector — one number per entity, guided by your intent." },
+    2: { title: "Dimensions shaped by your question", sub: "Categorical dimensions added — a purposeful cut that answers what you came to ask." },
+    3: { title: "A dataset built for your question", sub: "Domains linked by the relationship your intent asked for. Ready for analysis." },
   },
 };
 
@@ -87,9 +87,9 @@ export interface Intent {
 }
 
 export const INTENTS: Intent[] = [
-  { id: "class-size", question: "Do smaller classes lead to higher results?", short: "Class size → results" },
-  { id: "locale", question: "Are countryside schools outperforming downtown?", short: "Locale → results" },
-  { id: "ips", question: "Does social position (IPS) drive results?", short: "Social index → results" },
+  { id: "compare", question: "Which groups have the highest and lowest values?", short: "Top vs bottom" },
+  { id: "trend", question: "How does this change over time or across regions?", short: "Trends" },
+  { id: "outlier", question: "Are there unusual values that stand out?", short: "Outliers" },
 ];
 
 /* ----------------------------- helpers ----------------------------------- */

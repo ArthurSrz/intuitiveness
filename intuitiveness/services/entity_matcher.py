@@ -82,16 +82,19 @@ def match_entities(
 
 ## Your Task
 1. Analyze what real-world concepts each column represents.
-2. For each declared relationship, explain WHY these columns connect semantically.
-3. Propose a unified metadata catalog mapping columns to shared concepts.
+2. Find columns that are ROW IDENTIFIERS — columns whose values uniquely identify a row (like a school code, country name, year, department code, person ID). ONLY these should go in the catalog as join keys.
+3. DO NOT add measurement/value columns to the catalog (numbers like counts, rates, scores, amounts). Even if two sources measure the same thing, joining on measurements produces 0 rows because the values will differ.
 4. Propose a join plan with EXECUTABLE column transforms so the join actually works.
+
+RULE: A join key must be an IDENTIFIER (something that labels a row), NOT a MEASUREMENT (something that describes a row).
+- GOOD join keys: school code, year, country name, department code, person ID, session year
+- BAD join keys: number of candidates, success rate, score, amount, count
 
 CRITICAL: The columns may have different types (dates vs years, country codes vs names, etc).
 You MUST provide column_transforms that normalize them to a common format BEFORE joining.
 
 IMPORTANT: Write ALL descriptions in plain, non-technical language that anyone can understand.
-Do NOT use jargon like "temporal dimension", "geographic entity", "identifier", "metric".
-Instead write things a normal person would say: "The year something happened", "Which country", "How much money".
+Do NOT use jargon. Write things a normal person would say: "The year", "Which school", "Which country".
 
 Respond in JSON:
 {{
@@ -163,14 +166,21 @@ def _apply_transforms(
     column_transforms: Dict[str, str],
 ) -> Dict[str, pd.DataFrame]:
     """Apply LLM-prescribed transforms to source columns in-place (copies)."""
+    import unicodedata
     out = {name: df.copy() for name, df in sources.items()}
     for key, transform_name in column_transforms.items():
         parts = key.split(":", 1)
         if len(parts) != 2:
             continue
         source_name, col_name = parts
-        if source_name not in out or col_name not in out[source_name].columns:
+        col_name = unicodedata.normalize("NFC", col_name)
+        if source_name not in out:
             continue
+        # Match column with NFC normalization to handle accented names
+        col_match = next((c for c in out[source_name].columns if unicodedata.normalize("NFC", c) == col_name), None)
+        if col_match is None:
+            continue
+        col_name = col_match
         fn = _TRANSFORMS.get(transform_name.strip().lower())
         if fn is None:
             logger.warning("Unknown transform '%s' for %s — skipping", transform_name, key)
@@ -188,54 +198,132 @@ def execute_join(
     join_plan: Dict[str, Any],
     catalog: List[Dict[str, Any]],
     column_transforms: Dict[str, str] | None = None,
-) -> pd.DataFrame:
-    """Execute the LLM-proposed join plan with transforms applied first."""
+) -> "tuple[pd.DataFrame, Dict[str, str]]":
+    """Execute the join using ALL shared concepts as multi-key join.
+
+    Returns (merged_df, col_source_map) where col_source_map maps each
+    non-key column in the result to the short source name it came from.
+    This explicit mapping lets callers group columns by source without
+    relying on string-matching heuristics.
+    """
     if column_transforms:
         sources = _apply_transforms(sources, column_transforms)
 
     frames = list(sources.values())
     if len(frames) == 1:
-        return frames[0]
+        return frames[0], {}
 
-    join_key = join_plan.get("join_key", "")
-    join_type = join_plan.get("join_type", "outer")
+    join_type = join_plan.get("join_type", "inner")
+    source_names = list(sources.keys())
 
-    key_cols: List[Tuple[str, str]] = []
+    # Find ALL shared concepts from the catalog — each becomes a join key
+    shared_keys: List[Dict[str, str]] = []
     for entry in catalog:
-        if entry.get("concept", "").lower() == join_key.lower():
-            for m in entry.get("mappings", []):
-                key_cols.append((m["source"], m["column"]))
-            break
+        mappings = entry.get("mappings", [])
+        if len(mappings) < 2:
+            continue
+        key_map = {}
+        for m in mappings:
+            src = m.get("source", "")
+            col = m.get("column", "")
+            if src in sources and col in sources[src].columns:
+                key_map[src] = col
+        if len(key_map) >= 2:
+            shared_keys.append(key_map)
 
-    if len(key_cols) < 2:
-        source_names = list(sources.keys())
+    # Fallback: same-name columns across all sources
+    if not shared_keys:
         for col in sources[source_names[0]].columns:
             if all(col in sources[s].columns for s in source_names[1:]):
-                key_cols = [(s, col) for s in source_names]
-                break
+                shared_keys.append({s: col for s in source_names})
 
-    if len(key_cols) < 2:
-        logger.info("No join key found — concatenating all sources")
-        return pd.concat(frames, ignore_index=True)
+    if not shared_keys:
+        logger.info("No join keys found — concatenating all sources")
+        return pd.concat(frames, ignore_index=True), {}
 
-    merged = sources[key_cols[0][0]]
-    for src_name, col_name in key_cols[1:]:
-        other = sources[src_name]
-        left_col = key_cols[0][1]
-        merged = merged.merge(
-            other,
-            left_on=left_col,
-            right_on=col_name,
-            how=join_type,
-            suffixes=("", f"_{src_name.split('.')[0]}"),
-        )
+    logger.warning("JOIN: %d shared keys found: %s", len(shared_keys),
+                    [{v for v in k.values()} for k in shared_keys])
+
+    # col_source_map: final_column_name → short_source_name (built as we rename)
+    col_source_map: Dict[str, str] = {}
+
+    left_src = source_names[0]
+    left_name = left_src.replace(".csv", "").replace(".CSV", "")
+    merged = sources[left_src].copy()
+
+    # Track non-key columns from the left source
+    key_cols_global: set = set()
+    for km in shared_keys:
+        key_cols_global.update(km.values())
+    for col in merged.columns:
+        if col not in key_cols_global:
+            col_source_map[col] = left_name
+
+    for right_src in source_names[1:]:
+        right_name = right_src.replace(".csv", "").replace(".CSV", "")
+        other = sources[right_src].copy()
+
+        left_on = []
+        right_on = []
+        key_cols_set: set = set()
+        for key_map in shared_keys:
+            l_col = key_map.get(left_src)
+            r_col = key_map.get(right_src)
+            if l_col and r_col:
+                left_on.append(l_col)
+                right_on.append(r_col)
+                key_cols_set.add(l_col)
+                key_cols_set.add(r_col)
+
+        if not left_on:
+            logger.warning("JOIN: no keys between %s and %s — skipping", left_src, right_src)
+            continue
+
+        # Rename overlapping non-key columns and update col_source_map
+        overlap = set(merged.columns) & set(other.columns) - key_cols_set
+        if overlap:
+            left_renames = {c: f"{c}_{left_name}" for c in overlap}
+            right_renames = {c: f"{c}_{right_name}" for c in overlap}
+            # Update map for renamed left cols
+            for old, new in left_renames.items():
+                if old in col_source_map:
+                    col_source_map[new] = col_source_map.pop(old)
+                else:
+                    col_source_map[new] = left_name
+            merged = merged.rename(columns=left_renames)
+            other = other.rename(columns=right_renames)
+            # Register right source's renamed cols
+            for old, new in right_renames.items():
+                col_source_map[new] = right_name
+        else:
+            # Register right source's non-key cols directly
+            for col in other.columns:
+                if col not in key_cols_set:
+                    col_source_map[col] = right_name
+
+        logger.warning("JOIN: merging %s ← %s on %s = %s (overlap renamed: %s)",
+                        left_name, right_name, left_on, right_on, overlap)
+
+        merged = merged.merge(other, left_on=left_on, right_on=right_on, how=join_type)
 
     if merged.empty:
         logger.info("Merge produced 0 rows — falling back to concat")
-        return pd.concat(frames, ignore_index=True)
+        return pd.concat(frames, ignore_index=True), col_source_map
 
-    logger.info("Entity match join: %d rows × %d cols", len(merged), len(merged.columns))
-    return merged
+    # Drop rows where ALL columns from any one source are null (outer join artifacts)
+    source_col_groups: Dict[str, List[str]] = {}
+    for src_name in set(col_source_map.values()):
+        source_col_groups[src_name] = [c for c, s in col_source_map.items() if s == src_name and c in merged.columns]
+    before = len(merged)
+    for src_name, cols in source_col_groups.items():
+        if cols:
+            merged = merged[~merged[cols].isnull().all(axis=1)]
+    after = len(merged)
+    if before != after:
+        logger.warning("JOIN: dropped %d rows with no data from one source", before - after)
+
+    logger.warning("JOIN result: %d rows × %d cols — %s", len(merged), len(merged.columns), list(merged.columns))
+    return merged, col_source_map
 
 
 __all__ = ["match_entities", "execute_join"]

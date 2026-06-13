@@ -6,7 +6,7 @@ import { decodeDataframe, type DecodedTable } from "@/lib/payload";
 import { Icon } from "@/components/ui/Icon";
 import { apiPost } from "@/lib/api/client";
 
-export function L4Sources({ node, onAddSource, sessionId }: { node: NodeDetail; onAddSource?: () => void; sessionId?: string }) {
+export function L4Sources({ node, onAddSource, sessionId, onConnect }: { node: NodeDetail; onAddSource?: () => void; sessionId?: string; onConnect?: () => void }) {
   const payload = node.payload;
   const sources = useMemo(() => {
     if (!payload || typeof payload !== "object") return [];
@@ -59,7 +59,7 @@ export function L4Sources({ node, onAddSource, sessionId }: { node: NodeDetail; 
       ))}
 
       {sources.length >= 2 && sessionId && (
-        <ConnectSourcesButton sessionId={sessionId} />
+        <ConnectSourcesButton sessionId={sessionId} onConnect={onConnect} />
       )}
 
       {sources.length === 0 && (
@@ -72,23 +72,43 @@ export function L4Sources({ node, onAddSource, sessionId }: { node: NodeDetail; 
 }
 
 
+interface CatalogEntry {
+  concept: string;
+  description: string;
+  mappings: Array<{ source: string; column: string; notes: string }>;
+}
+
 interface AnalyzeResult {
-  catalog: Array<{ concept: string; description: string; mappings: Array<{ source: string; column: string; notes: string }> }>;
+  catalog: CatalogEntry[];
   join_plan: Record<string, unknown>;
   column_transforms: Record<string, string>;
   explanation: string;
   error?: string;
 }
 
-function ConnectSourcesButton({ sessionId }: { sessionId: string }) {
+interface PreviewResult {
+  row_count: number;
+  unmatched_count: number;
+  sample_rows: Record<string, unknown>[];
+  sample_columns: string[];
+  warnings: string[];
+  error?: string;
+}
+
+function ConnectSourcesButton({ sessionId, onConnect }: { sessionId: string; onConnect?: () => void }) {
   const [analyzing, setAnalyzing] = useState(false);
   const [confirming, setConfirming] = useState(false);
+  const [previewing, setPreviewing] = useState(false);
   const [result, setResult] = useState<AnalyzeResult | null>(null);
+  const [preview, setPreview] = useState<PreviewResult | null>(null);
+  const [excluded, setExcluded] = useState<Set<number>>(new Set());
   const [error, setError] = useState<string | null>(null);
 
   async function analyze() {
     setAnalyzing(true);
     setError(null);
+    setExcluded(new Set());
+    setPreview(null);
     try {
       const res = await apiPost<AnalyzeResult>(`/sessions/${sessionId}/entity-analyze`, { relationships: [] });
       if (res.error) { setError(res.error); setAnalyzing(false); return; }
@@ -99,16 +119,47 @@ function ConnectSourcesButton({ sessionId }: { sessionId: string }) {
     setAnalyzing(false);
   }
 
+  function toggleExclude(i: number) {
+    setExcluded((prev) => {
+      const next = new Set(prev);
+      next.has(i) ? next.delete(i) : next.add(i);
+      return next;
+    });
+    setPreview(null); // reset preview when catalog changes
+  }
+
+  function activeCatalog() {
+    return result!.catalog.filter((_, i) => !excluded.has(i));
+  }
+
+  async function previewJoin() {
+    if (!result) return;
+    setPreviewing(true);
+    setPreview(null);
+    try {
+      const res = await apiPost<PreviewResult>(`/sessions/${sessionId}/entity-preview`, {
+        catalog: activeCatalog(),
+        join_plan: result.join_plan,
+        column_transforms: result.column_transforms,
+      });
+      setPreview(res);
+    } catch (e) {
+      setError(String(e));
+    }
+    setPreviewing(false);
+  }
+
   async function confirm() {
     if (!result) return;
     setConfirming(true);
     try {
       await apiPost(`/sessions/${sessionId}/entity-confirm`, {
-        catalog: result.catalog,
+        catalog: activeCatalog(),
         join_plan: result.join_plan,
         column_transforms: result.column_transforms,
       });
-      window.location.reload();
+      if (onConnect) onConnect();
+      else window.location.reload();
     } catch (e) {
       setError(String(e));
       setConfirming(false);
@@ -137,14 +188,17 @@ function ConnectSourcesButton({ sessionId }: { sessionId: string }) {
     );
   }
 
+  const activeCount = result.catalog.length - excluded.size;
+
   return (
     <div className="card" style={{ padding: 0, overflow: "hidden", border: "1.5px solid var(--blue)" }}>
       {/* Header */}
       <div style={{ padding: "12px 16px", borderBottom: "1px solid var(--border)", display: "flex", alignItems: "center", gap: 10, background: "var(--blue-soft)" }}>
         <Icon name="graph" size={16} />
         <span style={{ fontWeight: 700, fontSize: 14, color: "var(--blue)" }}>Schema Preview</span>
-        <span className="t-meta">{result.catalog.length} concepts found</span>
-        <button className="pill-btn ghost" onClick={() => setResult(null)} style={{ marginLeft: "auto", height: 26, fontSize: 11 }}>Cancel</button>
+        <span className="t-meta">{activeCount} of {result.catalog.length} concepts active</span>
+        <button className="pill-btn ghost" onClick={() => { setResult(null); analyze(); }} style={{ marginLeft: "auto", height: 26, fontSize: 11 }}>Retry</button>
+        <button className="pill-btn ghost" onClick={() => setResult(null)} style={{ height: 26, fontSize: 11 }}>Cancel</button>
       </div>
 
       {/* Explanation */}
@@ -154,28 +208,40 @@ function ConnectSourcesButton({ sessionId }: { sessionId: string }) {
         </div>
       )}
 
-      {/* Concept rows */}
+      {/* Concept rows — editable */}
       {result.catalog.map((c, i) => {
+        const isExcluded = excluded.has(i);
         const tierNote = c.mappings?.[0]?.notes ?? "";
         const tierNum = tierNote.includes("tier 1") ? 1 : tierNote.includes("tier 2") ? 2 : tierNote.includes("tier 3") ? 3 : 0;
         const tierLabel = tierNum === 1 ? "name match" : tierNum === 2 ? "value overlap" : tierNum === 3 ? "LLM" : "";
         const confMatch = tierNote.match(/confidence:\s*(\d+%)/);
         const confidence = confMatch ? confMatch[1] : "";
         return (
-          <div key={i} style={{ display: "flex", alignItems: "center", borderBottom: "1px solid var(--border)", padding: "8px 0" }}>
+          <div
+            key={i}
+            style={{
+              display: "flex", alignItems: "center",
+              borderBottom: "1px solid var(--border)", padding: "8px 0",
+              opacity: isExcluded ? 0.35 : 1,
+              transition: "opacity 0.15s",
+            }}
+          >
+            {/* Left column name */}
             <div style={{ flex: 1, padding: "0 16px", textAlign: "right" }}>
               {c.mappings[0] && (
-                <span className="mono" style={{ fontSize: 13, fontWeight: 600, color: "var(--blue)" }}>
+                <span className="mono" style={{ fontSize: 13, fontWeight: 600, color: isExcluded ? "var(--text-2)" : "var(--blue)", textDecoration: isExcluded ? "line-through" : undefined }}>
                   {c.mappings[0].column}
                 </span>
               )}
             </div>
+
+            {/* Concept bridge */}
             <div style={{ flex: "0 0 auto", padding: "0 4px", display: "flex", alignItems: "center" }}>
-              <span style={{ width: 16, height: 1, background: "var(--blue)", opacity: 0.3 }} />
+              <span style={{ width: 16, height: 1, background: "var(--blue)", opacity: isExcluded ? 0.15 : 0.3 }} />
               <span style={{
-                padding: "4px 12px", background: "var(--blue-soft)", borderRadius: 16,
-                border: "1px solid var(--blue)", fontSize: 11, fontWeight: 700,
-                color: "var(--blue)", whiteSpace: "nowrap",
+                padding: "4px 12px", background: isExcluded ? "var(--surface)" : "var(--blue-soft)", borderRadius: 16,
+                border: `1px solid ${isExcluded ? "var(--border)" : "var(--blue)"}`, fontSize: 11, fontWeight: 700,
+                color: isExcluded ? "var(--text-2)" : "var(--blue)", whiteSpace: "nowrap",
                 display: "flex", flexDirection: "column", alignItems: "center", gap: 1,
               }}>
                 {c.concept}
@@ -190,25 +256,101 @@ function ConnectSourcesButton({ sessionId }: { sessionId: string }) {
                   </span>
                 )}
               </span>
-              <span style={{ width: 16, height: 1, background: "var(--blue)", opacity: 0.3 }} />
+              <span style={{ width: 16, height: 1, background: "var(--blue)", opacity: isExcluded ? 0.15 : 0.3 }} />
             </div>
+
+            {/* Right column name */}
             <div style={{ flex: 1, padding: "0 16px" }}>
               {c.mappings[1] && (
-                <span className="mono" style={{ fontSize: 13, fontWeight: 600, color: "var(--blue)" }}>
+                <span className="mono" style={{ fontSize: 13, fontWeight: 600, color: isExcluded ? "var(--text-2)" : "var(--blue)", textDecoration: isExcluded ? "line-through" : undefined }}>
                   {c.mappings[1].column}
                 </span>
               )}
             </div>
+
+            {/* Exclude toggle */}
+            <button
+              onClick={() => toggleExclude(i)}
+              title={isExcluded ? "Re-include this concept" : "Exclude this concept"}
+              style={{
+                marginRight: 12, width: 22, height: 22, borderRadius: "50%",
+                border: `1px solid ${isExcluded ? "var(--border)" : "var(--blue)"}`,
+                background: isExcluded ? "var(--surface)" : "var(--blue-soft)",
+                color: isExcluded ? "var(--text-2)" : "var(--blue)",
+                cursor: "pointer", fontSize: 13, fontWeight: 700,
+                display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0,
+                lineHeight: 1,
+              }}
+            >
+              {isExcluded ? "+" : "×"}
+            </button>
           </div>
         );
       })}
 
-      {/* Confirm / Cancel */}
-      <div style={{ padding: "12px 16px", display: "flex", alignItems: "center", gap: 10 }}>
+      {/* Join preview result */}
+      {preview && (
+        <div style={{
+          margin: "0 16px 12px",
+          padding: "10px 14px",
+          borderRadius: 8,
+          background: preview.row_count === 0 ? "var(--error-soft, #fff0f0)" : "var(--surface)",
+          border: `1px solid ${preview.row_count === 0 ? "var(--error)" : preview.unmatched_count > 0 ? "var(--border-strong)" : "var(--border)"}`,
+        }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: (preview.row_count > 0 || preview.warnings.length > 0) ? 8 : 0 }}>
+            <span style={{ fontSize: 13, fontWeight: 700, color: preview.row_count === 0 ? "var(--error)" : preview.unmatched_count > 0 ? "var(--text)" : "var(--green, #22c55e)" }}>
+              {preview.row_count === 0
+                ? "⚠ 0 rows matched"
+                : `✓ ${preview.row_count.toLocaleString()} rows matched${preview.unmatched_count > 0 ? ` (${preview.unmatched_count} unmatched)` : ""}`}
+            </span>
+          </div>
+          {preview.warnings.map((w, i) => (
+            <div key={i} style={{ fontSize: 12, color: "var(--error)", marginBottom: 6 }}>
+              {w} — click × on the concept to exclude it, then preview again.
+            </div>
+          ))}
+          {preview.row_count > 0 && preview.sample_rows.length > 0 && (
+            <div style={{ overflowX: "auto" }}>
+              <table style={{ borderCollapse: "collapse", fontSize: 11, width: "100%" }}>
+                <thead>
+                  <tr>
+                    {preview.sample_columns.map((c) => (
+                      <th key={c} className="mono" style={{ padding: "4px 8px", borderBottom: "1px solid var(--border)", color: "var(--text-2)", fontWeight: 700, whiteSpace: "nowrap" }}>{c}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {preview.sample_rows.map((row, i) => (
+                    <tr key={i}>
+                      {preview.sample_columns.map((c) => (
+                        <td key={c} className="mono" style={{ padding: "4px 8px", borderBottom: "1px solid var(--border)", color: "var(--text)", whiteSpace: "nowrap" }}>
+                          {row[c] == null ? "" : String(row[c])}
+                        </td>
+                      ))}
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Footer */}
+      <div style={{ padding: "12px 16px", borderTop: "1px solid var(--border)", display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+        <button
+          className="pill-btn ghost"
+          disabled={previewing || activeCount === 0}
+          onClick={previewJoin}
+          style={{ height: 36, fontSize: 13 }}
+        >
+          {previewing ? "Checking..." : "Preview join"}
+        </button>
         <button
           className="pill-btn primary"
-          disabled={confirming}
+          disabled={confirming || activeCount === 0 || !preview || preview.row_count === 0}
           onClick={confirm}
+          title={!preview ? "Preview the join first" : preview.row_count === 0 ? "Fix the join keys — 0 rows matched" : undefined}
           style={{ height: 36, fontSize: 13 }}
         >
           {confirming ? "Building L3..." : "Confirm and descend to L3"}

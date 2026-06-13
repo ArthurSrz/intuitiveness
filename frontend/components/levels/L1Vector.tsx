@@ -1,15 +1,20 @@
-import type { NodeDetail } from "@/lib/api/types";
+import type { NodeDetail, SessionOptions, AscendMove } from "@/lib/api/types";
 import { decodeVector } from "@/lib/payload";
 import { Icon } from "@/components/ui/Icon";
 import { scoreColor, initials } from "@/lib/design";
+import { EdgeControls, type EdgeParams } from "@/components/shell/EdgeControls";
+import { AggregateButton } from "./AggregateButton";
+import { AddDimensionsButton } from "./AddDimensionsButton";
 
-/*
- * L1 — the feature vector: one scalar per entity. Rendered as the design's
- * bracketed bar row (each bar coloured along the neutral→blue gradient by its
- * value), driven by the live "vector" payload (a zlib+base64 split-orient
- * DataFrame, decoded in lib/payload).
- */
-export function L1Vector({ node }: { node: NodeDetail }) {
+interface InlineEdgeProps {
+  edgeParams: EdgeParams;
+  onEdgeChange: (patch: Partial<EdgeParams>) => void;
+  options?: SessionOptions;
+  ascendMove?: AscendMove;
+  phase?: "descent" | "ascent";
+}
+
+export function L1Vector({ node, edgeProps, sessionId, onConfirm }: { node: NodeDetail; edgeProps?: InlineEdgeProps; sessionId?: string; onConfirm?: () => void }) {
   const entries = decodeVector(node.payload);
   const values = entries.map((e) => e.value);
   const max = values.length ? Math.max(...values) : 1;
@@ -20,6 +25,7 @@ export function L1Vector({ node }: { node: NodeDetail }) {
     "Feature vector";
 
   return (
+    <>
     <div className="card">
       <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 16 }}>
         <span className="t-label">{metricLabel}</span>
@@ -66,6 +72,13 @@ export function L1Vector({ node }: { node: NodeDetail }) {
         </div>
       )}
     </div>
+    {sessionId && (
+      <>
+        <AggregateButton sessionId={sessionId} onConfirm={onConfirm} />
+        <AddDimensionsButton sessionId={sessionId} onConfirm={onConfirm} />
+      </>
+    )}
+    </>
   );
 }
 
