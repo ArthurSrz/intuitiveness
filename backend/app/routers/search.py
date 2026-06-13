@@ -895,11 +895,22 @@ def dimension_analyze(
     from intuitiveness.services.dimension_suggester import suggest_dimensions
 
     state = svc.get(session_id)
+    logger.warning("DIMENSION-ANALYZE: session=%s current_level=%s intent=%r", session_id, state["current_level"], body.intent)
     if state["current_level"] != 1:
+        logger.warning("DIMENSION-ANALYZE: REJECTED — level is %s not 1", state["current_level"])
         raise HTTPException(status_code=409, detail="Dimension analysis is only available at L1.")
 
     session = svc._load(session_id)
-    series = session.current_dataset.get_data()
+    raw_data = session.current_dataset.get_data()
+    logger.warning("DIMENSION-ANALYZE: raw_data type=%s", type(raw_data).__name__)
+
+    series = raw_data
+    logger.warning("DIMENSION-ANALYZE: series dtype=%s len=%s name=%r notna_count=%s",
+                   getattr(series, "dtype", "?"),
+                   len(series) if hasattr(series, "__len__") else "?",
+                   getattr(series, "name", "?"),
+                   series.notna().sum() if hasattr(series, "notna") else "?")
+
     vector_info = {
         "name": getattr(series, "name", "value"),
         "length": len(series) if hasattr(series, "__len__") else 0,
@@ -909,22 +920,28 @@ def dimension_analyze(
         "sample_index": [str(i) for i in series.index[:10]],
         "sample_values": [str(v) for v in series.dropna()[:10]],
     }
+    logger.warning("DIMENSION-ANALYZE: vector_info=%s", vector_info)
 
     result = suggest_dimensions(vector_info, intent=body.intent)
+    logger.warning("DIMENSION-ANALYZE: suggest_dimensions returned keys=%s error=%r", list(result.keys()), result.get("error"))
 
     # Run code on real data for distribution preview
     code = result.get("code", "")
+    logger.warning("DIMENSION-ANALYZE: code present=%s len=%d", bool(code), len(code))
     if code:
         try:
             from intuitiveness.services.dimension_suggester import execute_dimension_code
+            logger.warning("DIMENSION-ANALYZE: running preview on %d rows", min(200, len(series)))
             preview_df = execute_dimension_code(series.head(200), code)
+            logger.warning("DIMENSION-ANALYZE: preview_df cols=%s shape=%s", list(preview_df.columns), preview_df.shape)
             for col in preview_df.columns:
                 if col != "value":
                     dist = preview_df[col].value_counts().to_dict()
                     result["sample_distribution"] = {str(k): int(v) for k, v in dist.items()}
+                    logger.warning("DIMENSION-ANALYZE: distribution for col=%r: %s", col, result["sample_distribution"])
                     break
         except Exception as exc:
-            logger.warning("DIMENSION preview failed: %s", exc)
+            logger.warning("DIMENSION-ANALYZE preview FAILED: %s", exc, exc_info=True)
 
     logger.warning("DIMENSION-ANALYZE result: cols=%s, code=%s", result.get("proposed_columns"), (result.get("code") or "")[:150])
     return DimensionAnalyzeResponse(**result)
