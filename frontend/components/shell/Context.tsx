@@ -21,11 +21,13 @@ export function IntentCard({
   onChange,
   active,
   sessionId,
+  locked,
 }: {
   value: string;
   onChange: (id: string) => void;
   active: boolean;
   sessionId?: string;
+  locked?: boolean;
 }) {
   const [aiIntents, setAiIntents] = useState<SuggestedIntent[] | null>(null);
   const [loading, setLoading] = useState(false);
@@ -48,6 +50,64 @@ export function IntentCard({
   const intents: Array<{ id: string; question: string; short: string }> = aiIntents
     ? aiIntents.map((it, i) => ({ id: `ai-${i}`, question: it.question, short: it.short }))
     : [];
+
+  const selectedIntent = intents.find((it) => it.id === value);
+  const selectedLabel =
+    selectedIntent?.question ?? (value === "custom" && customText ? customText : null);
+
+  if (locked && selectedLabel) {
+    return (
+      <div className="card" style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+          <Icon name="intent" size={18} style={{ color: "var(--blue)" }} />
+          <span className="t-name" style={{ whiteSpace: "nowrap" }}>Your intent</span>
+          <span
+            className="chip"
+            style={{
+              marginLeft: "auto",
+              background: "var(--blue-soft)",
+              color: "var(--blue)",
+              padding: "3px 8px",
+              fontSize: 10.5,
+              whiteSpace: "nowrap",
+            }}
+          >
+            shapes the ascent
+          </span>
+        </div>
+        <div
+          style={{
+            padding: "11px 12px",
+            borderRadius: 12,
+            border: "1.5px solid var(--blue)",
+            background: "var(--blue-soft-2)",
+          }}
+        >
+          <span className="t-body" style={{ fontWeight: 600, display: "block", lineHeight: 1.35 }}>
+            {selectedLabel}
+          </span>
+          {selectedIntent?.short && (
+            <span className="t-meta mono" style={{ fontSize: 11.5 }}>{selectedIntent.short}</span>
+          )}
+        </div>
+        <button
+          onClick={() => onChange("")}
+          style={{
+            alignSelf: "flex-start",
+            background: "none",
+            border: "none",
+            color: "var(--text-2)",
+            fontSize: 11.5,
+            cursor: "pointer",
+            padding: 0,
+            textDecoration: "underline",
+          }}
+        >
+          Change intent
+        </button>
+      </div>
+    );
+  }
 
   return (
     <div className="card">
