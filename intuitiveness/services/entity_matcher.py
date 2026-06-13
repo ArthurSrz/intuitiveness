@@ -279,6 +279,11 @@ def execute_join(
             logger.warning("JOIN: no keys between %s and %s — skipping", left_src, right_src)
             continue
 
+        # Normalise key columns to stripped strings so "01" == "1" and " UAI " == "UAI"
+        for l_col, r_col in zip(left_on, right_on):
+            merged[l_col] = merged[l_col].astype(str).str.strip()
+            other[r_col] = other[r_col].astype(str).str.strip()
+
         # Rename overlapping non-key columns and update col_source_map
         overlap = set(merged.columns) & set(other.columns) - key_cols_set
         if overlap:
@@ -304,11 +309,27 @@ def execute_join(
         logger.warning("JOIN: merging %s ← %s on %s = %s (overlap renamed: %s)",
                         left_name, right_name, left_on, right_on, overlap)
 
-        merged = merged.merge(other, left_on=left_on, right_on=right_on, how=join_type)
+        attempt = merged.merge(other, left_on=left_on, right_on=right_on, how=join_type)
 
-    if merged.empty:
-        logger.info("Merge produced 0 rows — falling back to concat")
-        return pd.concat(frames, ignore_index=True), col_source_map
+        # Multi-key join produced no rows — retry each key alone, pick best
+        if attempt.empty and len(left_on) > 1:
+            logger.warning("JOIN: multi-key produced 0 rows — trying each key individually")
+            best, best_n = None, 0
+            for l_col, r_col in zip(left_on, right_on):
+                # Normalise both sides to stripped strings before comparing
+                m_try = merged.copy()
+                o_try = other.copy()
+                m_try[l_col] = m_try[l_col].astype(str).str.strip()
+                o_try[r_col] = o_try[r_col].astype(str).str.strip()
+                candidate = m_try.merge(o_try, left_on=l_col, right_on=r_col, how=join_type)
+                logger.warning("JOIN: single-key %s=%s → %d rows", l_col, r_col, len(candidate))
+                if len(candidate) > best_n:
+                    best, best_n = candidate, len(candidate)
+            if best is not None and best_n > 0:
+                attempt = best
+                logger.warning("JOIN: best single-key produced %d rows", best_n)
+
+        merged = attempt
 
     # Drop rows where ALL columns from any one source are null (outer join artifacts)
     source_col_groups: Dict[str, List[str]] = {}
