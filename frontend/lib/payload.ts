@@ -86,6 +86,23 @@ export interface DecodedGraph {
  * parse, and normalize both the encoding and the edges/links naming.
  * Returns null if the input can't be decoded.
  */
+export function decodeGraphFull(encoded: unknown): { graph: DecodedGraph; attrs: Record<string, string> } | null {
+  try {
+    const obj =
+      typeof encoded === "string"
+        ? (JSON.parse(inflateBase64(encoded)) as Record<string, unknown>)
+        : (encoded as Record<string, unknown>);
+    if (!obj || typeof obj !== "object") return null;
+    const nodes = obj.nodes as DecodedGraph["nodes"] | undefined;
+    const links = (obj.links ?? obj.edges) as DecodedGraph["links"] | undefined;
+    if (!Array.isArray(nodes)) return null;
+    const graphLevel = (obj.graph ?? {}) as Record<string, string>;
+    return { graph: { nodes, links: Array.isArray(links) ? links : [] }, attrs: graphLevel };
+  } catch {
+    return null;
+  }
+}
+
 export function decodeGraph(encoded: unknown): DecodedGraph | null {
   try {
     const obj =

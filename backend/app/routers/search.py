@@ -586,6 +586,12 @@ def entity_confirm(
             return nx.DiGraph()
 
         g = nx.DiGraph()
+        import json as _json
+        g.graph["_catalog"] = _json.dumps(catalog, default=str)
+        g.graph["_sources"] = _json.dumps({
+            name: {"rows": len(df), "columns": list(df.columns)}
+            for name, df in payload.items()
+        }, default=str)
 
         # Step 1: Add every row from every source as a node
         # Node ID = "source:row_index" to guarantee uniqueness
