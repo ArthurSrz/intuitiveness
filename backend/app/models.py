@@ -70,6 +70,7 @@ class DescendRequest(BaseModel):
     domains: Optional[List[str]] = Field(default=None, description="L3→L2 category labels, e.g. ['high score','low score'].")
     use_semantic: Optional[bool] = Field(default=None, description="L3→L2 use embedding similarity for matching.")
     threshold: Optional[float] = Field(default=None, description="L3→L2 semantic similarity threshold (0–1).")
+    category_column: Optional[str] = Field(default=None, description="L3→L2 column to categorize by (overrides auto-detection).")
     # L2→L1: pick the column to reduce to a vector.
     column: Optional[str] = Field(default=None, description="L2→L1 column to keep.")
     filter_query: Optional[str] = Field(default=None, description="L2→L1 optional pandas query filter.")

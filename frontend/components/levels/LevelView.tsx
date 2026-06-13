@@ -1,11 +1,20 @@
 "use client";
 
+import dynamic from "next/dynamic";
 import type { NodeDetail } from "@/lib/api/types";
 import { L4Sources } from "./L4Sources";
-import { L3Graph } from "./L3Graph";
 import { L2Table } from "./L2Table";
 import { L1Vector } from "./L1Vector";
 import { L0Datum } from "./L0Datum";
+
+const L3Graph = dynamic(() => import("./L3Graph").then((m) => m.L3Graph), {
+  loading: () => (
+    <div className="rounded-lg border border-border bg-surface p-5 text-sm text-fg-muted shadow-sm">
+      Loading graph…
+    </div>
+  ),
+  ssr: false,
+});
 
 /*
  * Picks the right level component for a node by its abstraction level.

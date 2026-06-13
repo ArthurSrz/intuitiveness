@@ -6,10 +6,9 @@ import { decodeDataframe, type DecodedTable } from "@/lib/payload";
 import { Icon } from "@/components/ui/Icon";
 
 /*
- * L4 — the raw, unlinkable sources. The payload is a dict of
- * { <source name>: <dataframe encoding> }. We surface every source as a chip and
- * preview the first decodable table in the design's raw-table chrome, framing
- * the "full complexity you didn't ask for" that the descent strips away.
+ * L4 — the raw, unlinkable sources. Each source gets its own card with a
+ * collapsible table preview. Multiple sources stack vertically so you can
+ * see all your datasets at a glance.
  */
 export function L4Sources({ node, onAddSource }: { node: NodeDetail; onAddSource?: () => void }) {
   const payload = node.payload;
@@ -22,23 +21,17 @@ export function L4Sources({ node, onAddSource }: { node: NodeDetail; onAddSource
   }, [payload]);
 
   const shapes = (node.summary?.shapes as Record<string, unknown> | undefined) ?? undefined;
-  const [selectedName, setSelectedName] = useState<string>(() => sources[0]?.name ?? "");
-  const [showAll, setShowAll] = useState(false);
-  const selected = sources.find((s) => s.name === selectedName) ?? sources[0];
-  const table: DecodedTable | null = selected?.table ?? null;
-  const previewCols = table ? table.columns.slice(0, 8) : [];
-  const previewRows = table ? (showAll ? table.rows : table.rows.slice(0, 50)) : [];
 
   return (
-    <div className="card" style={{ padding: 0, overflow: "hidden" }}>
-      {/* header — sources as chips */}
+    <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+      {/* summary header */}
       <div
+        className="card"
         style={{
+          padding: "14px 16px",
           display: "flex",
           alignItems: "center",
           gap: 10,
-          padding: "14px 16px",
-          borderBottom: "1px solid var(--border)",
           flexWrap: "wrap",
         }}
       >
@@ -46,31 +39,9 @@ export function L4Sources({ node, onAddSource }: { node: NodeDetail; onAddSource
           <Icon name="dataset" size={15} />
           Raw sources
         </span>
-        {sources.map((s) => (
-          <button
-            key={s.name}
-            className={`chip mono ${s.name === selectedName ? "chip--active" : ""}`}
-            style={{
-              whiteSpace: "nowrap",
-              cursor: "pointer",
-              border: s.name === selectedName ? "1.5px solid var(--blue)" : undefined,
-              background: s.name === selectedName ? "var(--blue-soft)" : undefined,
-              color: s.name === selectedName ? "var(--blue)" : undefined,
-            }}
-            onClick={() => setSelectedName(s.name)}
-          >
-            {s.name}
-            {shapes?.[s.name] != null && (
-              <span className="t-meta" style={{ fontWeight: 400 }}>
-                {String(shapes[s.name])}
-              </span>
-            )}
-          </button>
-        ))}
         <span
           className="t-meta mono"
           style={{
-            marginLeft: "auto",
             color: sources.length > 1 ? "var(--blue)" : undefined,
             fontWeight: sources.length > 1 ? 700 : undefined,
           }}
@@ -81,41 +52,115 @@ export function L4Sources({ node, onAddSource }: { node: NodeDetail; onAddSource
           <button
             className="pill-btn ghost"
             onClick={onAddSource}
-            style={{ height: 28, fontSize: 12, flex: "none", padding: "0 10px" }}
+            style={{ height: 28, fontSize: 12, flex: "none", padding: "0 10px", marginLeft: "auto" }}
           >
             + Add source
           </button>
         )}
       </div>
 
-      {/* preview of the primary source */}
-      {table && previewCols.length > 0 ? (
+      {/* one card per source */}
+      {sources.map((s) => (
+        <SourceCard
+          key={s.name}
+          name={s.name}
+          table={s.table}
+          shape={shapes?.[s.name] != null ? String(shapes[s.name]) : undefined}
+          defaultOpen={sources.length <= 2}
+        />
+      ))}
+
+      {sources.length === 0 && (
+        <div className="card" style={{ padding: 16 }}>
+          <p className="t-meta">No source files yet — add one to begin.</p>
+        </div>
+      )}
+    </div>
+  );
+}
+
+
+function SourceCard({
+  name,
+  table,
+  shape,
+  defaultOpen,
+}: {
+  name: string;
+  table: DecodedTable | null;
+  shape?: string;
+  defaultOpen: boolean;
+}) {
+  const [open, setOpen] = useState(defaultOpen);
+  const [showAllRows, setShowAllRows] = useState(false);
+  const [showAllCols, setShowAllCols] = useState(false);
+
+  const cols = table ? (showAllCols ? table.columns : table.columns.slice(0, 8)) : [];
+  const rows = table ? (showAllRows ? table.rows : table.rows.slice(0, 20)) : [];
+  const hiddenCols = table ? table.columns.length - 8 : 0;
+
+  return (
+    <div className="card" style={{ padding: 0, overflow: "hidden" }}>
+      {/* source header — always visible */}
+      <button
+        onClick={() => setOpen((v) => !v)}
+        style={{
+          display: "flex",
+          alignItems: "center",
+          gap: 10,
+          padding: "12px 16px",
+          width: "100%",
+          border: "none",
+          background: open ? "var(--surface)" : "transparent",
+          cursor: "pointer",
+          borderBottom: open ? "1px solid var(--border)" : "none",
+          textAlign: "left",
+        }}
+      >
+        <Icon name={open ? "down" : "arrowRight"} size={14} />
+        <span className="mono" style={{ fontWeight: 600, fontSize: 13, color: "var(--blue)" }}>
+          {name}
+        </span>
+        {table && (
+          <span className="t-meta mono" style={{ fontSize: 12 }}>
+            {table.rows.length} rows × {table.columns.length} cols
+          </span>
+        )}
+        {shape && (
+          <span className="t-meta" style={{ fontSize: 12 }}>
+            {shape}
+          </span>
+        )}
+      </button>
+
+      {/* collapsible table preview */}
+      {open && table && cols.length > 0 && (
         <>
           <div style={{ overflowX: "auto" }}>
             <table style={{ borderCollapse: "collapse", width: "100%", minWidth: 480 }}>
               <thead>
                 <tr>
-                  {previewCols.map((c) => (
+                  {cols.map((c) => (
                     <th key={c} className="mono" style={thStyle}>
                       {c}
                     </th>
                   ))}
-                  {table.columns.length > previewCols.length && (
+                  {!showAllCols && hiddenCols > 0 && (
                     <th className="mono" style={{ ...thStyle, color: "var(--border-strong)" }}>
-                      +{table.columns.length - previewCols.length} …
+                      +{hiddenCols} …
                     </th>
                   )}
                 </tr>
               </thead>
               <tbody>
-                {previewRows.map((row, i) => (
+                {rows.map((row, i) => (
                   <tr key={i} className="rawrow">
-                    {previewCols.map((c) => (
+                    {cols.map((c) => (
                       <td key={c} className="mono" style={tdStyle}>
                         {formatCell(row[c])}
                       </td>
                     ))}
-                    {table.columns.length > previewCols.length && (
+                    {!showAllCols && hiddenCols > 0 && (
                       <td style={{ ...tdStyle, color: "var(--border-strong)" }}>…</td>
                     )}
                   </tr>
@@ -125,7 +170,7 @@ export function L4Sources({ node, onAddSource }: { node: NodeDetail; onAddSource
           </div>
           <div
             style={{
-              padding: "12px 16px",
+              padding: "10px 16px",
               borderTop: "1px solid var(--border)",
               display: "flex",
               alignItems: "center",
@@ -133,44 +178,31 @@ export function L4Sources({ node, onAddSource }: { node: NodeDetail; onAddSource
               flexWrap: "wrap",
             }}
           >
-            <span className="t-meta mono">
-              {selected.name} — {table.rows.length} rows × {table.columns.length} cols
-            </span>
-            {table.rows.length > 50 && (
+            {table.rows.length > 20 && (
               <button
                 className="pill-btn ghost"
-                style={{ height: 28, fontSize: 12, flex: "none" }}
-                onClick={() => setShowAll((v) => !v)}
+                style={{ height: 26, fontSize: 11, flex: "none" }}
+                onClick={() => setShowAllRows((v) => !v)}
               >
-                {showAll ? `Show first 50` : `Show all ${table.rows.length} rows`}
+                {showAllRows ? "Show first 20" : `Show all ${table.rows.length} rows`}
               </button>
             )}
-            {table.columns.length > previewCols.length && (
-              <span
-                className="chip"
-                style={{ marginLeft: "auto", background: "var(--error-soft)", color: "var(--error)" }}
+            {hiddenCols > 0 && (
+              <button
+                className="pill-btn ghost"
+                style={{ height: 26, fontSize: 11, flex: "none", marginLeft: "auto" }}
+                onClick={() => setShowAllCols((v) => !v)}
               >
-                <Icon name="info" size={14} /> {table.columns.length - previewCols.length} columns
-                you didn&apos;t ask for
-              </span>
+                {showAllCols ? "Show 8 columns" : `Show all ${table.columns.length} columns`}
+              </button>
             )}
           </div>
         </>
-      ) : (
-        <div style={{ padding: 16 }}>
-          {sources.length === 0 ? (
-            <p className="t-meta">No source files reported.</p>
-          ) : (
-            <p className="t-meta">
-              {sources.length} raw source{sources.length === 1 ? "" : "s"} ready — the descent
-              begins by facing the full complexity.
-            </p>
-          )}
-        </div>
       )}
     </div>
   );
 }
+
 
 const thStyle: React.CSSProperties = {
   textAlign: "left",

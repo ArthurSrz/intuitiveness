@@ -26,8 +26,8 @@ interface SearchResponse {
 interface WBIndicator {
   id: string;
   name: string;
-  source: string;
-  topics: string[];
+  database_id: string;
+  score: number;
 }
 
 interface WBSearchResponse {
@@ -149,7 +149,7 @@ export default function HomePage() {
   function handleWbImport(indicator: WBIndicator) {
     setWbImportingId(indicator.id);
     importWB.mutate(
-      { indicator_id: indicator.id, indicator_name: indicator.name },
+      { indicator_id: indicator.id, database_id: indicator.database_id, indicator_name: indicator.name },
       {
         onSuccess: (state) => router.push(`/session/${state.session_id}`),
         onError: (err) => {

@@ -105,8 +105,19 @@ class SessionService:
         try:
             if level == 4 and isinstance(data, dict) and data:
                 opts["sources"] = list(data.keys())
-                first = next(iter(data.values()))
-                opts["columns"] = [str(c) for c in getattr(first, "columns", [])]
+                all_cols: list[str] = []
+                per_source: dict[str, list[str]] = {}
+                for name, frame in data.items():
+                    cols = [str(c) for c in getattr(frame, "columns", [])]
+                    per_source[name] = cols
+                    all_cols.extend(c for c in cols if c not in all_cols)
+                opts["columns"] = all_cols
+                opts["source_columns"] = per_source
+                if len(data) > 1:
+                    shared = set(per_source[opts["sources"][0]])
+                    for cols in per_source.values():
+                        shared &= set(cols)
+                    opts["shared_columns"] = sorted(shared)
             elif level == 3:
                 # Graph node attributes become the table's columns at L2.
                 if hasattr(data, "nodes"):

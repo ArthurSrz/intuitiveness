@@ -4,10 +4,10 @@ import { use, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import {
   useAddSource,
+  useAddSourceUrl,
+  useAddSourceWorldBank,
   useAscend,
   useDescend,
-  useImportWorldBank,
-  useImportUrl,
   useNode,
   useSession,
   useTimeTravel,
@@ -70,8 +70,8 @@ export default function SessionPage({ params }: { params: Promise<{ id: string }
   const ascend = useAscend(id);
   const timeTravel = useTimeTravel(id);
   const addSource = useAddSource(id);
-  const importWB = useImportWorldBank();
-  const importUrl = useImportUrl();
+  const addSourceUrl = useAddSourceUrl(id);
+  const addSourceWB = useAddSourceWorldBank(id);
   const addSourceRef = useRef<HTMLInputElement>(null);
   const [addSourcePanel, setAddSourcePanel] = useState(false);
   const [addSourceTab, setAddSourceTab] = useState<"datagouv" | "worldbank" | "upload">("datagouv");
@@ -81,7 +81,7 @@ export default function SessionPage({ params }: { params: Promise<{ id: string }
   const [dgError, setDgError] = useState<string|null>(null);
   const [dgImportingId, setDgImportingId] = useState<string|null>(null);
   const [wbQuery, setWbQuery] = useState("");
-  const [wbResults, setWbResults] = useState<Array<{id:string;name:string}> | null>(null);
+  const [wbResults, setWbResults] = useState<Array<{id:string;name:string;database_id:string}> | null>(null);
   const [wbBusy, setWbBusy] = useState(false);
   const [wbError, setWbError] = useState<string|null>(null);
   const [wbImportingId, setWbImportingId] = useState<string|null>(null);
@@ -197,8 +197,8 @@ export default function SessionPage({ params }: { params: Promise<{ id: string }
 
   function handleDgImport(ds: {id:string;title:string}) {
     setDgImportingId(ds.id);
-    importUrl.mutate({ url: `https://www.data.gouv.fr/fr/datasets/${ds.id}/`, filename: ds.title + ".csv" }, {
-      onSuccess: (state) => { router.push(`/session/${state.session_id}`); setAddSourcePanel(false); },
+    addSourceUrl.mutate({ url: `https://www.data.gouv.fr/fr/datasets/${ds.id}/`, filename: ds.title + ".csv" }, {
+      onSuccess: () => { setAddSourcePanel(false); setDgImportingId(null); },
       onError: () => { setDgError("Import failed."); setDgImportingId(null); },
     });
   }
@@ -208,17 +208,17 @@ export default function SessionPage({ params }: { params: Promise<{ id: string }
     if (!wbQuery.trim()) return;
     setWbBusy(true); setWbError(null); setWbResults(null);
     try {
-      const res = await apiGet<{indicators: Array<{id:string;name:string}>}>(`/search/worldbank?q=${encodeURIComponent(wbQuery)}&size=8`);
+      const res = await apiGet<{indicators: Array<{id:string;name:string;database_id:string}>}>(`/search/worldbank?q=${encodeURIComponent(wbQuery)}&size=8`);
       setWbResults(res.indicators);
       if (!res.indicators.length) setWbError("No indicators found.");
     } catch { setWbError("Search unavailable."); }
     finally { setWbBusy(false); }
   }
 
-  function handleWbImport(ind: {id:string;name:string}) {
+  function handleWbImport(ind: {id:string;name:string;database_id:string}) {
     setWbImportingId(ind.id);
-    importWB.mutate({ indicator_id: ind.id, indicator_name: ind.name }, {
-      onSuccess: (state) => { router.push(`/session/${state.session_id}`); setAddSourcePanel(false); },
+    addSourceWB.mutate({ indicator_id: ind.id, database_id: ind.database_id, indicator_name: ind.name }, {
+      onSuccess: () => { setAddSourcePanel(false); setWbImportingId(null); },
       onError: () => { setWbError("Import failed."); setWbImportingId(null); },
     });
   }
