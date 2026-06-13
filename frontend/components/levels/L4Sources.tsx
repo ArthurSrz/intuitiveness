@@ -155,41 +155,53 @@ function ConnectSourcesButton({ sessionId }: { sessionId: string }) {
       )}
 
       {/* Concept rows */}
-      {result.catalog.map((c, i) => (
-        <div key={i} style={{ display: "flex", alignItems: "center", borderBottom: "1px solid var(--border)", padding: "8px 0" }}>
-          <div style={{ flex: 1, padding: "0 16px", textAlign: "right" }}>
-            {c.mappings[0] && (
-              <span className="mono" style={{ fontSize: 13, fontWeight: 600, color: "var(--blue)" }}>
-                {c.mappings[0].column}
-              </span>
-            )}
-          </div>
-          <div style={{ flex: "0 0 auto", padding: "0 4px", display: "flex", alignItems: "center" }}>
-            <span style={{ width: 16, height: 1, background: "var(--blue)", opacity: 0.3 }} />
-            <span style={{
-              padding: "4px 12px", background: "var(--blue-soft)", borderRadius: 16,
-              border: "1px solid var(--blue)", fontSize: 11, fontWeight: 700,
-              color: "var(--blue)", whiteSpace: "nowrap",
-              display: "flex", flexDirection: "column", alignItems: "center", gap: 1,
-            }}>
-              {c.concept}
-              {c.description && (
-                <span style={{ fontSize: 9, fontWeight: 400, color: "var(--text-2)", whiteSpace: "normal", textAlign: "center", maxWidth: 160 }}>
-                  {c.description}
+      {result.catalog.map((c, i) => {
+        const tierNote = c.mappings?.[0]?.notes ?? "";
+        const tierNum = tierNote.includes("tier 1") ? 1 : tierNote.includes("tier 2") ? 2 : tierNote.includes("tier 3") ? 3 : 0;
+        const tierLabel = tierNum === 1 ? "name match" : tierNum === 2 ? "value overlap" : tierNum === 3 ? "LLM" : "";
+        const confMatch = tierNote.match(/confidence:\s*(\d+%)/);
+        const confidence = confMatch ? confMatch[1] : "";
+        return (
+          <div key={i} style={{ display: "flex", alignItems: "center", borderBottom: "1px solid var(--border)", padding: "8px 0" }}>
+            <div style={{ flex: 1, padding: "0 16px", textAlign: "right" }}>
+              {c.mappings[0] && (
+                <span className="mono" style={{ fontSize: 13, fontWeight: 600, color: "var(--blue)" }}>
+                  {c.mappings[0].column}
                 </span>
               )}
-            </span>
-            <span style={{ width: 16, height: 1, background: "var(--blue)", opacity: 0.3 }} />
-          </div>
-          <div style={{ flex: 1, padding: "0 16px" }}>
-            {c.mappings[1] && (
-              <span className="mono" style={{ fontSize: 13, fontWeight: 600, color: "var(--blue)" }}>
-                {c.mappings[1].column}
+            </div>
+            <div style={{ flex: "0 0 auto", padding: "0 4px", display: "flex", alignItems: "center" }}>
+              <span style={{ width: 16, height: 1, background: "var(--blue)", opacity: 0.3 }} />
+              <span style={{
+                padding: "4px 12px", background: "var(--blue-soft)", borderRadius: 16,
+                border: "1px solid var(--blue)", fontSize: 11, fontWeight: 700,
+                color: "var(--blue)", whiteSpace: "nowrap",
+                display: "flex", flexDirection: "column", alignItems: "center", gap: 1,
+              }}>
+                {c.concept}
+                {c.description && (
+                  <span style={{ fontSize: 9, fontWeight: 400, color: "var(--text-2)", whiteSpace: "normal", textAlign: "center", maxWidth: 180 }}>
+                    {c.description}
+                  </span>
+                )}
+                {(tierLabel || confidence) && (
+                  <span style={{ fontSize: 8, fontWeight: 400, color: "var(--text-2)", marginTop: 2 }}>
+                    {tierLabel}{confidence ? ` (${confidence})` : ""}
+                  </span>
+                )}
               </span>
-            )}
+              <span style={{ width: 16, height: 1, background: "var(--blue)", opacity: 0.3 }} />
+            </div>
+            <div style={{ flex: 1, padding: "0 16px" }}>
+              {c.mappings[1] && (
+                <span className="mono" style={{ fontSize: 13, fontWeight: 600, color: "var(--blue)" }}>
+                  {c.mappings[1].column}
+                </span>
+              )}
+            </div>
           </div>
-        </div>
-      ))}
+        );
+      })}
 
       {/* Confirm / Cancel */}
       <div style={{ padding: "12px 16px", display: "flex", alignItems: "center", gap: 10 }}>

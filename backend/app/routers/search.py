@@ -535,8 +535,8 @@ def entity_analyze(
     body: EntityMatchRequest,
     svc: SessionService = Depends(get_session_service),
 ) -> EntityAnalyzeResponse:
-    """Analyze entity relationships without descending. Returns the catalog for user validation."""
-    from intuitiveness.services.entity_matcher import match_entities
+    """Three-tier entity discovery without descending. Returns catalog for user validation."""
+    from intuitiveness.services.entity_discovery import discover_entities
 
     state = svc.get(session_id)
     if state["current_level"] != 4:
@@ -547,15 +547,14 @@ def entity_analyze(
     if not isinstance(data, dict) or len(data) < 2:
         raise HTTPException(status_code=422, detail="Need at least 2 sources for entity matching.")
 
-    relationships = [r.model_dump() for r in body.relationships] if body.relationships else []
-    result = match_entities(data, relationships)
+    result = discover_entities(data, use_llm=True)
 
     return EntityAnalyzeResponse(
-        catalog=result.get("catalog", []),
-        join_plan=result.get("join_plan", {}),
-        column_transforms=result.get("column_transforms", {}),
-        explanation=result.get("explanation", ""),
-        error=result.get("error"),
+        catalog=result.catalog,
+        join_plan={},
+        column_transforms={},
+        explanation=result.explanation,
+        error=None,
     )
 
 
