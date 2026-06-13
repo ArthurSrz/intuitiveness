@@ -199,7 +199,7 @@ class SessionService:
         session = self._load(session_id)
         kwargs = dict(params or {})
         level = session.current_level.value
-        if level == 4:
+        if level == 4 and "builder_func" not in kwargs:
             # L4→L3 needs a graph builder callable; default to rows_as_nodes.
             builder_name = kwargs.pop("builder", "rows_as_nodes")
             config = kwargs.pop("config", {}) or {}

@@ -541,7 +541,7 @@ def entity_match(
     if not isinstance(data, dict) or len(data) < 2:
         raise HTTPException(status_code=422, detail="Need at least 2 sources for entity matching.")
 
-    relationships = [r.model_dump() for r in body.relationships]
+    relationships = [r.model_dump() for r in body.relationships] if body.relationships else []
     result = match_entities(data, relationships)
 
     if result.get("error"):

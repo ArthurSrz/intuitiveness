@@ -78,8 +78,7 @@ def match_entities(
 {json.dumps(list(profiles.values()), indent=2, default=str)}
 
 ## User-Declared Relationships
-The user says these columns are deeply related:
-{json.dumps(relationships, indent=2)}
+{json.dumps(relationships, indent=2) if relationships else "None declared — discover ALL meaningful relationships between the sources automatically. Look at column names, data types, and sample values to find columns that represent the same real-world thing."}
 
 ## Your Task
 1. Analyze what real-world concepts each column represents.
@@ -89,6 +88,10 @@ The user says these columns are deeply related:
 
 CRITICAL: The columns may have different types (dates vs years, country codes vs names, etc).
 You MUST provide column_transforms that normalize them to a common format BEFORE joining.
+
+IMPORTANT: Write ALL descriptions in plain, non-technical language that anyone can understand.
+Do NOT use jargon like "temporal dimension", "geographic entity", "identifier", "metric".
+Instead write things a normal person would say: "The year something happened", "Which country", "How much money".
 
 Respond in JSON:
 {{

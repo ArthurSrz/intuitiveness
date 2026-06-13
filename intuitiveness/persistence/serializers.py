@@ -83,7 +83,15 @@ def serialize_graph(G: nx.Graph) -> str:
         Base64-encoded compressed JSON string
     """
     data = nx.node_link_data(G)
-    json_str = json.dumps(data, cls=NumpyEncoder).replace(": NaN", ": null").replace(":NaN", ":null")
+    # Replace NaN with None in node attributes (not IDs) for JSON safety
+    import math
+    for node in data.get("nodes", []):
+        for k, v in list(node.items()):
+            if k == "id":
+                continue
+            if isinstance(v, float) and math.isnan(v):
+                node[k] = None
+    json_str = json.dumps(data, cls=NumpyEncoder)
     compressed = zlib.compress(json_str.encode('utf-8'))
     base64_str = base64.b64encode(compressed).decode('ascii')
     return base64_str
