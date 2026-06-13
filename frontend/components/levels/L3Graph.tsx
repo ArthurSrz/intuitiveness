@@ -48,8 +48,8 @@ export function L3Graph({ node }: { node: NodeDetail }) {
 /* Schema View — metadata catalog with source cards + concept bridges     */
 /* ─────────────────────────────────────────────────────────────────────── */
 
-interface GraphNode { id: string; [k: string]: unknown }
-interface GraphLink { source: string; target: string; type?: string; [k: string]: unknown }
+interface GraphNode { id: string | number; [k: string]: unknown }
+interface GraphLink { source: string | number; target: string | number; type?: string; [k: string]: unknown }
 interface DecodedGraph { nodes: GraphNode[]; links: GraphLink[] }
 
 function SchemaView({ graph, node: detail }: { graph: DecodedGraph; node: NodeDetail }) {
