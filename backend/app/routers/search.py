@@ -497,3 +497,83 @@ def add_source_worldbank(
         return svc.add_source(session_id, {filename: df})
     except NavigationError as exc:
         raise HTTPException(status_code=409, detail=str(exc))
+
+
+# --------------------------------------------------------------------------- #
+# LLM Entity Matching
+# --------------------------------------------------------------------------- #
+
+class RelationshipDeclaration(BaseModel):
+    source_a: str
+    column_a: str
+    source_b: str
+    column_b: str
+
+
+class EntityMatchRequest(BaseModel):
+    relationships: List[RelationshipDeclaration]
+
+
+class EntityMatchResponse(BaseModel):
+    catalog: List[dict] = []
+    join_plan: dict = {}
+    explanation: str = ""
+    error: Optional[str] = None
+
+
+@router.post("/sessions/{session_id}/entity-match", response_model=SessionState)
+def entity_match(
+    session_id: str,
+    body: EntityMatchRequest,
+    svc: SessionService = Depends(get_session_service),
+) -> SessionState:
+    """Use an LLM to match entities across sources, execute the join,
+    and descend to L3 with the result as a knowledge graph."""
+    import networkx as nx
+    from intuitiveness.services.entity_matcher import match_entities, execute_join
+
+    state = svc.get(session_id)
+    if state["current_level"] != 4:
+        raise HTTPException(status_code=409, detail="Entity matching is only available at L4.")
+
+    session = svc._load(session_id)
+    data = session.current_dataset.get_data()
+    if not isinstance(data, dict) or len(data) < 2:
+        raise HTTPException(status_code=422, detail="Need at least 2 sources for entity matching.")
+
+    relationships = [r.model_dump() for r in body.relationships]
+    result = match_entities(data, relationships)
+
+    if result.get("error"):
+        raise HTTPException(status_code=502, detail=result["error"])
+
+    catalog = result.get("catalog", [])
+    explanation = result.get("explanation", "")
+    transforms = result.get("column_transforms", {})
+
+    def builder_func(payload):
+        g = nx.DiGraph()
+        # Concept nodes
+        for entry in catalog:
+            concept = entry["concept"]
+            g.add_node(concept, node_type="concept", description=entry.get("description", ""))
+            for m in entry.get("mappings", []):
+                col_id = f"{m['source']}:{m['column']}"
+                g.add_node(col_id, node_type="column", source=m["source"],
+                           column=m["column"], notes=m.get("notes", ""))
+                transform = transforms.get(col_id, "none")
+                g.add_edge(concept, col_id, relationship="maps_to", transform=transform)
+        # Source nodes linking to their columns
+        if isinstance(payload, dict):
+            for source_name, df in payload.items():
+                g.add_node(source_name, node_type="source",
+                           rows=len(df), columns=len(df.columns))
+                for col in df.columns:
+                    col_id = f"{source_name}:{col}"
+                    if col_id not in g:
+                        g.add_node(col_id, node_type="column", source=source_name,
+                                   column=col, notes="")
+                    g.add_edge(source_name, col_id, relationship="has_column")
+        return g
+
+    return svc.descend(session_id, params={"builder_func": builder_func})

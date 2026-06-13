@@ -397,6 +397,7 @@ export default function SessionPage({ params }: { params: Promise<{ id: string }
                       node={node.data}
                       level={currentLevel}
                       onAddSource={currentLevel === 4 ? () => setAddSourcePanel(true) : undefined}
+                      sessionId={id}
                     />
                   )}
                 </div>
@@ -487,6 +488,7 @@ export default function SessionPage({ params }: { params: Promise<{ id: string }
                       node={node.data}
                       level={currentLevel}
                       onAddSource={currentLevel === 4 ? () => setAddSourcePanel(true) : undefined}
+                      sessionId={id}
                     />
                   )}
                 </div>
