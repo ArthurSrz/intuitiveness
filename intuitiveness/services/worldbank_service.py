@@ -1,108 +1,137 @@
 """
-World Bank Data Service
-========================
+World Bank Data360 Service
+============================
 
-Fetches indicator data from the World Bank REST API (v2) and returns
-pandas DataFrames compatible with the Level4Dataset ingestion path.
-
-No MCP server exists for the World Bank as of mid-2025; this service
-wraps the official JSON API directly instead.
+Searches and fetches indicator data from the World Bank Data360 API
+(https://data360api.worldbank.org) and returns pandas DataFrames
+compatible with the Level4Dataset ingestion path.
 
 Usage:
     svc = WorldBankService()
-    df = svc.fetch_indicator("NY.GDP.PCAP.CD", countries="all", year_range=(2018, 2023))
     results = svc.search_indicators("GDP per capita")
+    df = svc.fetch_indicator("WB_WDI_NY_GDP_PCAP_CD", database_id="WB_WDI")
 """
 
 from __future__ import annotations
 
 import logging
-from dataclasses import dataclass
-from typing import List, Optional, Tuple
+from dataclasses import dataclass, field
+from typing import List, Optional
 
 import pandas as pd
 import requests
 
 logger = logging.getLogger(__name__)
 
-_BASE = "https://api.worldbank.org/v2"
+_BASE = "https://data360api.worldbank.org/data360"
 _TIMEOUT = 15
+
+_DIMENSION_COLS = {
+    "REF_AREA": "country",
+    "TIME_PERIOD": "year",
+    "OBS_VALUE": "value",
+    "SEX": "sex",
+    "AGE": "age",
+    "URBANISATION": "urbanisation",
+    "UNIT_MEASURE": "unit",
+}
 
 
 @dataclass
 class IndicatorInfo:
     id: str
     name: str
-    source: str
-    topics: List[str]
+    database_id: str
+    score: float = 0.0
 
 
 class WorldBankService:
-    """Thin wrapper around the World Bank REST API v2."""
+    """Wrapper around the World Bank Data360 API."""
 
     def search_indicators(self, query: str, max_results: int = 8) -> List[IndicatorInfo]:
-        """Full-text search across all WB indicators."""
-        url = f"{_BASE}/indicator?format=json&per_page={max_results}&mrv=1&q={requests.utils.quote(query)}"
+        """Full-text search via Data360 searchv2 (server-side, relevance-ranked)."""
         try:
-            resp = requests.get(url, timeout=_TIMEOUT)
+            resp = requests.post(
+                f"{_BASE}/searchv2",
+                json={
+                    "search": query,
+                    "searchFields": "series_description/name",
+                    "select": "series_description/idno, series_description/name, series_description/database_id",
+                    "top": max_results,
+                    "count": True,
+                },
+                timeout=_TIMEOUT,
+            )
             resp.raise_for_status()
-            pages, items = resp.json()
+            payload = resp.json()
             return [
                 IndicatorInfo(
-                    id=it["id"],
-                    name=it.get("name", ""),
-                    source=it.get("source", {}).get("value", ""),
-                    topics=[t.get("value", "") for t in it.get("topics", [])],
+                    id=hit["series_description"]["idno"],
+                    name=hit["series_description"]["name"],
+                    database_id=hit["series_description"]["database_id"],
+                    score=hit.get("@search.score", 0),
                 )
-                for it in (items or [])
+                for hit in payload.get("value", [])
             ]
         except Exception as exc:
-            logger.warning("WB indicator search failed: %s", exc)
+            logger.warning("Data360 search failed: %s", exc)
             return []
 
     def fetch_indicator(
         self,
         indicator_id: str,
-        countries: str = "all",
-        year_range: Tuple[int, int] = (2018, 2023),
+        database_id: str,
     ) -> pd.DataFrame:
-        """
-        Download a World Bank indicator as a DataFrame.
+        """Download a Data360 indicator as a DataFrame.
 
-        Columns: country_code, country_name, year, <indicator_id>
+        Dimension columns (sex, age, urbanisation) are kept when they
+        carry meaningful variation; sentinel-only columns are dropped.
         """
-        start, end = year_range
-        url = (
-            f"{_BASE}/country/{countries}/indicator/{indicator_id}"
-            f"?format=json&per_page=1000&date={start}:{end}"
-        )
-        rows = []
-        page = 1
+        rows: list = []
+        skip = 0
+        page_size = 1000
         while True:
-            try:
-                resp = requests.get(f"{url}&page={page}", timeout=_TIMEOUT)
-                resp.raise_for_status()
-                payload = resp.json()
-                if not isinstance(payload, list) or len(payload) < 2:
-                    break
-                meta, data = payload
-                if not data:
-                    break
-                for item in data:
-                    if item.get("value") is not None:
-                        rows.append({
-                            "country_code": item["country"]["id"],
-                            "country_name": item["country"]["value"],
-                            "year": int(item["date"]),
-                            indicator_id: item["value"],
-                        })
-                if page >= meta.get("pages", 1):
-                    break
-                page += 1
-            except Exception as exc:
-                logger.warning("WB fetch page %d failed: %s", page, exc)
+            resp = requests.get(
+                f"{_BASE}/data",
+                params={
+                    "DATABASE_ID": database_id,
+                    "INDICATOR": indicator_id,
+                    "top": page_size,
+                    "skip": skip,
+                },
+                timeout=30,
+            )
+            resp.raise_for_status()
+            batch = resp.json().get("value", [])
+            if not batch:
                 break
+            rows.extend(batch)
+            if len(batch) < page_size:
+                break
+            skip += page_size
 
-        if not rows:
-            return pd.DataFrame(columns=["country_code", "country_name", "year", indicator_id])
-        return pd.DataFrame(rows)
+        records = []
+        for r in rows:
+            if r.get("OBS_VALUE") is None:
+                continue
+            record = {}
+            for api_key, col_name in _DIMENSION_COLS.items():
+                val = r.get(api_key)
+                if val is not None:
+                    record[col_name] = val
+            records.append(record)
+
+        if not records:
+            return pd.DataFrame(columns=["country", "year", "value"])
+
+        df = pd.DataFrame(records)
+        if "value" in df.columns:
+            df["value"] = pd.to_numeric(df["value"], errors="coerce")
+        if "year" in df.columns:
+            df["year"] = pd.to_numeric(df["year"], errors="coerce").astype("Int64")
+
+        for col in ["sex", "age", "urbanisation"]:
+            if col in df.columns and df[col].nunique() <= 1:
+                df.drop(columns=col, inplace=True)
+
+        return df

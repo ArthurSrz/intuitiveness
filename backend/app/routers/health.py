@@ -68,6 +68,7 @@ def _check_memgraph() -> DepStatus:
         return DepStatus(configured=True, ok=False, detail=str(e)[:200])
 
 
+@router.get("/health", response_model=HealthResponse)
 @router.get("/healthz", response_model=HealthResponse)
 def healthz() -> HealthResponse:
     return HealthResponse(

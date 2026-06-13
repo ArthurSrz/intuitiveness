@@ -26,7 +26,10 @@ export interface EdgeParams {
   entityColumn: string;
   attributeColumn: string;
   valueColumn: string;
+  leftKey: string;   // join_sources: shared entity key column
+  rightKey: string;  // join_sources: right-side key (if different)
   domains: string; // comma-separated (lowest bin → first)
+  categoryColumn: string; // L3→L2 column to categorize by
   useSemantic: boolean; // L3→L2 text match via embeddings
   threshold: number; // L3→L2 semantic similarity cutoff
   column: string; // L2→L1
@@ -45,7 +48,10 @@ export function defaultEdgeParams(): EdgeParams {
     entityColumn: "",
     attributeColumn: "",
     valueColumn: "",
+    leftKey: "",
+    rightKey: "",
     domains: "low, high",
+    categoryColumn: "",
     useSemantic: false,
     threshold: 0.6,
     column: "",
@@ -77,18 +83,28 @@ export function buildDescendBody(
   const columns = options?.columns ?? [];
   switch (level) {
     case 4: {
+      const sources: string[] = (options as any)?.sources ?? [];
+      const multiSource = sources.length > 1;
+      const builder = multiSource && p.builder === "rows_as_nodes" ? "join_sources" : p.builder;
       const config: Record<string, string> = {};
-      if (p.builder === "rows_as_nodes" && p.idColumn) config.id_column = p.idColumn;
-      if (p.builder === "bipartite") {
+      if (builder === "rows_as_nodes" && p.idColumn) config.id_column = p.idColumn;
+      if (builder === "bipartite") {
         if (p.entityColumn) config.entity_column = p.entityColumn;
         if (p.attributeColumn) config.attribute_column = p.attributeColumn;
         if (p.valueColumn) config.value_column = p.valueColumn;
       }
-      return { builder: p.builder, config };
+      if (builder === "join_sources") {
+        const sharedCols: string[] = (options as any)?.shared_columns ?? [];
+        if (p.leftKey) config.left_key = p.leftKey;
+        else if (sharedCols.length > 0) config.left_key = sharedCols[0];
+        if (p.rightKey && p.rightKey !== "inner") config.how = p.rightKey;
+      }
+      return { builder, config };
     }
     case 3:
       return {
         domains: splitList(p.domains),
+        ...(p.categoryColumn ? { category_column: p.categoryColumn } : {}),
         ...(p.useSemantic ? { use_semantic: true, threshold: p.threshold } : {}),
       };
     case 2:
@@ -139,8 +155,16 @@ export function EdgeControls({
   onChange: (patch: Partial<EdgeParams>) => void;
 }) {
   const columns = options?.columns ?? [];
-  const builders = options?.builders ?? ["rows_as_nodes", "bipartite"];
+  const sharedColumns: string[] = (options as any)?.shared_columns ?? [];
+  const sources: string[] = (options as any)?.sources ?? [];
+  const multiSource = sources.length > 1;
+  const builders = options?.builders ?? ["rows_as_nodes", "bipartite", "join_sources"];
   const aggregations = options?.aggregations ?? ["mean", "sum", "count", "min", "max"];
+
+  // Auto-select join_sources when multiple sources are present
+  const effectiveBuilder = multiSource && params.builder === "rows_as_nodes"
+    ? "join_sources"
+    : params.builder;
 
   const body = (() => {
     if (dir === "descend") {
@@ -149,17 +173,41 @@ export function EdgeControls({
           <>
             <Select
               label="Graph builder"
-              value={params.builder}
+              value={effectiveBuilder}
               options={builders}
               onChange={(v) => onChange({ builder: v })}
             />
-            {params.builder === "rows_as_nodes" ? (
+            {multiSource && effectiveBuilder !== "join_sources" && (
+              <p style={{ fontSize: 12, color: "var(--warning)", margin: "4px 0" }}>
+                You have {sources.length} sources — consider using <strong>join_sources</strong> to connect them.
+              </p>
+            )}
+            {effectiveBuilder === "rows_as_nodes" ? (
               <Select
                 label="Entity (id) column"
                 value={params.idColumn || columns[0] || ""}
                 options={columns}
                 onChange={(v) => onChange({ idColumn: v })}
               />
+            ) : effectiveBuilder === "join_sources" ? (
+              <>
+                {sharedColumns.length > 0 ? (
+                  <Select
+                    label="Shared entity key"
+                    value={params.leftKey || sharedColumns[0] || ""}
+                    options={sharedColumns}
+                    onChange={(v) => onChange({ leftKey: v })}
+                  />
+                ) : (
+                  <Text label="Shared entity key column" value={params.leftKey} placeholder="e.g. country" onChange={(v) => onChange({ leftKey: v })} />
+                )}
+                <Select
+                  label="Join type"
+                  value={params.rightKey || "inner"}
+                  options={["inner", "left", "outer"]}
+                  onChange={(v) => onChange({ rightKey: v })}
+                />
+              </>
             ) : (
               <>
                 <Select label="Entity column" value={params.entityColumn || columns[0] || ""} options={columns} onChange={(v) => onChange({ entityColumn: v })} />
@@ -174,10 +222,17 @@ export function EdgeControls({
         return (
           <>
             <Text
-              label="Domain categories (comma-separated)"
+              label="Domain categories (comma-separated, lowest first)"
               value={params.domains}
               placeholder="e.g. low, high"
               onChange={(v) => onChange({ domains: v })}
+            />
+            <Select
+              label="Column to categorize by"
+              value={params.categoryColumn}
+              options={["", ...columns]}
+              emptyLabel="(auto-detect)"
+              onChange={(v) => onChange({ categoryColumn: v })}
             />
             <div style={{ gridColumn: "1 / -1", display: "flex", alignItems: "center", gap: 14, flexWrap: "wrap" }}>
               <Toggle

@@ -134,7 +134,7 @@ export function useUploadCsv() {
 export function useImportWorldBank() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (body: { indicator_id: string; indicator_name: string; mrv?: number }) =>
+    mutationFn: (body: { indicator_id: string; database_id: string; indicator_name: string }) =>
       apiPost<SessionState>("/sessions/import-worldbank", body),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: queryKeys.sessions });
@@ -147,6 +147,24 @@ export function useAddSource(sessionId: string) {
   return useMutation({
     mutationFn: (files: File[]) =>
       apiUpload<SessionState>(`/sessions/${sessionId}/add-source`, files),
+    onSuccess: () => invalidateSession(queryClient, sessionId),
+  });
+}
+
+export function useAddSourceUrl(sessionId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (body: { url: string; filename?: string }) =>
+      apiPost<SessionState>(`/sessions/${sessionId}/add-source-url`, body),
+    onSuccess: () => invalidateSession(queryClient, sessionId),
+  });
+}
+
+export function useAddSourceWorldBank(sessionId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (body: { indicator_id: string; database_id: string; indicator_name: string }) =>
+      apiPost<SessionState>(`/sessions/${sessionId}/add-source-worldbank`, body),
     onSuccess: () => invalidateSession(queryClient, sessionId),
   });
 }

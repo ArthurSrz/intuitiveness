@@ -102,6 +102,7 @@ def test_worldbank_search_indicators(tmp_path):
     svc = WorldBankService()
     results = svc.search_indicators("GDP per capita")
     assert len(results) > 0, "No WB indicators found for 'GDP per capita'"
+    assert any("GDP" in r.name for r in results), "Results should mention GDP"
     ids = [r.id for r in results]
     print(f"\n✓ World Bank search: {ids[:4]}")
 
@@ -112,8 +113,8 @@ def test_worldbank_fetch_and_import(tmp_path):
 
     wb = WorldBankService()
 
-    gdp = wb.fetch_indicator("NY.GDP.PCAP.CD", year_range=(2020, 2022))
-    life = wb.fetch_indicator("SP.DYN.LE00.IN", year_range=(2020, 2022))
+    gdp = wb.fetch_indicator("WB_WDI_NY_GDP_PCAP_CD", database_id="WB_WDI")
+    life = wb.fetch_indicator("WB_WDI_SP_DYN_LE00_IN", database_id="WB_WDI")
 
     assert not gdp.empty, "GDP per capita returned empty"
     assert not life.empty, "Life expectancy returned empty"

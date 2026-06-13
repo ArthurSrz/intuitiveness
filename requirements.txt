@@ -1,35 +1,28 @@
-# Install the local package
+# Install the local package (core: pandas, networkx, numpy, scipy, scikit-learn, openai, requests)
 -e .
 
 # Environment variable management
 python-dotenv>=1.0.0
 
-streamlit_pdf_viewer
+# FastAPI backend
+fastapi>=0.100.0
+uvicorn>=0.20.0
+python-multipart>=0.0.5
+
+# Graph database client (Memgraph/Neo4j)
 neo4j>=5.0.0
-# PostgreSQL driver for the durable session store (e.g. Railway). Optional at
-# runtime: the durable backend falls back to local files when no DATABASE_URL.
+# PostgreSQL driver for the durable session store (e.g. Railway)
 psycopg2-binary>=2.9.0
-networkx
-pandas
-matplotlib
-scipy
-scikit-learn
-# sentence-transformers removed - using HF Inference API instead (see models.py)
-streamlit>=1.28.0
-streamlit-extras>=0.7.0
-streamlit-agraph>=0.0.45
+
+# Visualization (backend-side chart generation)
 plotly>=5.18.0
-openai>=1.0.0
-streamlit-javascript>=0.1.5
-numpy
-# Note: Using built-in st.json() for JSON visualization (streamlit-json-viewer doesn't exist on PyPI)
-requests
+matplotlib
 
 # Quality Data Platform dependencies
 tabpfn-client>=0.1.0
 tabpfn-extensions[unsupervised]>=0.2.0
-# SHAP with Python 3.11+ support (avoid old numba/llvmlite incompatibility)
 shap>=0.45.0,<0.51.0
-# Pin rich version to satisfy tabpfn-client requirement
 rich<=14.0.0,>=13.7.0
- 
+
+# Dev / test
+pytest

@@ -23,11 +23,14 @@ class NumpyEncoder(json.JSONEncoder):
         if isinstance(obj, np.integer):
             return int(obj)
         elif isinstance(obj, np.floating):
-            return float(obj)
+            v = float(obj)
+            return None if (v != v) else v  # NaN → null
         elif isinstance(obj, np.ndarray):
             return obj.tolist()
         elif isinstance(obj, np.bool_):
             return bool(obj)
+        elif isinstance(obj, float) and obj != obj:
+            return None
         return super().default(obj)
 
 
@@ -81,6 +84,7 @@ def serialize_graph(G: nx.Graph) -> str:
     """
     data = nx.node_link_data(G)
     json_str = json.dumps(data, cls=NumpyEncoder)
+    json_str = json_str.replace(": NaN,", ": null,").replace(": NaN}", ": null}").replace(":NaN,", ":null,").replace(":NaN}", ":null}")
     compressed = zlib.compress(json_str.encode('utf-8'))
     base64_str = base64.b64encode(compressed).decode('ascii')
     return base64_str
