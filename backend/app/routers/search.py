@@ -521,6 +521,91 @@ class EntityMatchResponse(BaseModel):
     error: Optional[str] = None
 
 
+class EntityAnalyzeResponse(BaseModel):
+    catalog: List[dict] = []
+    join_plan: dict = {}
+    column_transforms: dict = {}
+    explanation: str = ""
+    error: Optional[str] = None
+
+
+@router.post("/sessions/{session_id}/entity-analyze", response_model=EntityAnalyzeResponse)
+def entity_analyze(
+    session_id: str,
+    body: EntityMatchRequest,
+    svc: SessionService = Depends(get_session_service),
+) -> EntityAnalyzeResponse:
+    """Analyze entity relationships without descending. Returns the catalog for user validation."""
+    from intuitiveness.services.entity_matcher import match_entities
+
+    state = svc.get(session_id)
+    if state["current_level"] != 4:
+        raise HTTPException(status_code=409, detail="Entity matching is only available at L4.")
+
+    session = svc._load(session_id)
+    data = session.current_dataset.get_data()
+    if not isinstance(data, dict) or len(data) < 2:
+        raise HTTPException(status_code=422, detail="Need at least 2 sources for entity matching.")
+
+    relationships = [r.model_dump() for r in body.relationships] if body.relationships else []
+    result = match_entities(data, relationships)
+
+    return EntityAnalyzeResponse(
+        catalog=result.get("catalog", []),
+        join_plan=result.get("join_plan", {}),
+        column_transforms=result.get("column_transforms", {}),
+        explanation=result.get("explanation", ""),
+        error=result.get("error"),
+    )
+
+
+class EntityConfirmRequest(BaseModel):
+    catalog: List[dict]
+    join_plan: dict = {}
+    column_transforms: dict = {}
+
+
+@router.post("/sessions/{session_id}/entity-confirm", response_model=SessionState)
+def entity_confirm(
+    session_id: str,
+    body: EntityConfirmRequest,
+    svc: SessionService = Depends(get_session_service),
+) -> SessionState:
+    """Confirm the entity matching and descend to L3 with the merged data table."""
+    import networkx as nx
+    from intuitiveness.services.entity_matcher import execute_join
+
+    state = svc.get(session_id)
+    if state["current_level"] != 4:
+        raise HTTPException(status_code=409, detail="Can only confirm entity matching at L4.")
+
+    catalog = body.catalog
+    transforms = body.column_transforms
+
+    def builder_func(payload):
+        merged = execute_join(payload, body.join_plan, catalog, transforms or None)
+        merged = merged.dropna(subset=[merged.columns[0]])
+        g = nx.DiGraph()
+        id_col = merged.columns[0]
+        for _, row in merged.iterrows():
+            node_id = row[id_col]
+            if node_id is None or (isinstance(node_id, float) and node_id != node_id):
+                continue
+            clean_attrs = {}
+            for c in merged.columns:
+                if c == id_col:
+                    continue
+                v = row[c]
+                if isinstance(v, float) and v != v:
+                    clean_attrs[c] = None
+                else:
+                    clean_attrs[c] = v
+            g.add_node(node_id, **clean_attrs)
+        return g
+
+    return svc.descend(session_id, params={"builder_func": builder_func})
+
+
 @router.post("/sessions/{session_id}/entity-match", response_model=SessionState)
 def entity_match(
     session_id: str,

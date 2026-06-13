@@ -72,45 +72,138 @@ export function L4Sources({ node, onAddSource, sessionId }: { node: NodeDetail; 
 }
 
 
+interface AnalyzeResult {
+  catalog: Array<{ concept: string; description: string; mappings: Array<{ source: string; column: string; notes: string }> }>;
+  join_plan: Record<string, unknown>;
+  column_transforms: Record<string, string>;
+  explanation: string;
+  error?: string;
+}
+
 function ConnectSourcesButton({ sessionId }: { sessionId: string }) {
-  const [busy, setBusy] = useState(false);
+  const [analyzing, setAnalyzing] = useState(false);
+  const [confirming, setConfirming] = useState(false);
+  const [result, setResult] = useState<AnalyzeResult | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  async function connect() {
-    setBusy(true);
+  async function analyze() {
+    setAnalyzing(true);
     setError(null);
     try {
-      await apiPost(`/sessions/${sessionId}/entity-match`, { relationships: [] });
+      const res = await apiPost<AnalyzeResult>(`/sessions/${sessionId}/entity-analyze`, { relationships: [] });
+      if (res.error) { setError(res.error); setAnalyzing(false); return; }
+      setResult(res);
+    } catch (e) {
+      setError(String(e));
+    }
+    setAnalyzing(false);
+  }
+
+  async function confirm() {
+    if (!result) return;
+    setConfirming(true);
+    try {
+      await apiPost(`/sessions/${sessionId}/entity-confirm`, {
+        catalog: result.catalog,
+        join_plan: result.join_plan,
+        column_transforms: result.column_transforms,
+      });
       window.location.reload();
     } catch (e) {
       setError(String(e));
-      setBusy(false);
+      setConfirming(false);
     }
   }
 
+  if (!result) {
+    return (
+      <button
+        className="card"
+        onClick={analyze}
+        disabled={analyzing}
+        style={{
+          padding: "14px 16px", display: "flex", alignItems: "center", gap: 10,
+          width: "100%", border: "1.5px dashed var(--blue)",
+          background: analyzing ? "var(--surface)" : "var(--blue-soft)",
+          cursor: analyzing ? "wait" : "pointer", textAlign: "left",
+        }}
+      >
+        <Icon name="graph" size={16} />
+        <span style={{ fontWeight: 600, color: "var(--blue)" }}>
+          {analyzing ? "Analyzing with LLM..." : "Connect these sources"}
+        </span>
+        {error && <span style={{ color: "var(--error)", fontSize: 12, marginLeft: "auto" }}>{error}</span>}
+      </button>
+    );
+  }
+
   return (
-    <button
-      className="card"
-      onClick={connect}
-      disabled={busy}
-      style={{
-        padding: "14px 16px",
-        display: "flex",
-        alignItems: "center",
-        gap: 10,
-        width: "100%",
-        border: "1.5px dashed var(--blue)",
-        background: busy ? "var(--surface)" : "var(--blue-soft)",
-        cursor: busy ? "wait" : "pointer",
-        textAlign: "left",
-      }}
-    >
-      <Icon name="graph" size={16} />
-      <span style={{ fontWeight: 600, color: "var(--blue)" }}>
-        {busy ? "Analyzing with LLM..." : "Connect these sources"}
-      </span>
-      {error && <span style={{ color: "var(--error)", fontSize: 12, marginLeft: "auto" }}>{error}</span>}
-    </button>
+    <div className="card" style={{ padding: 0, overflow: "hidden", border: "1.5px solid var(--blue)" }}>
+      {/* Header */}
+      <div style={{ padding: "12px 16px", borderBottom: "1px solid var(--border)", display: "flex", alignItems: "center", gap: 10, background: "var(--blue-soft)" }}>
+        <Icon name="graph" size={16} />
+        <span style={{ fontWeight: 700, fontSize: 14, color: "var(--blue)" }}>Schema Preview</span>
+        <span className="t-meta">{result.catalog.length} concepts found</span>
+        <button className="pill-btn ghost" onClick={() => setResult(null)} style={{ marginLeft: "auto", height: 26, fontSize: 11 }}>Cancel</button>
+      </div>
+
+      {/* Explanation */}
+      {result.explanation && (
+        <div style={{ padding: "10px 16px", borderBottom: "1px solid var(--border)", fontSize: 13, lineHeight: 1.5, color: "var(--text-2)" }}>
+          {result.explanation}
+        </div>
+      )}
+
+      {/* Concept rows */}
+      {result.catalog.map((c, i) => (
+        <div key={i} style={{ display: "flex", alignItems: "center", borderBottom: "1px solid var(--border)", padding: "8px 0" }}>
+          <div style={{ flex: 1, padding: "0 16px", textAlign: "right" }}>
+            {c.mappings[0] && (
+              <span className="mono" style={{ fontSize: 13, fontWeight: 600, color: "var(--blue)" }}>
+                {c.mappings[0].column}
+              </span>
+            )}
+          </div>
+          <div style={{ flex: "0 0 auto", padding: "0 4px", display: "flex", alignItems: "center" }}>
+            <span style={{ width: 16, height: 1, background: "var(--blue)", opacity: 0.3 }} />
+            <span style={{
+              padding: "4px 12px", background: "var(--blue-soft)", borderRadius: 16,
+              border: "1px solid var(--blue)", fontSize: 11, fontWeight: 700,
+              color: "var(--blue)", whiteSpace: "nowrap",
+              display: "flex", flexDirection: "column", alignItems: "center", gap: 1,
+            }}>
+              {c.concept}
+              {c.description && (
+                <span style={{ fontSize: 9, fontWeight: 400, color: "var(--text-2)", whiteSpace: "normal", textAlign: "center", maxWidth: 160 }}>
+                  {c.description}
+                </span>
+              )}
+            </span>
+            <span style={{ width: 16, height: 1, background: "var(--blue)", opacity: 0.3 }} />
+          </div>
+          <div style={{ flex: 1, padding: "0 16px" }}>
+            {c.mappings[1] && (
+              <span className="mono" style={{ fontSize: 13, fontWeight: 600, color: "var(--blue)" }}>
+                {c.mappings[1].column}
+              </span>
+            )}
+          </div>
+        </div>
+      ))}
+
+      {/* Confirm / Cancel */}
+      <div style={{ padding: "12px 16px", display: "flex", alignItems: "center", gap: 10 }}>
+        <button
+          className="pill-btn primary"
+          disabled={confirming}
+          onClick={confirm}
+          style={{ height: 36, fontSize: 13 }}
+        >
+          {confirming ? "Building L3..." : "Confirm and descend to L3"}
+        </button>
+        {error && <span style={{ color: "var(--error)", fontSize: 12 }}>{error}</span>}
+      </div>
+    </div>
   );
 }
 
