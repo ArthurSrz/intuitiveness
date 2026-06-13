@@ -582,24 +582,76 @@ def entity_confirm(
     transforms = body.column_transforms
 
     def builder_func(payload):
-        merged = execute_join(payload, body.join_plan, catalog, transforms or None)
-        merged = merged.dropna(subset=[merged.columns[0]])
+        if not isinstance(payload, dict):
+            return nx.DiGraph()
+
         g = nx.DiGraph()
-        id_col = merged.columns[0]
-        for _, row in merged.iterrows():
-            node_id = row[id_col]
-            if node_id is None or (isinstance(node_id, float) and node_id != node_id):
+
+        # Step 1: Add every row from every source as a node
+        # Node ID = "source:row_index" to guarantee uniqueness
+        node_map: dict = {}  # (source, row_idx) → node_id
+        for source_name, df in payload.items():
+            for idx, row in df.iterrows():
+                node_id = f"{source_name}:{idx}"
+                attrs = {"_source": source_name}
+                for c in df.columns:
+                    v = row[c]
+                    if isinstance(v, float) and v != v:
+                        attrs[c] = None
+                    else:
+                        attrs[c] = v
+                g.add_node(node_id, **attrs)
+                node_map[(source_name, idx)] = node_id
+
+        # Step 2: Build edges from the catalog concepts
+        # For each concept, find which columns map to it per source,
+        # then link nodes that share the same value for that concept
+        for entry in catalog:
+            concept = entry.get("concept", "")
+            mappings = entry.get("mappings", [])
+            if len(mappings) < 2:
                 continue
-            clean_attrs = {}
-            for c in merged.columns:
-                if c == id_col:
-                    continue
-                v = row[c]
-                if isinstance(v, float) and v != v:
-                    clean_attrs[c] = None
-                else:
-                    clean_attrs[c] = v
-            g.add_node(node_id, **clean_attrs)
+
+            # Group: source_name → column_name for this concept
+            source_cols: dict = {}
+            for m in mappings:
+                src = m.get("source", "")
+                col = m.get("column", "")
+                if src in payload and col in payload[src].columns:
+                    source_cols[src] = col
+
+            if len(source_cols) < 2:
+                continue
+
+            # Build value → node_ids index per source
+            source_names = list(source_cols.keys())
+            for i, src_a in enumerate(source_names):
+                col_a = source_cols[src_a]
+                for src_b in source_names[i + 1:]:
+                    col_b = source_cols[src_b]
+
+                    # Index: value → list of node_ids for each source
+                    idx_a: dict = {}
+                    for row_idx, row in payload[src_a].iterrows():
+                        v = row[col_a]
+                        if v is None or (isinstance(v, float) and v != v):
+                            continue
+                        key = str(v).strip().lower()
+                        if key:
+                            idx_a.setdefault(key, []).append(node_map[(src_a, row_idx)])
+
+                    for row_idx, row in payload[src_b].iterrows():
+                        v = row[col_b]
+                        if v is None or (isinstance(v, float) and v != v):
+                            continue
+                        key = str(v).strip().lower()
+                        if key in idx_a:
+                            b_node = node_map[(src_b, row_idx)]
+                            for a_node in idx_a[key]:
+                                g.add_edge(a_node, b_node,
+                                           relationship=concept,
+                                           matched_on=f"{col_a}={col_b}={key}")
+
         return g
 
     return svc.descend(session_id, params={"builder_func": builder_func})
