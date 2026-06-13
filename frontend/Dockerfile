@@ -8,7 +8,7 @@
 # be present as a build ARG (Railway passes service variables as Docker build args).
 # Set it to the backend's public domain BEFORE building; a later change needs a rebuild.
 
-FROM node:20-slim
+FROM node:22-slim
 
 # NOTE: do NOT set NODE_ENV=production before `npm ci` — that omits
 # devDependencies (openapi-typescript, typescript, tailwindcss), which the build
