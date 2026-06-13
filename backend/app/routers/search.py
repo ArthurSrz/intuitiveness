@@ -356,23 +356,28 @@ def _wb_search_via_mcp(q: str, size: int) -> Optional[WBSearchResponse]:
 
 def _wb_search_via_rest(q: str, size: int) -> WBSearchResponse:
     """Search World Bank indicators via the REST API (fallback)."""
-    try:
-        resp = requests.post(
-            f"{_DATA360_BASE}/searchv2",
-            json={
-                "search": q,
-                "searchFields": "series_description/name",
-                "select": "series_description/idno, series_description/name, series_description/database_id",
-                "top": size,
-                "count": True,
-            },
-            timeout=15,
-        )
-        resp.raise_for_status()
-        payload = resp.json()
-    except Exception as exc:
-        logger.warning("Data360 REST search failed: %s", exc)
-        raise HTTPException(status_code=502, detail=f"World Bank search unavailable: {exc}") from exc
+    last_exc: Exception | None = None
+    for attempt in range(3):
+        try:
+            resp = requests.post(
+                f"{_DATA360_BASE}/searchv2",
+                json={
+                    "search": q,
+                    "searchFields": "series_description/name",
+                    "select": "series_description/idno, series_description/name, series_description/database_id",
+                    "top": size,
+                    "count": True,
+                },
+                timeout=20,
+            )
+            resp.raise_for_status()
+            payload = resp.json()
+            break
+        except Exception as exc:
+            last_exc = exc
+            logger.warning("Data360 REST search attempt %d failed: %s", attempt + 1, exc)
+    else:
+        raise HTTPException(status_code=502, detail=f"World Bank search unavailable after 3 attempts: {last_exc}") from last_exc
 
     indicators = [
         WBIndicator(
@@ -919,6 +924,7 @@ def dimension_analyze(
         "mean": round(float(series.mean()), 2) if hasattr(series, "mean") and series.notna().any() else None,
         "sample_index": [str(i) for i in series.index[:10]],
         "sample_values": [str(v) for v in series.dropna()[:10]],
+        "index_is_numeric": pd.api.types.is_integer_dtype(series.index) or pd.api.types.is_float_dtype(series.index),
     }
     logger.warning("DIMENSION-ANALYZE: vector_info=%s", vector_info)
 
