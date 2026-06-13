@@ -308,6 +308,40 @@ function SourceCard({
 /* ─────────────────────────────────────────────────────────────────────── */
 
 function EntityGraph({ graph, node: detail }: { graph: DecodedGraph; node: NodeDetail }) {
+  const [showAllCols, setShowAllCols] = useState(false);
+  const [showAllRows, setShowAllRows] = useState(false);
+
+  // Detect row-like data: nodes have many attributes (merged table rows)
+  const isRowData = useMemo(() => {
+    if (graph.nodes.length === 0) return false;
+    const attrCount = Object.keys(graph.nodes[0]).filter((k) => k !== "id").length;
+    return attrCount > 3;
+  }, [graph]);
+
+  // Extract table from graph nodes
+  const table = useMemo(() => {
+    if (!isRowData) return null;
+    const allKeys = new Set<string>();
+    for (const n of graph.nodes) {
+      for (const k of Object.keys(n)) allKeys.add(k);
+    }
+    const columns = Array.from(allKeys);
+    const rows = graph.nodes.map((n) => {
+      const row: Record<string, unknown> = {};
+      for (const c of columns) row[c] = n[c] ?? null;
+      return row;
+    });
+    return { columns, rows };
+  }, [graph, isRowData]);
+
+  const displayCols = table
+    ? showAllCols ? table.columns : table.columns.slice(0, 8)
+    : [];
+  const displayRows = table
+    ? showAllRows ? table.rows : table.rows.slice(0, 50)
+    : [];
+  const hiddenCols = table ? table.columns.length - 8 : 0;
+
   const { nodes, edges } = useMemo(() => {
     const cols = Math.max(1, Math.ceil(Math.sqrt(graph.nodes.length)));
     const gapX = 170;
@@ -347,29 +381,94 @@ function EntityGraph({ graph, node: detail }: { graph: DecodedGraph; node: NodeD
   }, [graph]);
 
   return (
-    <div className="card" style={{ padding: 12 }}>
-      <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "4px 6px 12px", flexWrap: "wrap" }}>
-        <span className="chip"><Icon name="graph" size={15} /> L3 · Graph</span>
-        <span className="t-name" style={{ fontWeight: 700 }}>
-          {detail.decision_description ?? "Entity / relationship graph"}
-        </span>
+    <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+      {/* Graph view (compact when table is present) */}
+      <div className="card" style={{ padding: 12 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "4px 6px 12px", flexWrap: "wrap" }}>
+          <span className="chip"><Icon name="graph" size={15} /> L3 · Knowledge Graph</span>
+          <span className="t-name" style={{ fontWeight: 700 }}>
+            {detail.decision_description ?? "Entity / relationship graph"}
+          </span>
+          <span className="t-meta" style={{ marginLeft: "auto" }}>
+            <span className="mono">{nodes.length}</span> entities
+            {edges.length > 0 && <> · <span className="mono">{edges.length}</span> links</>}
+          </span>
+        </div>
+        <div style={{ height: isRowData ? 200 : 420, overflow: "hidden", borderRadius: "var(--radius-lg)", border: "1px solid var(--border)", background: "var(--surface)" }}>
+          <ReactFlow nodes={nodes} edges={edges} fitView proOptions={{ hideAttribution: true }} nodesDraggable nodesConnectable={false}>
+            <Background color="var(--border-strong)" gap={22} />
+            <Controls showInteractive={false} />
+          </ReactFlow>
+        </div>
       </div>
-      <div style={{ height: 420, overflow: "hidden", borderRadius: "var(--radius-lg)", border: "1px solid var(--border)", background: "var(--surface)" }}>
-        <ReactFlow nodes={nodes} edges={edges} fitView proOptions={{ hideAttribution: true }} nodesDraggable nodesConnectable={false}>
-          <Background color="var(--border-strong)" gap={22} />
-          <Controls showInteractive={false} />
-        </ReactFlow>
-      </div>
-      <div style={{ display: "flex", gap: 16, alignItems: "center", flexWrap: "wrap", padding: "12px 6px 4px", borderTop: "1px solid var(--border)", marginTop: 10 }}>
-        <span className="t-label">Relationship</span>
-        <span className="t-meta">nodes → <b style={{ color: "var(--text)" }}>entities</b></span>
-        <span className="t-meta">links → <b style={{ color: "var(--blue)" }}>relationships</b></span>
-        <span className="t-meta" style={{ marginLeft: "auto" }}>
-          <span className="mono">{nodes.length}</span> entities · <span className="mono">{edges.length}</span> links
-        </span>
-      </div>
+
+      {/* Data table (when nodes contain row-like data) */}
+      {table && (
+        <div className="card" style={{ padding: 0, overflow: "hidden" }}>
+          <div style={{ padding: "12px 16px", borderBottom: "1px solid var(--border)", display: "flex", alignItems: "center", gap: 10 }}>
+            <span className="chip"><Icon name="table" size={15} /> L3 · Merged Data</span>
+            <span className="t-meta mono">
+              {table.rows.length} rows x {table.columns.length} cols
+            </span>
+          </div>
+          <div style={{ overflowX: "auto" }}>
+            <table style={{ borderCollapse: "collapse", width: "100%", minWidth: 480 }}>
+              <thead>
+                <tr>
+                  {displayCols.map((c) => (
+                    <th key={c} className="mono" style={thStyle}>{c}</th>
+                  ))}
+                  {!showAllCols && hiddenCols > 0 && (
+                    <th className="mono" style={{ ...thStyle, color: "var(--border-strong)" }}>+{hiddenCols} ...</th>
+                  )}
+                </tr>
+              </thead>
+              <tbody>
+                {displayRows.map((row, i) => (
+                  <tr key={i} className="rawrow">
+                    {displayCols.map((c) => (
+                      <td key={c} className="mono" style={tdStyle}>{formatCell(row[c])}</td>
+                    ))}
+                    {!showAllCols && hiddenCols > 0 && (
+                      <td style={{ ...tdStyle, color: "var(--border-strong)" }}>...</td>
+                    )}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          <div style={{ padding: "10px 16px", borderTop: "1px solid var(--border)", display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+            {table.rows.length > 50 && (
+              <button className="pill-btn ghost" style={{ height: 26, fontSize: 11 }} onClick={() => setShowAllRows((v) => !v)}>
+                {showAllRows ? "Show first 50" : `Show all ${table.rows.length} rows`}
+              </button>
+            )}
+            {hiddenCols > 0 && (
+              <button className="pill-btn ghost" style={{ height: 26, fontSize: 11, marginLeft: "auto" }} onClick={() => setShowAllCols((v) => !v)}>
+                {showAllCols ? "Show 8 columns" : `Show all ${table.columns.length} columns`}
+              </button>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   );
+}
+
+const thStyle: React.CSSProperties = {
+  textAlign: "left", padding: "9px 12px", fontSize: 12, fontWeight: 700,
+  color: "var(--text-2)", borderBottom: "1px solid var(--border)", background: "var(--surface)",
+  position: "sticky", top: 0, letterSpacing: "0.01em", whiteSpace: "nowrap",
+};
+const tdStyle: React.CSSProperties = {
+  padding: "10px 12px", fontSize: 13, borderBottom: "1px solid var(--border)",
+  color: "var(--text)", whiteSpace: "nowrap",
+};
+
+function formatCell(value: unknown): string {
+  if (value == null) return "";
+  if (typeof value === "number") return Number.isInteger(value) ? String(value) : value.toFixed(3);
+  return String(value);
 }
 
 function labelForNode(n: Record<string, unknown>): string {
