@@ -9,15 +9,25 @@ import ReactFlow, {
 } from "reactflow";
 import "reactflow/dist/style.css";
 import type { NodeDetail } from "@/lib/api/types";
-import { decodeGraph } from "@/lib/payload";
+import { decodeGraph, decodeGraphFull } from "@/lib/payload";
 import { Icon } from "@/components/ui/Icon";
 
 export function L3Graph({ node }: { node: NodeDetail }) {
-  const graph = useMemo(() => decodeGraph(node.payload), [node.payload]);
+  const decoded = useMemo(() => decodeGraphFull(node.payload), [node.payload]);
+  const graph = decoded?.graph ?? null;
+  const graphAttrs = decoded?.attrs ?? {};
+
   const isSchema = useMemo(
     () => graph?.nodes.some((n) => n.node_type === "concept") ?? false,
     [graph],
   );
+
+  const hasCatalog = !!graphAttrs._catalog;
+  const isRowData = useMemo(() => {
+    if (!graph || graph.nodes.length === 0) return false;
+    const attrCount = Object.keys(graph.nodes[0]).filter((k) => k !== "id").length;
+    return attrCount > 3;
+  }, [graph]);
 
   if (!graph || graph.nodes.length === 0) {
     return (
@@ -29,6 +39,7 @@ export function L3Graph({ node }: { node: NodeDetail }) {
   }
 
   if (isSchema) return <SchemaView graph={graph} node={node} />;
+  if (isRowData && hasCatalog) return <ReconciliatedView graph={graph} node={node} graphAttrs={graphAttrs} />;
   return <EntityGraph graph={graph} node={node} />;
 }
 
@@ -306,6 +317,145 @@ function SourceCard({
 /* ─────────────────────────────────────────────────────────────────────── */
 /* Entity Graph — generic ReactFlow view (rows_as_nodes, bipartite, etc) */
 /* ─────────────────────────────────────────────────────────────────────── */
+
+/* ─────────────────────────────────────────────────────────────────────── */
+/* Reconciliated View — schema + data table (no ReactFlow)               */
+/* ─────────────────────────────────────────────────────────────────────── */
+
+function ReconciliatedView({
+  graph, node: detail, graphAttrs,
+}: {
+  graph: DecodedGraph; node: NodeDetail; graphAttrs: Record<string, string>;
+}) {
+  const [showAllCols, setShowAllCols] = useState(false);
+  const [showAllRows, setShowAllRows] = useState(false);
+
+  const catalog: Array<{ concept: string; description: string; mappings: Array<{ source: string; column: string; notes?: string }> }> =
+    useMemo(() => {
+      try { return JSON.parse(graphAttrs._catalog || "[]"); }
+      catch { return []; }
+    }, [graphAttrs]);
+
+  const sourceMeta: Record<string, { rows: number; columns: string[] }> =
+    useMemo(() => {
+      try { return JSON.parse(graphAttrs._sources || "{}"); }
+      catch { return {}; }
+    }, [graphAttrs]);
+
+  const sourceNames = Object.keys(sourceMeta);
+  const leftName = sourceNames[0]?.replace(/\.csv$/i, "").replace(/_/g, " ") ?? "";
+  const rightName = sourceNames[1]?.replace(/\.csv$/i, "").replace(/_/g, " ") ?? "";
+
+  // Extract table from graph nodes
+  const table = useMemo(() => {
+    const allKeys = new Set<string>();
+    for (const n of graph.nodes) {
+      for (const k of Object.keys(n)) if (k !== "_source") allKeys.add(k);
+    }
+    const columns = Array.from(allKeys);
+    const rows = graph.nodes.map((n) => {
+      const row: Record<string, unknown> = {};
+      for (const c of columns) row[c] = n[c] ?? null;
+      return row;
+    });
+    return { columns, rows };
+  }, [graph]);
+
+  const displayCols = showAllCols ? table.columns : table.columns.slice(0, 8);
+  const displayRows = showAllRows ? table.rows : table.rows.slice(0, 50);
+  const hiddenCols = table.columns.length - 8;
+
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+      {/* Schema reconciliation */}
+      <div className="card" style={{ padding: 0, overflow: "hidden" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "12px 16px", borderBottom: "1px solid var(--border)" }}>
+          <span className="chip"><Icon name="graph" size={15} /> L3 · Schema</span>
+          <span className="t-meta" style={{ marginLeft: "auto" }}>
+            {sourceNames.length} sources · {catalog.length} concepts
+          </span>
+        </div>
+
+        {/* Source headers */}
+        <div style={{ display: "flex", borderBottom: "1px solid var(--border)", background: "var(--surface)" }}>
+          <div style={{ flex: 1, padding: "10px 16px", borderRight: "1px solid var(--border)" }}>
+            <div style={{ fontWeight: 700, fontSize: 13 }}>{leftName}</div>
+            {sourceMeta[sourceNames[0]] && <span className="t-meta mono" style={{ fontSize: 11 }}>{sourceMeta[sourceNames[0]].rows} rows</span>}
+          </div>
+          <div style={{ flex: "0 0 40px" }} />
+          <div style={{ flex: 1, padding: "10px 16px", textAlign: "right", borderLeft: "1px solid var(--border)" }}>
+            <div style={{ fontWeight: 700, fontSize: 13 }}>{rightName}</div>
+            {sourceMeta[sourceNames[1]] && <span className="t-meta mono" style={{ fontSize: 11 }}>{sourceMeta[sourceNames[1]].rows} rows</span>}
+          </div>
+        </div>
+
+        {/* Concept bridge rows */}
+        {catalog.map((c, i) => (
+          <div key={i} style={{ display: "flex", alignItems: "center", borderBottom: "1px solid var(--border)", padding: "8px 0" }}>
+            <div style={{ flex: 1, padding: "0 16px", textAlign: "right" }}>
+              {c.mappings[0] && <span className="mono" style={{ fontSize: 13, fontWeight: 600, color: "var(--blue)" }}>{c.mappings[0].column}</span>}
+            </div>
+            <div style={{ flex: "0 0 auto", padding: "0 4px", display: "flex", alignItems: "center" }}>
+              <span style={{ width: 16, height: 1, background: "var(--blue)", opacity: 0.3 }} />
+              <span style={{
+                padding: "4px 12px", background: "var(--blue-soft)", borderRadius: 16,
+                border: "1px solid var(--blue)", fontSize: 11, fontWeight: 700,
+                color: "var(--blue)", whiteSpace: "nowrap",
+                display: "flex", flexDirection: "column", alignItems: "center", gap: 1,
+              }}>
+                {c.concept}
+                {c.description && <span style={{ fontSize: 9, fontWeight: 400, color: "var(--text-2)", whiteSpace: "normal", textAlign: "center", maxWidth: 180 }}>{c.description}</span>}
+              </span>
+              <span style={{ width: 16, height: 1, background: "var(--blue)", opacity: 0.3 }} />
+            </div>
+            <div style={{ flex: 1, padding: "0 16px" }}>
+              {c.mappings[1] && <span className="mono" style={{ fontSize: 13, fontWeight: 600, color: "var(--blue)" }}>{c.mappings[1].column}</span>}
+            </div>
+          </div>
+        ))}
+      </div>
+
+      {/* Merged data table */}
+      <div className="card" style={{ padding: 0, overflow: "hidden" }}>
+        <div style={{ padding: "12px 16px", borderBottom: "1px solid var(--border)", display: "flex", alignItems: "center", gap: 10 }}>
+          <span className="chip"><Icon name="table" size={15} /> L3 · Linked Data</span>
+          <span className="t-meta mono">{table.rows.length} rows x {table.columns.length} cols</span>
+        </div>
+        <div style={{ overflowX: "auto" }}>
+          <table style={{ borderCollapse: "collapse", width: "100%", minWidth: 480 }}>
+            <thead>
+              <tr>
+                {displayCols.map((c) => <th key={c} className="mono" style={thStyle}>{c}</th>)}
+                {!showAllCols && hiddenCols > 0 && <th className="mono" style={{ ...thStyle, color: "var(--border-strong)" }}>+{hiddenCols} ...</th>}
+              </tr>
+            </thead>
+            <tbody>
+              {displayRows.map((row, i) => (
+                <tr key={i} className="rawrow">
+                  {displayCols.map((c) => <td key={c} className="mono" style={tdStyle}>{formatCell(row[c])}</td>)}
+                  {!showAllCols && hiddenCols > 0 && <td style={{ ...tdStyle, color: "var(--border-strong)" }}>...</td>}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+        <div style={{ padding: "10px 16px", borderTop: "1px solid var(--border)", display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+          {table.rows.length > 50 && (
+            <button className="pill-btn ghost" style={{ height: 26, fontSize: 11 }} onClick={() => setShowAllRows((v) => !v)}>
+              {showAllRows ? "Show first 50" : `Show all ${table.rows.length} rows`}
+            </button>
+          )}
+          {hiddenCols > 0 && (
+            <button className="pill-btn ghost" style={{ height: 26, fontSize: 11, marginLeft: "auto" }} onClick={() => setShowAllCols((v) => !v)}>
+              {showAllCols ? "Show 8 columns" : `Show all ${table.columns.length} columns`}
+            </button>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 
 function EntityGraph({ graph, node: detail }: { graph: DecodedGraph; node: NodeDetail }) {
   const [showAllCols, setShowAllCols] = useState(false);
