@@ -9,6 +9,7 @@
 # Set it to the backend's public domain BEFORE building; a later change needs a rebuild.
 
 FROM node:20-slim
+# Force rebuild: 2026-06-13
 
 # NOTE: do NOT set NODE_ENV=production before `npm ci` — that omits
 # devDependencies (openapi-typescript, typescript, tailwindcss), which the build
