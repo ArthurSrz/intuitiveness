@@ -146,6 +146,7 @@ export function EdgeControls({
   ascendMove,
   params,
   onChange,
+  bare,
 }: {
   dir: "descend" | "ascend";
   level: number; // source level of the transition
@@ -153,6 +154,7 @@ export function EdgeControls({
   ascendMove?: AscendMove;
   params: EdgeParams;
   onChange: (patch: Partial<EdgeParams>) => void;
+  bare?: boolean;
 }) {
   const columns = options?.columns ?? [];
   const sharedColumns: string[] = (options as any)?.shared_columns ?? [];
@@ -169,19 +171,25 @@ export function EdgeControls({
   const body = (() => {
     if (dir === "descend") {
       if (level === 4) {
+        if (multiSource) {
+          return (
+            <div style={{ gridColumn: "1 / -1" }}>
+              <p className="t-body" style={{ margin: 0, fontSize: 13, color: "var(--text-2)", lineHeight: 1.5 }}>
+                Use <strong style={{ color: "var(--blue)" }}>"Connect these sources"</strong> above
+                to discover shared entities across your {sources.length} sources. The LLM will
+                propose a schema you can review before descending.
+              </p>
+            </div>
+          );
+        }
         return (
           <>
             <Select
-              label="Graph builder"
+              label="Graph structure"
               value={effectiveBuilder}
-              options={builders}
+              options={builders.filter((b) => b !== "join_sources")}
               onChange={(v) => onChange({ builder: v })}
             />
-            {multiSource && effectiveBuilder !== "join_sources" && (
-              <p style={{ fontSize: 12, color: "var(--warning)", margin: "4px 0" }}>
-                You have {sources.length} sources — consider using <strong>join_sources</strong> to connect them.
-              </p>
-            )}
             {effectiveBuilder === "rows_as_nodes" ? (
               <Select
                 label="Entity (id) column"
@@ -189,25 +197,6 @@ export function EdgeControls({
                 options={columns}
                 onChange={(v) => onChange({ idColumn: v })}
               />
-            ) : effectiveBuilder === "join_sources" ? (
-              <>
-                {sharedColumns.length > 0 ? (
-                  <Select
-                    label="Shared entity key"
-                    value={params.leftKey || sharedColumns[0] || ""}
-                    options={sharedColumns}
-                    onChange={(v) => onChange({ leftKey: v })}
-                  />
-                ) : (
-                  <Text label="Shared entity key column" value={params.leftKey} placeholder="e.g. country" onChange={(v) => onChange({ leftKey: v })} />
-                )}
-                <Select
-                  label="Join type"
-                  value={params.rightKey || "inner"}
-                  options={["inner", "left", "outer"]}
-                  onChange={(v) => onChange({ rightKey: v })}
-                />
-              </>
             ) : (
               <>
                 <Select label="Entity column" value={params.entityColumn || columns[0] || ""} options={columns} onChange={(v) => onChange({ entityColumn: v })} />
@@ -222,27 +211,27 @@ export function EdgeControls({
         return (
           <>
             <Text
-              label="Domain categories (comma-separated, lowest first)"
+              label="Define your domain lens"
               value={params.domains}
-              placeholder="e.g. low, high"
+              placeholder="e.g. low, high  or  urban, rural"
               onChange={(v) => onChange({ domains: v })}
             />
             <Select
-              label="Column to categorize by"
+              label="Which column defines coherence?"
               value={params.categoryColumn}
               options={["", ...columns]}
-              emptyLabel="(auto-detect)"
+              emptyLabel="(auto — best numeric or text column)"
               onChange={(v) => onChange({ categoryColumn: v })}
             />
             <div style={{ gridColumn: "1 / -1", display: "flex", alignItems: "center", gap: 14, flexWrap: "wrap" }}>
               <Toggle
-                label="Semantic matching (text)"
+                label="Semantic matching (text columns)"
                 checked={params.useSemantic}
                 onChange={(v) => onChange({ useSemantic: v })}
               />
               {params.useSemantic && (
                 <label style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                  <span style={{ ...fieldLabel, marginBottom: 0 }}>Threshold</span>
+                  <span style={{ ...fieldLabel, marginBottom: 0 }}>Similarity threshold</span>
                   <input
                     type="range"
                     min={0.1}
@@ -255,8 +244,8 @@ export function EdgeControls({
                 </label>
               )}
               <span className="t-meta" style={{ flexBasis: "100%" }}>
-                Numeric columns split into ordered bins (first category = lowest). Semantic
-                matching applies to text columns via the embeddings API.
+                Name your categories in order (first = lowest). Numeric data is split into
+                quantile bins; text data matches by keyword or embeddings.
               </span>
             </div>
           </>
@@ -266,15 +255,15 @@ export function EdgeControls({
         return (
           <>
             <Select
-              label="Feature column to extract"
+              label="Which variable to isolate?"
               value={params.column || defaultColumn(columns)}
               options={columns}
               onChange={(v) => onChange({ column: v })}
             />
             <Text
-              label="Filter (optional pandas query)"
+              label="Focus on a subset (optional filter)"
               value={params.filterQuery}
-              placeholder="e.g. value > 30"
+              placeholder="e.g. category == 'high'"
               onChange={(v) => onChange({ filterQuery: v })}
             />
           </>
@@ -283,7 +272,7 @@ export function EdgeControls({
       if (level === 1) {
         return (
           <Select
-            label="Aggregation metric"
+            label="How to compress into a single value?"
             value={params.aggregation}
             options={aggregations}
             onChange={(v) => onChange({ aggregation: v })}
@@ -297,10 +286,10 @@ export function EdgeControls({
       const funcs = (ascendMove?.enrichment_functions ?? []).map((f) => f.name);
       return (
         <Select
-          label="Enrichment function"
+          label="How to reconstruct a vector from this datum?"
           value={params.enrichmentFunc}
           options={["", ...funcs]}
-          emptyLabel="(default: rebuild from source)"
+          emptyLabel="(default: rebuild from source data)"
           onChange={(v) => onChange({ enrichmentFunc: v })}
         />
       );
@@ -310,7 +299,7 @@ export function EdgeControls({
       return (
         <>
           <MultiSelect
-            label="Dimensions to add"
+            label={level === 1 ? "Which categorical dimensions to add?" : "Which analytic dimensions to link?"}
             selected={params.dimensions}
             options={dims}
             onToggle={(name) =>
@@ -324,13 +313,13 @@ export function EdgeControls({
           {level === 2 && (
             <>
               <Text
-                label="Relationships to link (comma-separated)"
+                label="Relationships to discover"
                 value={params.relationships}
-                placeholder="e.g. belongs_to"
+                placeholder="e.g. belongs_to, funded_by"
                 onChange={(v) => onChange({ relationships: v })}
               />
               <Select
-                label="Source column"
+                label="Source column for linking"
                 value={params.sourceColumn}
                 options={["", "value", ...(options?.columns ?? [])]}
                 emptyLabel="(default: value)"
@@ -347,15 +336,51 @@ export function EdgeControls({
   if (!body) return null;
 
   const target = dir === "descend" ? level - 1 : level + 1;
+  const transitionLabel = (() => {
+    if (dir === "descend") {
+      if (level === 4) return multiSource ? "ENTITY MATCHING" : "BUILD RELATIONS";
+      if (level === 3) return "MAP DOMAINS";
+      if (level === 2) return "SELECT FEATURE";
+      if (level === 1) return "AGGREGATE";
+    } else {
+      if (level === 0) return "ENRICH";
+      if (level === 1) return "ADD DIMENSIONS";
+      if (level === 2) return "LINK DOMAINS";
+    }
+    return dir === "descend" ? "REDUCE" : "AMPLIFY";
+  })();
+
+  const transitionHint = (() => {
+    if (dir === "descend") {
+      if (level === 4) return multiSource
+        ? "reduce heterogeneity → gain relational structure"
+        : "structure a single source as a knowledge graph";
+      if (level === 3) return "reduce domain breadth → gain domain coherence";
+      if (level === 2) return "reduce dimensionality → gain feature legibility";
+      if (level === 1) return "reduce extent → gain atomic certainty";
+    } else {
+      if (level === 0) return "enrich the datum → rebuild a vector";
+      if (level === 1) return "add categorical dimensions";
+      if (level === 2) return "link domains into a knowledge graph";
+    }
+    return "";
+  })();
+
+  if (bare) {
+    return (
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>{body}</div>
+    );
+  }
+
   return (
     <div className="card surface" style={{ display: "flex", flexDirection: "column", gap: 12, marginTop: 16 }}>
-      <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
         <Icon name="sliders" size={15} style={{ color: "var(--blue)" }} />
         <span className="t-label" style={{ color: "var(--text-2)" }}>
-          {dir === "descend" ? "REDUCE" : "AMPLIFY"} TO L{target}
+          {transitionLabel} → L{target}
         </span>
         <span className="t-meta" style={{ marginLeft: "auto" }}>
-          applied when you press {dir === "descend" ? "Descend / Next" : "Ascend / Next"}
+          {transitionHint}
         </span>
       </div>
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>{body}</div>

@@ -8,11 +8,15 @@ exception handlers in `main.py`.
 
 from __future__ import annotations
 
+import logging
+
 from fastapi import APIRouter, Depends
 
 from ..deps import get_session_service
 from ..models import AscendRequest, DescendRequest, SessionState
 from ..service import SessionService
+
+logger = logging.getLogger("intuitiveness.api.transitions")
 
 router = APIRouter(prefix="/sessions", tags=["transitions"])
 
@@ -24,9 +28,11 @@ def descend(
     svc: SessionService = Depends(get_session_service),
 ) -> SessionState:
     """Reduce complexity one level (L4→L3→…→L0)."""
-    # model_dump(exclude_none) keeps the payload tight; extras are preserved
-    # because the model allows them.
-    return svc.descend(session_id, body.model_dump(exclude_none=True))
+    params = body.model_dump(exclude_none=True)
+    logger.warning("DESCEND session=%s params=%s", session_id[:8], {k: str(v)[:80] for k, v in params.items()})
+    result = svc.descend(session_id, params)
+    logger.warning("DESCEND result: level=%s", result.get("current_level"))
+    return result
 
 
 @router.post("/{session_id}/ascend", response_model=SessionState)
@@ -36,4 +42,8 @@ def ascend(
     svc: SessionService = Depends(get_session_service),
 ) -> SessionState:
     """Increase complexity one level (L0→L1→L2→L3; never L4)."""
-    return svc.ascend(session_id, body.model_dump(exclude_none=True))
+    params = body.model_dump(exclude_none=True)
+    logger.warning("ASCEND session=%s params=%s", session_id[:8], {k: str(v)[:80] for k, v in params.items()})
+    result = svc.ascend(session_id, params)
+    logger.warning("ASCEND result: level=%s", result.get("current_level"))
+    return result

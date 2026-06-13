@@ -9,12 +9,16 @@ from __future__ import annotations
 
 from typing import Any, Dict
 
-from fastapi import APIRouter, Depends
+import logging
+
+from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import JSONResponse
 
 from ..deps import get_session_service
 from ..models import ImportRequest, SessionState
 from ..service import SessionService
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/sessions", tags=["artifacts"])
 
@@ -26,7 +30,11 @@ def get_node(
     svc: SessionService = Depends(get_session_service),
 ) -> Dict[str, Any]:
     """Full node record for rendering a level view (payload encoded per spec 015)."""
-    return svc.node(session_id, node_id)
+    try:
+        return svc.node(session_id, node_id)
+    except KeyError:
+        logger.warning("NODE-NOT-FOUND: session=%s node=%s", session_id, node_id)
+        raise HTTPException(status_code=404, detail=f"Node '{node_id}' not found in session '{session_id}'")
 
 
 @router.get("/{session_id}/export")

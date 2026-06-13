@@ -11,8 +11,9 @@ import "reactflow/dist/style.css";
 import type { NodeDetail } from "@/lib/api/types";
 import { decodeGraph, decodeGraphFull } from "@/lib/payload";
 import { Icon } from "@/components/ui/Icon";
+import { MapDomainsButton } from "./MapDomainsButton";
 
-export function L3Graph({ node }: { node: NodeDetail }) {
+export function L3Graph({ node, sessionId, onConfirm }: { node: NodeDetail; sessionId?: string; onConfirm?: () => void }) {
   const decoded = useMemo(() => decodeGraphFull(node.payload), [node.payload]);
   const graph = decoded?.graph ?? null;
   const graphAttrs = decoded?.attrs ?? {};
@@ -38,9 +39,20 @@ export function L3Graph({ node }: { node: NodeDetail }) {
     );
   }
 
-  if (isSchema) return <SchemaView graph={graph} node={node} />;
-  if (isRowData && hasCatalog) return <ReconciliatedView graph={graph} node={node} graphAttrs={graphAttrs} />;
-  return <EntityGraph graph={graph} node={node} />;
+  const view = isSchema
+    ? <SchemaView graph={graph} node={node} />
+    : isRowData && hasCatalog
+      ? <ReconciliatedView graph={graph} node={node} graphAttrs={graphAttrs} />
+      : <EntityGraph graph={graph} node={node} />;
+
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+      {view}
+      {sessionId && (
+        <MapDomainsButton sessionId={sessionId} onConfirm={onConfirm} />
+      )}
+    </div>
+  );
 }
 
 
@@ -315,6 +327,173 @@ function SourceCard({
 
 
 /* ─────────────────────────────────────────────────────────────────────── */
+/* Multi-Level Pivot Table — paper's L3 = shared keys × source attributes */
+/* ─────────────────────────────────────────────────────────────────────── */
+
+type CatalogEntry = { concept: string; description: string; mappings: Array<{ source: string; column: string }> };
+
+function MultiLevelTable({
+  table,
+  sourceNames,
+  catalog,
+  colSources,
+  showAllRows,
+  setShowAllRows,
+}: {
+  table: { columns: string[]; rows: Record<string, unknown>[] };
+  sourceNames: string[];
+  catalog: CatalogEntry[];
+  colSources: Record<string, string>; // column → short source name (from backend)
+  showAllRows: boolean;
+  setShowAllRows: (v: boolean) => void;
+}) {
+  const INTERNAL_COLS = new Set(["id", "index", "_id", "_index", "_source"]);
+
+  // Identify shared key columns: catalog entries with mappings covering 2+ sources
+  const sharedKeyCols = useMemo(() => {
+    const keys = new Set<string>();
+    for (const entry of catalog) {
+      for (const m of entry.mappings) {
+        if (table.columns.includes(m.column)) keys.add(m.column);
+      }
+    }
+    return Array.from(keys);
+  }, [catalog, table.columns]);
+
+  // Group columns by source using the explicit backend mapping (fully generic)
+  const sourceColGroups = useMemo(() => {
+    const groups: Record<string, string[]> = {};
+    for (const col of table.columns) {
+      if (sharedKeyCols.includes(col) || INTERNAL_COLS.has(col)) continue;
+      const src = colSources[col] ?? "other";
+      if (!groups[src]) groups[src] = [];
+      groups[src].push(col);
+    }
+    return groups;
+  }, [colSources, sharedKeyCols, table.columns]);
+
+  const allSourceGroups = Object.entries(sourceColGroups).filter(([, cols]) => cols.length > 0);
+  const displayRows = showAllRows ? table.rows : table.rows.slice(0, 50);
+  const friendlyName = (src: string) => src.replace(/\.csv$/i, "").replace(/_/g, " ").replace(/_/g, " ");
+
+  if (table.rows.length === 0) return null;
+
+  return (
+    <div className="card" style={{ padding: 0, overflow: "hidden" }}>
+      {/* Header */}
+      <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "12px 16px", borderBottom: "1px solid var(--border)" }}>
+        <span className="chip"><Icon name="table" size={15} /> L3 · Linked data</span>
+        <span className="t-meta mono" style={{ marginLeft: "auto" }}>
+          {table.rows.length} rows · {table.columns.length} cols
+        </span>
+      </div>
+
+      {/* Scrollable table */}
+      <div style={{ overflowX: "auto" }}>
+        <table style={{ borderCollapse: "collapse", width: "100%", minWidth: 600 }}>
+          <thead>
+            {/* Row 1: group headers */}
+            <tr style={{ background: "var(--surface)" }}>
+              {/* Shared key columns span together */}
+              {sharedKeyCols.length > 0 && (
+                <th
+                  colSpan={sharedKeyCols.length}
+                  style={{ ...thStyle, borderRight: "2px solid var(--border-strong)", textAlign: "center", color: "var(--text-2)", fontSize: 10, letterSpacing: "0.08em" }}
+                >
+                  SHARED KEYS
+                </th>
+              )}
+              {/* Source group headers */}
+              {allSourceGroups.map(([src, cols]) => (
+                <th
+                  key={src}
+                  colSpan={cols.length}
+                  style={{ ...thStyle, textAlign: "center", color: "var(--blue)", fontSize: 11, fontWeight: 700, borderLeft: "2px solid var(--blue)", borderRight: "1px solid var(--border)" }}
+                >
+                  {friendlyName(src)}
+                </th>
+              ))}
+            </tr>
+            {/* Row 2: actual column names */}
+            <tr>
+              {sharedKeyCols.map((col) => (
+                <th key={col} className="mono" style={{ ...thStyle, borderRight: col === sharedKeyCols[sharedKeyCols.length - 1] ? "2px solid var(--border-strong)" : undefined }}>
+                  {col}
+                </th>
+              ))}
+              {allSourceGroups.map(([src, cols]) =>
+                cols.map((col, i) => {
+                  // Strip source name prefix for cleaner display
+                  const shortSrc = src.replace(/\.csv$/i, "");
+                  const label = col.startsWith(`value_${shortSrc}_`)
+                    ? col.slice(`value_${shortSrc}_`.length)
+                    : col.replace(`_${shortSrc}`, "").replace(`${shortSrc}_`, "");
+                  return (
+                    <th
+                      key={col}
+                      className="mono"
+                      style={{
+                        ...thStyle,
+                        color: "var(--blue)",
+                        borderLeft: i === 0 ? "2px solid var(--blue)" : undefined,
+                      }}
+                    >
+                      {label || col}
+                    </th>
+                  );
+                }),
+              )}
+            </tr>
+          </thead>
+          <tbody>
+            {displayRows.map((row, i) => (
+              <tr key={i} className="rawrow">
+                {sharedKeyCols.map((col) => (
+                  <td key={col} className="mono" style={{ ...tdStyle, fontWeight: 600, borderRight: col === sharedKeyCols[sharedKeyCols.length - 1] ? "2px solid var(--border-strong)" : undefined }}>
+                    {formatCell(row[col])}
+                  </td>
+                ))}
+                {allSourceGroups.map(([src, cols]) =>
+                  cols.map((col, i) => (
+                    <td
+                      key={col}
+                      className="mono"
+                      style={{
+                        ...tdStyle,
+                        color: "var(--text)",
+                        borderLeft: i === 0 ? "2px solid var(--blue)" : undefined,
+                      }}
+                    >
+                      {formatCell(row[col])}
+                    </td>
+                  )),
+                )}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+
+      {/* Show more / summary */}
+      <div style={{ padding: "12px 16px", borderTop: "1px solid var(--border)", display: "flex", alignItems: "center", gap: 12 }}>
+        <span className="t-meta mono" style={{ flex: 1 }}>
+          Showing {displayRows.length} of {table.rows.length} rows
+        </span>
+        {table.rows.length > 50 && (
+          <button
+            className="pill-btn ghost"
+            onClick={() => setShowAllRows(!showAllRows)}
+            style={{ height: 28, fontSize: 12 }}
+          >
+            {showAllRows ? "Show less" : `Show all ${table.rows.length} rows`}
+          </button>
+        )}
+      </div>
+    </div>
+  );
+}
+
+/* ─────────────────────────────────────────────────────────────────────── */
 /* Entity Graph — generic ReactFlow view (rows_as_nodes, bipartite, etc) */
 /* ─────────────────────────────────────────────────────────────────────── */
 
@@ -339,6 +518,12 @@ function ReconciliatedView({
   const sourceMeta: Record<string, { rows: number; columns: string[] }> =
     useMemo(() => {
       try { return JSON.parse(graphAttrs._sources || "{}"); }
+      catch { return {}; }
+    }, [graphAttrs]);
+
+  const colSources: Record<string, string> =
+    useMemo(() => {
+      try { return JSON.parse(graphAttrs._col_sources || "{}"); }
       catch { return {}; }
     }, [graphAttrs]);
 
@@ -367,6 +552,20 @@ function ReconciliatedView({
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+      {/* Relational gain banner */}
+      <div style={{
+        padding: "10px 16px", borderRadius: "var(--radius-md)",
+        background: "var(--blue-soft)", border: "1px solid var(--blue)",
+        display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap",
+      }}>
+        <span style={{ fontSize: 13, fontWeight: 700, color: "var(--blue)" }}>
+          {sourceNames.length} sources · {catalog.length} shared concept{catalog.length === 1 ? "" : "s"} → {table.rows.length.toLocaleString()} rows linked
+        </span>
+        <span className="t-meta" style={{ fontSize: 11 }}>
+          Artefactual heterogeneity reduced — relational structure established
+        </span>
+      </div>
+
       {/* Schema reconciliation */}
       <div className="card" style={{ padding: 0, overflow: "hidden" }}>
         <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "12px 16px", borderBottom: "1px solid var(--border)" }}>
@@ -415,43 +614,8 @@ function ReconciliatedView({
         ))}
       </div>
 
-      {/* Merged data table */}
-      <div className="card" style={{ padding: 0, overflow: "hidden" }}>
-        <div style={{ padding: "12px 16px", borderBottom: "1px solid var(--border)", display: "flex", alignItems: "center", gap: 10 }}>
-          <span className="chip"><Icon name="table" size={15} /> L3 · Linked Data</span>
-          <span className="t-meta mono">{table.rows.length} rows x {table.columns.length} cols</span>
-        </div>
-        <div style={{ overflowX: "auto" }}>
-          <table style={{ borderCollapse: "collapse", width: "100%", minWidth: 480 }}>
-            <thead>
-              <tr>
-                {displayCols.map((c) => <th key={c} className="mono" style={thStyle}>{c}</th>)}
-                {!showAllCols && hiddenCols > 0 && <th className="mono" style={{ ...thStyle, color: "var(--border-strong)" }}>+{hiddenCols} ...</th>}
-              </tr>
-            </thead>
-            <tbody>
-              {displayRows.map((row, i) => (
-                <tr key={i} className="rawrow">
-                  {displayCols.map((c) => <td key={c} className="mono" style={tdStyle}>{formatCell(row[c])}</td>)}
-                  {!showAllCols && hiddenCols > 0 && <td style={{ ...tdStyle, color: "var(--border-strong)" }}>...</td>}
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-        <div style={{ padding: "10px 16px", borderTop: "1px solid var(--border)", display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
-          {table.rows.length > 50 && (
-            <button className="pill-btn ghost" style={{ height: 26, fontSize: 11 }} onClick={() => setShowAllRows((v) => !v)}>
-              {showAllRows ? "Show first 50" : `Show all ${table.rows.length} rows`}
-            </button>
-          )}
-          {hiddenCols > 0 && (
-            <button className="pill-btn ghost" style={{ height: 26, fontSize: 11, marginLeft: "auto" }} onClick={() => setShowAllCols((v) => !v)}>
-              {showAllCols ? "Show 8 columns" : `Show all ${table.columns.length} columns`}
-            </button>
-          )}
-        </div>
-      </div>
+      {/* Multi-level linked data table */}
+      <MultiLevelTable table={table} sourceNames={sourceNames} catalog={catalog} colSources={colSources} showAllRows={showAllRows} setShowAllRows={setShowAllRows} />
     </div>
   );
 }

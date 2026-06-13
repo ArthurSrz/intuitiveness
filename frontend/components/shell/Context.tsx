@@ -1,7 +1,9 @@
 "use client";
 
+import { useEffect, useRef, useState } from "react";
 import { Icon } from "@/components/ui/Icon";
 import { INTENTS } from "@/lib/design";
+import { apiPost } from "@/lib/api/client";
 
 /*
  * Right-hand context aside from the Blue Pulse design (shell.jsx): the intent
@@ -9,15 +11,44 @@ import { INTENTS } from "@/lib/design";
  * reduction stats. Stats are passed in from the live session summary.
  */
 
+interface SuggestedIntent {
+  question: string;
+  short: string;
+}
+
 export function IntentCard({
   value,
   onChange,
   active,
+  sessionId,
 }: {
   value: string;
   onChange: (id: string) => void;
   active: boolean;
+  sessionId?: string;
 }) {
+  const [aiIntents, setAiIntents] = useState<SuggestedIntent[] | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [customText, setCustomText] = useState("");
+  const isCustom = value === "custom";
+  const fetchedRef = useRef(false);
+
+  useEffect(() => {
+    if (!sessionId || fetchedRef.current) return;
+    fetchedRef.current = true;
+    setLoading(true);
+    apiPost<{ intents: SuggestedIntent[] }>(`/sessions/${sessionId}/intent-suggest`, {})
+      .then((res) => {
+        if (res.intents?.length) setAiIntents(res.intents);
+      })
+      .catch(() => {})
+      .finally(() => setLoading(false));
+  }, [sessionId]);
+
+  const intents: Array<{ id: string; question: string; short: string }> = aiIntents
+    ? aiIntents.map((it, i) => ({ id: `ai-${i}`, question: it.question, short: it.short }))
+    : [];
+
   return (
     <div className="card">
       <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 4 }}>
@@ -25,7 +56,12 @@ export function IntentCard({
         <span className="t-name" style={{ whiteSpace: "nowrap" }}>
           Your intent
         </span>
-        {active && (
+        {loading && (
+          <span className="t-meta" style={{ marginLeft: "auto", fontSize: 11 }}>
+            AI suggesting...
+          </span>
+        )}
+        {active && !loading && (
           <span
             className="chip"
             style={{
@@ -45,7 +81,12 @@ export function IntentCard({
         The question you&apos;re rebuilding the data to answer. Switch it any time during the ascent.
       </p>
       <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-        {INTENTS.map((it) => {
+        {loading && intents.length === 0 && (
+          <div style={{ padding: "14px 12px", borderRadius: 12, border: "1px solid var(--border)", background: "var(--bg)", textAlign: "center" }}>
+            <span className="t-meta">AI is crafting questions for your data...</span>
+          </div>
+        )}
+        {intents.map((it) => {
           const sel = value === it.id;
           return (
             <button
@@ -90,6 +131,51 @@ export function IntentCard({
             </button>
           );
         })}
+
+        {/* Custom intent */}
+        <button
+          onClick={() => onChange("custom")}
+          style={{
+            display: "flex",
+            gap: 11,
+            alignItems: "flex-start",
+            textAlign: "left",
+            padding: "11px 12px",
+            borderRadius: 12,
+            border: `1px solid ${isCustom ? "var(--blue)" : "var(--border)"}`,
+            background: isCustom ? "var(--blue-soft-2)" : "var(--bg)",
+            transition: "all .15s",
+          }}
+        >
+          <span
+            style={{
+              width: 18, height: 18, borderRadius: 99, flex: "none", marginTop: 1,
+              border: `2px solid ${isCustom ? "var(--blue)" : "var(--border-strong)"}`,
+              background: isCustom ? "var(--blue)" : "transparent",
+              display: "inline-flex", alignItems: "center", justifyContent: "center",
+            }}
+          >
+            {isCustom && <Icon name="check" size={11} style={{ color: "#fff" }} stroke={3} />}
+          </span>
+          <span className="t-body" style={{ fontWeight: 600, lineHeight: 1.35 }}>
+            Write your own question
+          </span>
+        </button>
+        {isCustom && (
+          <input
+            type="text"
+            value={customText}
+            onChange={(e) => setCustomText(e.target.value)}
+            placeholder="e.g. Which schools need intervention?"
+            autoFocus
+            style={{
+              width: "100%", height: 36, borderRadius: "var(--radius-md)",
+              border: "1px solid var(--blue)", background: "var(--bg)",
+              color: "var(--text)", fontFamily: "var(--font)", fontSize: 13,
+              padding: "0 12px",
+            }}
+          />
+        )}
       </div>
     </div>
   );

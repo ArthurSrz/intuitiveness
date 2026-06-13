@@ -185,6 +185,10 @@ class DimensionRegistry:
                     self._defaults[level_pair] = []
                 self._defaults[level_pair].append(dimension.name)
 
+    def has(self, name: str) -> bool:
+        """Return True if a dimension with this name is registered."""
+        return name in self._dimensions
+
     def get(self, name: str) -> DimensionDefinition:
         """
         Retrieve dimension by name.

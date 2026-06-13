@@ -12,6 +12,7 @@ import {
   useSession,
   useTimeTravel,
   useTree,
+  useInvalidateSession,
 } from "@/lib/api/hooks";
 import { apiGet } from "@/lib/api/client";
 import { API_BASE_URL, ApiError } from "@/lib/api/client";
@@ -66,6 +67,7 @@ export default function SessionPage({ params }: { params: Promise<{ id: string }
   const node = useNode(id, session.data?.current_node_id);
 
   // ---- mutations ----
+  const invalidate = useInvalidateSession(id);
   const descend = useDescend(id);
   const ascend = useAscend(id);
   const timeTravel = useTimeTravel(id);
@@ -96,9 +98,7 @@ export default function SessionPage({ params }: { params: Promise<{ id: string }
   const [toast, setToast] = useState<string | null>(null);
   const [dark, setDark] = useState(false);
   const [showContext, setShowContext] = useState(true);
-
-  // Per-edge transition parameters captured by EdgeControls (replaces the old
-  // hardcoded defaults). Prefilled so "Next" still works one-click.
+  // Per-edge transition parameters — set inline in each level view, used by Next.
   const [edgeParams, setEdgeParams] = useState<EdgeParams>(defaultEdgeParams);
   const patchEdge = (patch: Partial<EdgeParams>) =>
     setEdgeParams((p) => ({ ...p, ...patch }));
@@ -146,11 +146,13 @@ export default function SessionPage({ params }: { params: Promise<{ id: string }
   }, [datum, datumKey]);
   const shownDatum = datum ?? seenDatum;
 
-  // Derived guided step index (see file header).
+  // Derived guided step index. Each step represents "you are at this level,
+  // about to do the next transition". L4=0, L3=2 (Map Domains), L2=3, etc.
   const stepIndex = useMemo(() => {
     if (intentPivot && currentLevel === 0) return 5;
     if (phase === "ascent" && currentLevel >= 1) return 5 + currentLevel;
-    return 4 - currentLevel;
+    if (currentLevel === 4) return 0;
+    return 5 - currentLevel;
   }, [intentPivot, currentLevel, phase]);
   const step = STEPS[Math.max(0, Math.min(TOTAL_STEPS - 1, stepIndex))];
 
@@ -161,7 +163,7 @@ export default function SessionPage({ params }: { params: Promise<{ id: string }
   // Which transition the guided "Next" will run (so EdgeControls shows the
   // matching inputs) — null on the L0 pivot and final export steps.
   const guidedEdge: { dir: "descend" | "ascend"; level: number } | null =
-    stepIndex <= 3
+    stepIndex <= 4 && stepIndex > 0
       ? { dir: "descend", level: currentLevel }
       : stepIndex === 5
         ? { dir: "ascend", level: 0 }
@@ -226,18 +228,23 @@ export default function SessionPage({ params }: { params: Promise<{ id: string }
   // Reset the captured params after a move so the next edge starts clean.
   const afterMove = { onSuccess: () => setEdgeParams(defaultEdgeParams()) };
 
+  const multiSource = (session.data?.options?.sources?.length ?? 0) > 1;
+
   // ---- guided transitions ----
+  // Most transitions are handled by AI-powered buttons in each level view.
+  // guidedNext only handles: L4 single-source descent, L0 pivot, and export.
   function guidedNext() {
-    if (stepIndex < 4) {
+    if (currentLevel === 4 && !multiSource) {
       descend.mutate(buildDescendBody(currentLevel, edgeParams, session.data?.options), afterMove);
-    } else if (stepIndex === 4) {
-      setIntentPivot(true); // L0 reached → reveal the intent pivot (no backend move)
-    } else if (stepIndex >= 5 && stepIndex < TOTAL_STEPS - 1) {
-      setIntentPivot(false);
-      ascend.mutate(buildAscendBody(currentLevel, edgeParams), afterMove);
-    } else {
+    } else if (currentLevel === 0 && !intentPivot) {
+      setIntentPivot(true);
+    } else if (currentLevel === 0 && intentPivot) {
+      // Intent selected — trigger L0→L1 ascent with source_expansion
+      ascend.mutate({ enrichment_func: "source_expansion" }, afterMove);
+    } else if (stepIndex >= TOTAL_STEPS - 1) {
       void exportDataset();
     }
+    // All other transitions: use the AI button in the level view
   }
   function guidedPrev() {
     if (stepIndex === 5) {
@@ -254,6 +261,7 @@ export default function SessionPage({ params }: { params: Promise<{ id: string }
 
   // ---- explore transitions ----
   function exploreDescend() {
+    if (currentLevel === 4 && multiSource) return;
     setStepsTaken((s) => s + 1);
     descend.mutate(buildDescendBody(currentLevel, edgeParams, session.data?.options), afterMove);
   }
@@ -387,8 +395,8 @@ export default function SessionPage({ params }: { params: Promise<{ id: string }
                 <div key={`g-${stepIndex}`} className={phase === "ascent" ? "stage-anim-up" : "stage-anim-down"}>
                   {stepIndex === 5 ? (
                     <div style={{ display: "flex", flexDirection: "column", gap: "var(--gap)" }}>
-                      {node.data && <L0Datum node={node.data} />}
-                      <IntentCard value={intentId} onChange={setIntentId} active />
+                      {node.data && <L0Datum node={node.data} sessionId={id} />}
+                      <IntentCard value={intentId} onChange={setIntentId} active sessionId={id} />
                     </div>
                   ) : node.isLoading || !node.data ? (
                     <StagePlaceholder />
@@ -398,19 +406,10 @@ export default function SessionPage({ params }: { params: Promise<{ id: string }
                       level={currentLevel}
                       onAddSource={currentLevel === 4 ? () => setAddSourcePanel(true) : undefined}
                       sessionId={id}
+                      onConnect={invalidate}
                     />
                   )}
                 </div>
-                {guidedEdge && (
-                  <EdgeControls
-                    dir={guidedEdge.dir}
-                    level={guidedEdge.level}
-                    options={session.data?.options}
-                    ascendMove={ascendMove}
-                    params={edgeParams}
-                    onChange={patchEdge}
-                  />
-                )}
                 <WorkflowNav
                   stepIndex={stepIndex}
                   total={TOTAL_STEPS}
@@ -489,6 +488,7 @@ export default function SessionPage({ params }: { params: Promise<{ id: string }
                       level={currentLevel}
                       onAddSource={currentLevel === 4 ? () => setAddSourcePanel(true) : undefined}
                       sessionId={id}
+                      onConnect={invalidate}
                     />
                   )}
                 </div>
@@ -524,6 +524,7 @@ export default function SessionPage({ params }: { params: Promise<{ id: string }
               value={intentId}
               onChange={setIntentId}
               active={mode === "explore" ? phase === "ascent" : true}
+              sessionId={id}
             />
           )}
           <CoreCard reached={coreReached || seenDatum != null} datum={shownDatum ?? undefined} />

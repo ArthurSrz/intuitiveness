@@ -1,9 +1,20 @@
 "use client";
 
 import { useMemo } from "react";
-import type { NodeDetail } from "@/lib/api/types";
+import type { NodeDetail, SessionOptions, AscendMove } from "@/lib/api/types";
 import { decodeDataframe, type DecodedTable } from "@/lib/payload";
 import { Icon } from "@/components/ui/Icon";
+import { EdgeControls, type EdgeParams } from "@/components/shell/EdgeControls";
+import { SelectFeatureButton } from "./SelectFeatureButton";
+import { LinkDomainsButton } from "./LinkDomainsButton";
+
+interface InlineEdgeProps {
+  edgeParams: EdgeParams;
+  onEdgeChange: (patch: Partial<EdgeParams>) => void;
+  options?: SessionOptions;
+  ascendMove?: AscendMove;
+  phase?: "descent" | "ascent";
+}
 
 /*
  * Tabular level view (kind "dataframe" = zlib+base64, inflated client-side with
@@ -15,10 +26,16 @@ export function L2Table({
   node,
   code = "L2",
   glyph = "categories",
+  edgeProps,
+  sessionId,
+  onConfirm,
 }: {
   node: NodeDetail;
   code?: string;
   glyph?: string;
+  edgeProps?: InlineEdgeProps;
+  sessionId?: string;
+  onConfirm?: () => void;
 }) {
   const table: DecodedTable | null = useMemo(() => {
     if (typeof node.payload === "string") {
@@ -41,6 +58,7 @@ export function L2Table({
   const previewRows = table.rows.slice(0, 50);
 
   return (
+    <>
     <div className="card" style={{ padding: 0, overflow: "hidden" }}>
       <Header
         code={code}
@@ -94,6 +112,13 @@ export function L2Table({
         </div>
       )}
     </div>
+    {sessionId && (
+      <>
+        <SelectFeatureButton sessionId={sessionId} onConfirm={onConfirm} />
+        <LinkDomainsButton sessionId={sessionId} onConfirm={onConfirm} />
+      </>
+    )}
+    </>
   );
 }
 

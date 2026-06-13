@@ -7,7 +7,7 @@
 
 Replace the Streamlit app with a **FastAPI** REST backend (wrapping the headless `intuitiveness` core) and a **Next.js** frontend (onto which the user layers a design system), both deployed as Railway services next to the existing Memgraph + PostgreSQL. REST + OpenAPI between them; single-user, no auth, first cut. The migration is **strangler-fig**: API parity first, frontend parity next, Streamlit removed last.
 
-The architecture is unlocked by prior work: the core is headless (spec 016), and navigation state is a self-contained Postgres record (spec 015). So the **backend is stateless** — each request loads the session from Postgres, runs one engine transition, and saves it back. There is **no new business logic** in the API: it adapts HTTP ↔ the existing `Redesigner` engine, `NavigationSession`, `session_export`, `durable_backend`, `neo4j_client`, and `models`.
+The architecture is unlocked by prior work: the core is headless (spec 016), and navigation state is a self-contained Postgres record (spec 015). So the **backend is stateless** — each request loads the session from Postgres, runs one engine transition, and saves it back. There is **no new business logic** in the API: it adapts HTTP ↔ the existing `Redesigner` engine, `NavigationSession`, `session_export`, `durable_backend`, `neo4j_client`, and `models`. **Exception (Phase A)**: `intuitiveness/persistence/session_export.py` received one justified fix — persisting the parent vector so L0 exports round-trip correctly (schema bumped 1.0.0→1.1.0, backward-compatible). This is the only core change; all engine/navigation logic is untouched.
 
 ## Technical Context
 
@@ -58,7 +58,7 @@ backend/            # FastAPI — imports intuitiveness core, stateless
   app/{main,deps}.py, app/routers/*.py, app/models/*.py, tests/
 frontend/           # Next.js + TS, design-token layer, generated API client
   app/, components/, lib/api/ (generated), styles/tokens.css
-intuitiveness/      # existing package (engine/nav/persistence) — UNCHANGED in A–C
+intuitiveness/      # existing package (engine/nav/persistence) — unchanged except session_export.py (schema 1.0.0→1.1.0, Phase A justified fix)
 specs/017-backend-frontend-railway/  # this spec
 ```
 

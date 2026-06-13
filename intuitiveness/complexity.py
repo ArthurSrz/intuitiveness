@@ -199,6 +199,12 @@ class Level0Dataset(Dataset):
         s = self._base_summary()
         s["type"] = "datum"
         s["value"] = self._value
+        s["description"] = self.description
+        if self._aggregation_method:
+            s["aggregation_method"] = self._aggregation_method
+        if self._parent_data is not None and hasattr(self._parent_data, "name"):
+            s["parent_name"] = self._parent_data.name or "vector"
+            s["parent_length"] = len(self._parent_data)
         return s
 
     @property

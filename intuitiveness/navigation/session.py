@@ -157,9 +157,16 @@ class NavigationSession:
                 return L3toL2Params(prebuilt_table=query(data), domains=params.get("domains", []))
             return L3toL2Params(domains=params.get("domains", []))
         if edge == (2, 1):
-            return L2toL1Params(column=params.get("column"), filter_query=params.get("filter_query"))
+            return L2toL1Params(
+                column=params.get("column"),
+                filter_query=params.get("filter_query"),
+                prebuilt_series=params.get("prebuilt_series"),
+            )
         if edge == (1, 0):
-            return L1toL0Params(aggregation=params.get("aggregation", "sum"))
+            return L1toL0Params(
+                aggregation=params.get("aggregation", "sum"),
+                prebuilt_value=params.get("prebuilt_value"),
+            )
         raise NavigationError(f"Unsupported descent edge {current_level.name}→{target_level.name}.")
 
     def _ascent_params(self, current_level, target_level, params):
@@ -173,7 +180,10 @@ class NavigationSession:
         if edge == (0, 1):
             return L0toL1Params(enrichment_function=params.get("enrichment_func"))
         if edge == (1, 2):
-            return L1toL2Params(dimensions=params.get("dimensions", []))
+            return L1toL2Params(
+                dimensions=params.get("dimensions", []),
+                prebuilt_dataframe=params.get("prebuilt_dataframe"),
+            )
         if edge == (2, 3):
             return L2toL3Params(
                 dimensions=params.get("dimensions", []),

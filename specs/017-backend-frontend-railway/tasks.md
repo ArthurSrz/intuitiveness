@@ -49,11 +49,13 @@ package (core, reused), PostgreSQL + Memgraph + OpenRouter (live on Railway).
 **Goal**: The frontend drives a session and renders all five level artifacts + rail + branch tree via a typed client; styling flows entirely through design tokens.
 **Independent test**: complete a descent→ascent in the browser; flip a token → restyle with no component edits.
 
-- [ ] T016 [US3] OpenAPI→TypeScript client: `gen:api` script (openapi-typescript) + typed fetch wrapper in frontend/lib/api/
+- [ ] T027 [US3] **[depends-on: T014–T015; blocks T016]** Standardize `available_moves` shape across contract + code in specs/017-backend-frontend-railway/contracts/rest-api.md + backend/app/service.py — must be resolved before client generation
+- [ ] T016 [US3] **[depends-on: T027]** OpenAPI→TypeScript client: `gen:api` script (openapi-typescript) + typed fetch wrapper in frontend/lib/api/
 - [ ] T017 [P] [US3] Design-token layer (CSS variables + Tailwind theme: color/type/space/radii/motion) — the seam for the user's design system — in frontend/styles/tokens.css
 - [ ] T018 [P] [US3] Level views (L4 sources, L3 graph via react-flow, L2 table, L1 vector, L0 datum), tokens-only styling, in frontend/components/levels/
 - [ ] T019 [US3] Navigation rail + branch-tree components (from GET /tree) in frontend/components/nav/
 - [ ] T020 [US3] Session page wiring (create → descend/ascend → branch/prune → export) with React Query over the typed client in frontend/app/session/
+- [ ] T030 [US3] Constitution §V audit: review all visible labels, headings, button text, and error messages in frontend/components/ and frontend/app/ — replace any technical term (descend, ascend, node, branch, prune, L0–L4, vector, graph, datum) with domain-native equivalents; document the mapping in frontend/lib/domain-labels.ts
 - [ ] T021 [US3] Chrome MCP walkthrough: full descent→ascent in browser + token-flip restyle (per CLAUDE.md UI-test rule)
 
 ## Phase 6: User Story 4 — Deployed on Railway, secrets-only config (P1)
@@ -62,27 +64,26 @@ package (core, reused), PostgreSQL + Memgraph + OpenRouter (live on Railway).
 **Independent test**: in the browser against the deployed services, drive a session; backend uses internal DATABASE_URL; `/healthz` green.
 
 - [x] T022 [US4] /healthz endpoint mirroring the three verify scripts (postgres/memgraph/embeddings) in backend/app/routers/health.py
-- [x] T023 [US4] Railway backend service: root backend/, start `uvicorn app.main:app`, env DATABASE_URL (internal ref) + MEMGRAPH_* + EMBEDDING_* + ALLOWED_ORIGINS; verify /healthz on Railway
-- [x] T024 [US4] Railway frontend service: root frontend/, NEXT_PUBLIC_API_URL → backend public domain; browser walkthrough on Railway green
+- [x] T023 [US4] Railway backend service config: root backend/, start `uvicorn app.main:app`, env DATABASE_URL (internal ref) + MEMGRAPH_* + EMBEDDING_* + ALLOWED_ORIGINS; verify /healthz on Railway — **config wired, not parity; full E2E walkthrough deferred to T021**
+- [x] T024 [US4] Railway frontend service config: root frontend/, NEXT_PUBLIC_API_URL → backend public domain — **service scaffolded, browser walkthrough deferred until T021 (frontend parity) passes**
 
 ## Phase 7: Polish & Cross-Cutting (Phase D — retire Streamlit)
 
-- [ ] T025 Reconcile plan.md "intuitiveness/ unchanged" claim with the justified L0 core fix (analyze C1) in specs/017-backend-frontend-railway/plan.md
+- [x] T025 Reconcile plan.md "intuitiveness/ unchanged" claim with the justified L0 core fix (analyze C1) in specs/017-backend-frontend-railway/plan.md
 - [ ] T026 [P] Decide + implement (or explicitly defer) L3→L2 embeddings categorization in the API (analyze U3) in backend/app/service.py
-- [ ] T027 [P] Standardize `available_moves` shape across contract + code (analyze I2) in specs/017-backend-frontend-railway/contracts/rest-api.md + backend/app/service.py
-- [ ] T028 Retire Streamlit AFTER parity + E2E green: delete intuitiveness/streamlit_app.py, intuitiveness/ui/, intuitiveness/app/ pages, the `[app]` extra in pyproject.toml, and streamlit lines in requirements.txt
+- [ ] T028 **[depends-on: T021, T023, T024]** Retire Streamlit AFTER parity + E2E green: delete intuitiveness/streamlit_app.py, intuitiveness/ui/, intuitiveness/app/ pages, the `[app]` extra in pyproject.toml, and streamlit lines in requirements.txt
 - [ ] T029 [P] Update README/docs with new run commands; remove Streamlit-specific notes
 
 ---
 
 ## Dependencies (story completion order)
-- Setup (T001–T003) → Foundational (T004–T008) → **US1** (T009–T013) → **US2** (T014–T015, needs the app+routers from US1) → **US3** (T016–T021, needs the API) → **US4** (T022–T024, deploys API+frontend) → **Polish/D** (T025–T029; T028 only after US1–US4 + E2E green).
+- Setup (T001–T003) → Foundational (T004–T008) → **US1** (T009–T013) → **US2** (T014–T015) → **T027** (contract fix) → **T016** (client gen) → T017–T020 → T030 (§V audit) → T021 (walkthrough) → **US4** (T022–T024) → **Polish/D** (T025–T026, T028–T029; T028 only after US1–US4 + E2E green).
 
 ## Parallel opportunities
 - Setup: T003 (frontend scaffold) ∥ backend setup.
 - US1: T010 ∥ T011 ∥ T012 (separate router files) after T009.
 - US3: T017 ∥ T018 (tokens + level views, distinct files).
-- Polish: T026 ∥ T027 ∥ T029.
+- Polish: T026 ∥ T029.
 
 ## MVP scope
 **US1 (Phase 3)** is the MVP: the engine driveable over HTTP, headless-testable, no frontend required. Foundational layer (T004–T007) is already done, so MVP = T002, T008, T009–T013.

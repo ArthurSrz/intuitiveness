@@ -214,18 +214,22 @@ class Redesigner:
 
     @staticmethod
     def _l2_to_l1(dataset: Level2Dataset, params: L2toL1Params) -> Level1Dataset:
-        df = dataset.get_data()
-        if params.filter_query:
-            df = df.query(params.filter_query)
-        column = params.column
-        if column:
-            if column not in df.columns:
-                raise TransitionError(f"Column '{column}' not found in table.")
-            series = df[column]
-        elif df.shape[1] == 1:
-            series = df.iloc[:, 0]
+        if params.prebuilt_series is not None:
+            series = params.prebuilt_series
+            column = params.column or (series.name if hasattr(series, "name") and series.name else "variable")
         else:
-            raise TransitionError("L2→L1 requires params.column when the table has >1 column.")
+            df = dataset.get_data()
+            if params.filter_query:
+                df = df.query(params.filter_query)
+            column = params.column
+            if column:
+                if column not in df.columns:
+                    raise TransitionError(f"Column '{column}' not found in table.")
+                series = df[column]
+            elif df.shape[1] == 1:
+                series = df.iloc[:, 0]
+            else:
+                raise TransitionError("L2→L1 requires params.column when the table has >1 column.")
         lineage = Redesigner._stamp(
             dataset, "L2→L1", ComplexityLevel.LEVEL_2, ComplexityLevel.LEVEL_1,
             {"column": column, "filter_query": params.filter_query, **params.metadata},
@@ -237,10 +241,13 @@ class Redesigner:
     def _l1_to_l0(dataset: Level1Dataset, params: L1toL0Params) -> Level0Dataset:
         series = dataset.get_data()
         agg = params.aggregation
-        try:
-            value = getattr(series, agg)()
-        except AttributeError:
-            raise TransitionError(f"Unsupported aggregation '{agg}'.")
+        if params.prebuilt_value is not None:
+            value = params.prebuilt_value
+        else:
+            try:
+                value = getattr(series, agg)()
+            except AttributeError:
+                raise TransitionError(f"Unsupported aggregation '{agg}'.")
         lineage = Redesigner._stamp(
             dataset, "L1→L0", ComplexityLevel.LEVEL_1, ComplexityLevel.LEVEL_0,
             {"aggregation": agg, **params.metadata},
@@ -301,20 +308,30 @@ class Redesigner:
 
     @staticmethod
     def _l1_to_l2(dataset: Level1Dataset, params: L1toL2Params) -> Level2Dataset:
-        # Mirror legacy _increase_1_to_2: build {'value': series}, apply
-        # dimensions from the shared DimensionRegistry. Rows preserved.
-        from intuitiveness.ascent.dimensions import DimensionRegistry, DimensionDefinition
-
-        registry = DimensionRegistry.get_instance()
         series = dataset.get_data()
-        df = pd.DataFrame({"value": series})
-        dimensions = list(params.dimensions)
-        if not dimensions:
-            defaults = registry.get_defaults(ComplexityLevel.LEVEL_1, ComplexityLevel.LEVEL_2)
-            dimensions = [d.name for d in defaults] if defaults else []
-        for dim in dimensions:
-            dim_def = registry.get(dim) if isinstance(dim, str) else dim
-            df = dim_def.apply_to_dataframe(df, source_column="value")
+
+        if params.prebuilt_dataframe is not None:
+            df = params.prebuilt_dataframe
+            dimensions = list(params.dimensions) or ["AI-generated"]
+        else:
+            from intuitiveness.ascent.dimensions import DimensionRegistry, DimensionDefinition
+
+            registry = DimensionRegistry.get_instance()
+            df = pd.DataFrame({"value": series})
+            dimensions = list(params.dimensions)
+            if not dimensions:
+                defaults = registry.get_defaults(ComplexityLevel.LEVEL_1, ComplexityLevel.LEVEL_2)
+                dimensions = [d.name for d in defaults] if defaults else []
+            for dim in dimensions:
+                if isinstance(dim, str) and not registry.has(dim):
+                    continue
+                dim_def = registry.get(dim) if isinstance(dim, str) else dim
+                df = dim_def.apply_to_dataframe(df, source_column="value")
+
+            free_labels = [d for d in dimensions if isinstance(d, str) and not registry.has(d)]
+            if free_labels:
+                from backend.app.categorizers import _quantile_categorize
+                df["category"] = list(_quantile_categorize(df, "value", free_labels))
 
         before, after = _row_count(series), _row_count(df)
         Redesigner._require_row_count_preserved(before, after, "L1→L2")
@@ -349,8 +366,16 @@ class Redesigner:
             source_column = "value" if "value" in df.columns else (df.columns[0] if len(df.columns) else None)
 
         for dim in dimensions:
+            if isinstance(dim, str) and not registry.has(dim):
+                continue  # free-form labels handled below
             dim_def = registry.get(dim) if isinstance(dim, str) else dim
             df = dim_def.apply_to_dataframe(df, source_column=source_column)
+
+        free_labels = [d for d in dimensions if isinstance(d, str) and not registry.has(d)]
+        if free_labels:
+            from backend.app.categorizers import _quantile_categorize
+            col = source_column if source_column in df.columns else (df.columns[0] if len(df.columns) else "value")
+            df["category"] = list(_quantile_categorize(df, col, free_labels))
 
         if relationships:
             rel_defs = [r if isinstance(r, RelationshipDefinition) else RelationshipDefinition.from_dict(r)

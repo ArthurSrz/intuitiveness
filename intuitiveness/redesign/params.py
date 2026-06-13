@@ -56,6 +56,7 @@ class L2toL1Params(TransitionParams):
     """L2→L1: extract a single column (optionally filtered) as a vector."""
     column: Optional[str] = None
     filter_query: Optional[str] = None
+    prebuilt_series: Optional[Any] = None
     metadata: Dict[str, Any] = field(default_factory=dict)
 
 
@@ -63,6 +64,7 @@ class L2toL1Params(TransitionParams):
 class L1toL0Params(TransitionParams):
     """L1→L0: aggregate a vector to a single atomic datum."""
     aggregation: str = "sum"
+    prebuilt_value: Optional[Any] = None
     metadata: Dict[str, Any] = field(default_factory=dict)
 
 
@@ -81,6 +83,7 @@ class L0toL1Params(TransitionParams):
 class L1toL2Params(TransitionParams):
     """L1→L2: add classification dimensions to a vector, producing a table."""
     dimensions: List[str] = field(default_factory=list)
+    prebuilt_dataframe: Optional[Any] = None
     metadata: Dict[str, Any] = field(default_factory=dict)
 
 
