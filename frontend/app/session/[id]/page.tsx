@@ -525,6 +525,7 @@ export default function SessionPage({ params }: { params: Promise<{ id: string }
               onChange={setIntentId}
               active={mode === "explore" ? phase === "ascent" : true}
               sessionId={id}
+              locked={phase === "ascent" && !!intentId && intentId !== ""}
             />
           )}
           <CoreCard reached={coreReached || seenDatum != null} datum={shownDatum ?? undefined} />
