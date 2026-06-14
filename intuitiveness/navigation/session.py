@@ -132,6 +132,49 @@ class NavigationSession:
         """Current dataset wrapper."""
         return self._current_dataset
 
+    def get_ascent_context(self) -> Dict[str, Any]:
+        """Assemble historical context for ascent suggesters.
+
+        Returns sibling columns from the DESCENT L3 graph that are not
+        in the current dataset, so the linkage step can reconnect them.
+        Walks the tree's branch path to find the first L3 node (from the
+        descent) rather than using _accumulated_outputs which may be
+        overwritten during the ascent.
+        """
+        context: Dict[str, Any] = {}
+
+        # Find the descent L3 node — the first L3 in the branch path
+        l3_data = None
+        try:
+            for node in self._tree.get_current_branch_path():
+                if node.level.value == 3 and node.action == "descend":
+                    ds = node.dataset_snapshot
+                    if ds is not None:
+                        candidate = ds.get_data()
+                        if hasattr(candidate, 'columns') and len(candidate.columns) > 3:
+                            l3_data = candidate
+                            break
+        except Exception:
+            pass
+
+        # Fallback to accumulated_outputs
+        if l3_data is None:
+            l3_dataset = self._accumulated_outputs.get(3)
+            if l3_dataset is not None:
+                l3_data = l3_dataset.get_data()
+
+        if l3_data is not None and hasattr(l3_data, 'columns'):
+            current_data = self._current_dataset.get_data()
+            current_cols = set(current_data.columns) if hasattr(current_data, 'columns') else set()
+            sibling_cols = [c for c in l3_data.columns if c not in current_cols]
+            if sibling_cols:
+                context["sibling_df"] = l3_data[sibling_cols + [c for c in l3_data.columns if c in current_cols]].copy()
+                context["sibling_columns"] = sibling_cols
+            context["l3_columns"] = list(l3_data.columns)
+
+        context["accumulated_levels"] = list(self._accumulated_outputs.keys())
+        return context
+
     # -------------------------------------------------------------------------
     # descend() - Move down one level
     # -------------------------------------------------------------------------

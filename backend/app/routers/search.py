@@ -52,19 +52,16 @@ class SearchResponse(BaseModel):
     source: str = "rest"
 
 
-def _hosted_csv_resources(resources: list) -> list:
-    """CSV resources hosted on trusted French open-data domains.
+def _csv_resources(resources: list) -> list:
+    """CSV resources from the data.gouv.fr catalog.
 
-    Search and import MUST share this predicate: anything search counts as a
-    CSV here is something import-url will actually download.  data.gouv.fr is
-    a federation hub — most files live on ministry portals (*.gouv.fr), which
-    are reliable.  Untrusted third-party hosts are still excluded.
+    The data.gouv.fr API already vets uploads, so we trust any URL it returns.
+    We only filter on format (CSV).
     """
     return [
         r
         for r in resources
-        if ((r.get("format") or "").lower() == "csv" or str(r.get("url", "")).endswith(".csv"))
-        and ".gouv.fr" in str(r.get("url", ""))
+        if (r.get("format") or "").lower() == "csv" or str(r.get("url", "")).endswith(".csv")
     ]
 
 
@@ -129,7 +126,7 @@ def _search_via_rest(q: str, page: int, size: int) -> SearchResponse:
 
     datasets = []
     for ds in data.get("data", []):
-        csv_resources = _hosted_csv_resources(ds.get("resources", []))
+        csv_resources = _csv_resources(ds.get("resources", []))
         if not csv_resources:
             continue
         org = ds.get("organization") or {}
@@ -202,11 +199,11 @@ def _resolve_csv_candidates(url: str) -> list[tuple[str, str]]:
             data = api_resp.json()
         except requests.exceptions.RequestException as exc:
             raise HTTPException(status_code=502, detail=f"Could not resolve CSV for dataset '{dataset_id}': {exc}") from exc
-        hosted = _hosted_csv_resources(data.get("resources", []))
+        hosted = _csv_resources(data.get("resources", []))
         if not hosted:
             raise HTTPException(
                 status_code=404,
-                detail=f"No .gouv.fr-hosted CSV found for dataset '{dataset_id}'. Try another dataset.",
+                detail=f"No CSV resource found for dataset '{dataset_id}'. Try another dataset.",
             )
         return [(res["url"], (res.get("title") or dataset_id) + ".csv") for res in hosted]
     return [(url, url.split("/")[-1].split("?")[0] or "dataset.csv")]
@@ -393,6 +390,8 @@ def _wb_search_via_rest(q: str, size: int) -> WBSearchResponse:
             score=hit.get("@search.score", 0),
         )
         for hit in payload.get("value", [])
+        if hit.get("series_description", {}).get("idno")
+        and hit.get("series_description", {}).get("database_id")
     ]
     total = payload.get("@odata.count", len(indicators))
     return WBSearchResponse(indicators=indicators, total=total, source="rest")
@@ -508,3 +507,907 @@ def add_source_worldbank(
         return svc.add_source(session_id, {filename: df})
     except NavigationError as exc:
         raise HTTPException(status_code=409, detail=str(exc))
+
+
+# --------------------------------------------------------------------------- #
+# LLM Entity Matching
+# --------------------------------------------------------------------------- #
+
+class RelationshipDeclaration(BaseModel):
+    source_a: str
+    column_a: str
+    source_b: str
+    column_b: str
+
+
+class EntityMatchRequest(BaseModel):
+    relationships: List[RelationshipDeclaration]
+
+
+class EntityMatchResponse(BaseModel):
+    catalog: List[dict] = []
+    join_plan: dict = {}
+    explanation: str = ""
+    error: Optional[str] = None
+
+
+class EntityAnalyzeResponse(BaseModel):
+    catalog: List[dict] = []
+    join_plan: dict = {}
+    column_transforms: dict = {}
+    explanation: str = ""
+    error: Optional[str] = None
+
+
+@router.post("/sessions/{session_id}/entity-analyze", response_model=EntityAnalyzeResponse)
+def entity_analyze(
+    session_id: str,
+    body: EntityMatchRequest,
+    svc: SessionService = Depends(get_session_service),
+) -> EntityAnalyzeResponse:
+    """Three-tier entity discovery without descending. Returns catalog for user validation."""
+    from intuitiveness.services.entity_discovery import discover_entities
+
+    state = svc.get(session_id)
+    if state["current_level"] != 4:
+        raise HTTPException(status_code=409, detail="Entity matching is only available at L4.")
+
+    session = svc._load(session_id)
+    data = session.current_dataset.get_data()
+    if not isinstance(data, dict) or len(data) < 2:
+        raise HTTPException(status_code=422, detail="Need at least 2 sources for entity matching.")
+
+    result = discover_entities(data, use_llm=True)
+
+    return EntityAnalyzeResponse(
+        catalog=result.catalog,
+        join_plan={},
+        column_transforms={},
+        explanation=result.explanation,
+        error=None,
+    )
+
+
+class DomainAnalyzeResponse(BaseModel):
+    proposed_column: str = ""
+    proposed_domains: List[str] = []
+    explanation: str = ""
+    confidence: str = ""
+    code: str = ""
+    sample_distribution: dict = {}
+    columns: List[str] = []
+    error: Optional[str] = None
+
+
+class AnalyzeRequest(BaseModel):
+    intent: str = ""
+
+
+@router.post("/sessions/{session_id}/domain-analyze", response_model=DomainAnalyzeResponse)
+def domain_analyze(
+    session_id: str,
+    body: AnalyzeRequest = AnalyzeRequest(),
+    svc: SessionService = Depends(get_session_service),
+) -> DomainAnalyzeResponse:
+    """LLM analyzes data and writes categorization code."""
+    from intuitiveness.services.domain_suggester import suggest_domains
+
+    state = svc.get(session_id)
+    if state["current_level"] != 3:
+        raise HTTPException(status_code=409, detail="Domain analysis is only available at L3.")
+
+    session = svc._load(session_id)
+    data = session.current_dataset.get_data()
+    result = suggest_domains(data, intent=body.intent)
+    logger.warning("DOMAIN-ANALYZE result: domains=%s, dist=%s, code=%s", result.get("proposed_domains"), result.get("sample_distribution"), (result.get("code") or "")[:150])
+
+    return DomainAnalyzeResponse(**result)
+
+
+class DomainConfirmRequest(BaseModel):
+    code: str
+    domains: List[str] = []
+
+
+@router.post("/sessions/{session_id}/domain-confirm", response_model=SessionState)
+def domain_confirm(
+    session_id: str,
+    body: DomainConfirmRequest,
+    svc: SessionService = Depends(get_session_service),
+) -> SessionState:
+    """Execute Claude's categorization code and descend to L2."""
+    from intuitiveness.services.domain_suggester import execute_categorization
+
+    state = svc.get(session_id)
+    if state["current_level"] != 3:
+        raise HTTPException(status_code=409, detail="Can only confirm domain mapping at L3.")
+
+    session = svc._load(session_id)
+    data = session.current_dataset.get_data()
+    try:
+        categorized = execute_categorization(data, body.code)
+    except Exception as e:
+        raise HTTPException(status_code=422, detail=f"Code execution failed: {str(e)}")
+
+    session.descend(query_func=lambda _data: categorized)
+    svc._save(session)
+    return svc.state_of(session)
+
+
+class ColumnAnalyzeResponse(BaseModel):
+    proposed_column: str = ""
+    proposed_filter: str = ""
+    explanation: str = ""
+    confidence: str = ""
+    code: str = ""
+    columns: List[str] = []
+    preview_stats: dict = {}
+    error: Optional[str] = None
+
+
+@router.post("/sessions/{session_id}/column-analyze", response_model=ColumnAnalyzeResponse)
+def column_analyze(
+    session_id: str,
+    body: AnalyzeRequest = AnalyzeRequest(),
+    svc: SessionService = Depends(get_session_service),
+) -> ColumnAnalyzeResponse:
+    """AI analyzes L2 table and suggests which column to extract as L1 vector."""
+    from intuitiveness.services.column_suggester import suggest_column
+
+    state = svc.get(session_id)
+    if state["current_level"] != 2:
+        raise HTTPException(status_code=409, detail="Column analysis is only available at L2.")
+
+    session = svc._load(session_id)
+    data = session.current_dataset.get_data()
+    result = suggest_column(data, intent=body.intent)
+    logger.warning("COLUMN-ANALYZE result: col=%s, stats=%s, code=%s", result.get("proposed_column"), result.get("preview_stats"), (result.get("code") or "")[:150])
+
+    return ColumnAnalyzeResponse(**result)
+
+
+class ColumnConfirmRequest(BaseModel):
+    code: str
+    column: str = ""
+
+
+@router.post("/sessions/{session_id}/column-confirm", response_model=SessionState)
+def column_confirm(
+    session_id: str,
+    body: ColumnConfirmRequest,
+    svc: SessionService = Depends(get_session_service),
+) -> SessionState:
+    """Execute AI's extraction code and descend to L1."""
+    from intuitiveness.services.column_suggester import execute_column_extraction
+
+    state = svc.get(session_id)
+    if state["current_level"] != 2:
+        raise HTTPException(status_code=409, detail="Can only confirm column extraction at L2.")
+
+    session = svc._load(session_id)
+    data = session.current_dataset.get_data()
+    try:
+        series = execute_column_extraction(data, body.code)
+    except Exception as e:
+        raise HTTPException(status_code=422, detail=f"Code execution failed: {str(e)}")
+    col_name = body.column or (series.name if series.name else "value")
+    series.name = col_name
+
+    session.descend(column=col_name, prebuilt_series=series)
+    svc._save(session)
+    return svc.state_of(session)
+
+
+class AggregationAnalyzeResponse(BaseModel):
+    proposed_aggregation: str = ""
+    explanation: str = ""
+    confidence: str = ""
+    code: str = ""
+    preview_value: Optional[float] = None
+    vector_profile: dict = {}
+    error: Optional[str] = None
+
+
+@router.post("/sessions/{session_id}/aggregation-analyze", response_model=AggregationAnalyzeResponse)
+def aggregation_analyze(
+    session_id: str,
+    body: AnalyzeRequest = AnalyzeRequest(),
+    svc: SessionService = Depends(get_session_service),
+) -> AggregationAnalyzeResponse:
+    """AI analyzes L1 vector and suggests how to compress to L0 datum."""
+    from intuitiveness.services.aggregation_suggester import suggest_aggregation
+
+    state = svc.get(session_id)
+    if state["current_level"] != 1:
+        raise HTTPException(status_code=409, detail="Aggregation analysis is only available at L1.")
+
+    session = svc._load(session_id)
+    data = session.current_dataset.get_data()
+    result = suggest_aggregation(data, intent=body.intent)
+    logger.warning("AGGREGATION-ANALYZE result: agg=%s, preview=%s, code=%s", result.get("proposed_aggregation"), result.get("preview_value"), (result.get("code") or "")[:150])
+
+    return AggregationAnalyzeResponse(**result)
+
+
+class AggregationConfirmRequest(BaseModel):
+    code: str
+    aggregation: str = "mean"
+
+
+@router.post("/sessions/{session_id}/aggregation-confirm", response_model=SessionState)
+def aggregation_confirm(
+    session_id: str,
+    body: AggregationConfirmRequest,
+    svc: SessionService = Depends(get_session_service),
+) -> SessionState:
+    """Execute AI's aggregation code and descend to L0."""
+    from intuitiveness.services.aggregation_suggester import execute_aggregation
+
+    state = svc.get(session_id)
+    if state["current_level"] != 1:
+        raise HTTPException(status_code=409, detail="Can only confirm aggregation at L1.")
+
+    session = svc._load(session_id)
+    data = session.current_dataset.get_data()
+    datum = execute_aggregation(data, body.code)
+
+    session.descend(aggregation=body.aggregation, prebuilt_value=datum)
+    svc._save(session)
+    return svc.state_of(session)
+
+
+class IntentSuggestResponse(BaseModel):
+    intents: List[dict] = []
+    error: Optional[str] = None
+
+
+@router.post("/sessions/{session_id}/intent-suggest", response_model=IntentSuggestResponse)
+def intent_suggest(
+    session_id: str,
+    svc: SessionService = Depends(get_session_service),
+) -> IntentSuggestResponse:
+    """AI suggests analytical intents based on the descent path."""
+    from intuitiveness.services.intent_suggester import suggest_intents
+
+    state = svc.get(session_id)
+    session = svc._load(session_id)
+
+    summary = state.get("summary", {})
+
+    # Walk the tree to gather context from all levels
+    data_context = {}
+    try:
+        session = svc._load(session_id)
+        tree = session.navigation_tree.export_to_json()
+        for node in tree.get("nodes", []):
+            nid = node.get("id")
+            lvl = node.get("level")
+            if lvl == 4:
+                try:
+                    nd = svc.node(session_id, nid)
+                    shapes = nd.get("summary", {}).get("shapes", {})
+                    data_context["sources"] = list(shapes.keys()) if shapes else []
+                except Exception:
+                    pass
+            elif lvl == 3:
+                try:
+                    nd = svc.node(session_id, nid)
+                    cols = nd.get("summary", {}).get("columns", [])
+                    if cols:
+                        data_context["l3_columns"] = cols[:15]
+                except Exception:
+                    pass
+    except Exception:
+        pass
+
+    descent_summary = {
+        "current_level": state["current_level"],
+        "datum_value": summary.get("value"),
+        "datum_description": summary.get("description"),
+        "aggregation_method": summary.get("aggregation_method"),
+        "parent_column": summary.get("parent_name"),
+        "entity_count": summary.get("parent_length"),
+        "columns_seen": state.get("options", {}).get("columns", []),
+        "data_sources": data_context.get("sources", []),
+        "data_columns": data_context.get("l3_columns", []),
+    }
+
+    result = suggest_intents(descent_summary)
+    logger.warning("INTENT-SUGGEST result: %s", [i.get("short") for i in result.get("intents", [])])
+    return IntentSuggestResponse(**result)
+
+
+class DatumDescribeResponse(BaseModel):
+    title: str = ""
+    description: str = ""
+    error: Optional[str] = None
+
+
+@router.post("/sessions/{session_id}/datum-describe", response_model=DatumDescribeResponse)
+def datum_describe(
+    session_id: str,
+    svc: SessionService = Depends(get_session_service),
+) -> DatumDescribeResponse:
+    """AI describes the L0 datum in plain language."""
+    from intuitiveness.services.datum_describer import describe_datum
+
+    state = svc.get(session_id)
+    summary = state.get("summary", {})
+
+    context = {
+        "value": summary.get("value"),
+        "aggregation": summary.get("aggregation_method", summary.get("description", "")),
+        "column_name": summary.get("parent_name", ""),
+        "dataset_description": summary.get("description", ""),
+        "entity_count": summary.get("parent_length", ""),
+    }
+
+    # Try to get lineage info for richer context
+    try:
+        session = svc._load(session_id)
+        lineage = getattr(session.current_dataset, "lineage", None)
+        if lineage and hasattr(lineage, "sources"):
+            ops = [s.operation for s in lineage.sources if hasattr(s, "operation")]
+            context["descent_operations"] = ops
+    except Exception:
+        pass
+
+    logger.warning("DATUM-DESCRIBE context: value=%s, agg=%s, col=%s", context.get("value"), context.get("aggregation"), context.get("column_name"))
+    result = describe_datum(context)
+    logger.warning("DATUM-DESCRIBE result: title=%s, desc=%s", result.get("title"), (result.get("description") or "")[:100])
+    return DatumDescribeResponse(**result)
+
+
+class EnrichmentAnalyzeResponse(BaseModel):
+    code: str = ""
+    explanation: str = ""
+    confidence: str = ""
+    preview_description: str = ""
+    preview_stats: dict = {}
+    error: Optional[str] = None
+
+
+@router.post("/sessions/{session_id}/enrichment-analyze", response_model=EnrichmentAnalyzeResponse)
+def enrichment_analyze(
+    session_id: str,
+    body: AnalyzeRequest = AnalyzeRequest(),
+    svc: SessionService = Depends(get_session_service),
+) -> EnrichmentAnalyzeResponse:
+    """AI writes code to rebuild the L0 datum back to L1 vector."""
+    from intuitiveness.services.enrichment_suggester import suggest_enrichment, execute_enrichment_code
+
+    state = svc.get(session_id)
+    if state["current_level"] != 0:
+        raise HTTPException(status_code=409, detail="Enrichment analysis is only available at L0.")
+
+    summary = state.get("summary", {})
+    parent_info = {
+        "aggregation_method": summary.get("aggregation_method", ""),
+        "parent_name": summary.get("parent_name", ""),
+        "parent_length": summary.get("parent_length", 0),
+    }
+
+    result = suggest_enrichment(summary.get("value"), parent_info, intent=body.intent)
+    logger.warning("ENRICHMENT-ANALYZE result: code=%s, explanation=%s", (result.get("code") or "")[:100], (result.get("explanation") or "")[:100])
+
+    # Run code on preview to get stats
+    code = result.get("code", "")
+    preview_stats = {}
+    if code:
+        try:
+            session = svc._load(session_id)
+            dataset = session.current_dataset
+            scalar = dataset.get_data()
+            parent_series = dataset.get_parent_data()
+            if parent_series is not None:
+                preview_parent = parent_series.head(200)
+                preview_series = execute_enrichment_code(scalar, preview_parent, code)
+                preview_stats = {
+                    "count": int(len(preview_series)),
+                    "mean": round(float(preview_series.mean()), 4) if preview_series.dtype.kind in "iufb" else None,
+                    "min": round(float(preview_series.min()), 4) if preview_series.dtype.kind in "iufb" else None,
+                    "max": round(float(preview_series.max()), 4) if preview_series.dtype.kind in "iufb" else None,
+                }
+        except Exception as exc:
+            logger.warning("ENRICHMENT-ANALYZE preview failed: %s", exc, exc_info=True)
+
+    return EnrichmentAnalyzeResponse(
+        code=code,
+        explanation=result.get("explanation", ""),
+        confidence=result.get("confidence", ""),
+        preview_description=result.get("preview_description", ""),
+        preview_stats=preview_stats,
+        error=result.get("error"),
+    )
+
+
+class EnrichmentConfirmRequest(BaseModel):
+    code: str
+
+
+@router.post("/sessions/{session_id}/enrichment-confirm", response_model=SessionState)
+def enrichment_confirm(
+    session_id: str,
+    body: EnrichmentConfirmRequest,
+    svc: SessionService = Depends(get_session_service),
+) -> SessionState:
+    """Execute AI's enrichment code and ascend to L1."""
+    from intuitiveness.services.enrichment_suggester import execute_enrichment_code
+
+    state = svc.get(session_id)
+    if state["current_level"] != 0:
+        raise HTTPException(status_code=409, detail="Can only confirm enrichment at L0.")
+
+    session = svc._load(session_id)
+    dataset = session.current_dataset
+    scalar = dataset.get_data()
+    parent_series = dataset.get_parent_data()
+
+    if parent_series is None:
+        raise HTTPException(status_code=422, detail="No parent data available for enrichment.")
+
+    try:
+        result_series = execute_enrichment_code(scalar, parent_series, body.code)
+    except Exception as e:
+        raise HTTPException(status_code=422, detail=f"Code execution failed: {str(e)}")
+
+    logger.warning("ENRICHMENT-CONFIRM: %d values produced", len(result_series))
+    session.ascend(prebuilt_series=result_series)
+    svc._save(session)
+    return svc.state_of(session)
+
+
+class DimensionAnalyzeResponse(BaseModel):
+    explanation: str = ""
+    confidence: str = ""
+    code: str = ""
+    proposed_columns: List[str] = []
+    sample_distribution: dict = {}
+    error: Optional[str] = None
+
+
+@router.post("/sessions/{session_id}/dimension-analyze", response_model=DimensionAnalyzeResponse)
+def dimension_analyze(
+    session_id: str,
+    body: AnalyzeRequest = AnalyzeRequest(),
+    svc: SessionService = Depends(get_session_service),
+) -> DimensionAnalyzeResponse:
+    """AI writes code to add dimensions for L1→L2 ascent."""
+    from intuitiveness.services.dimension_suggester import suggest_dimensions
+
+    state = svc.get(session_id)
+    logger.warning("DIMENSION-ANALYZE: session=%s current_level=%s intent=%r", session_id, state["current_level"], body.intent)
+    if state["current_level"] != 1:
+        logger.warning("DIMENSION-ANALYZE: REJECTED — level is %s not 1", state["current_level"])
+        raise HTTPException(status_code=409, detail="Dimension analysis is only available at L1.")
+
+    session = svc._load(session_id)
+    raw_data = session.current_dataset.get_data()
+    logger.warning("DIMENSION-ANALYZE: raw_data type=%s", type(raw_data).__name__)
+
+    series = raw_data
+    logger.warning("DIMENSION-ANALYZE: series dtype=%s len=%s name=%r notna_count=%s",
+                   getattr(series, "dtype", "?"),
+                   len(series) if hasattr(series, "__len__") else "?",
+                   getattr(series, "name", "?"),
+                   series.notna().sum() if hasattr(series, "notna") else "?")
+
+    vector_info = {
+        "name": getattr(series, "name", "value"),
+        "length": len(series) if hasattr(series, "__len__") else 0,
+        "min": round(float(series.min()), 2) if hasattr(series, "min") and series.notna().any() else None,
+        "max": round(float(series.max()), 2) if hasattr(series, "max") and series.notna().any() else None,
+        "mean": round(float(series.mean()), 2) if hasattr(series, "mean") and series.notna().any() else None,
+        "sample_index": [str(i) for i in series.index[:10]],
+        "sample_values": [str(v) for v in series.dropna()[:10]],
+        "index_is_numeric": pd.api.types.is_integer_dtype(series.index) or pd.api.types.is_float_dtype(series.index),
+        "dtypes": {"value": str(series.dtype)},
+    }
+    logger.warning("DIMENSION-ANALYZE: vector_info=%s", vector_info)
+
+    result = suggest_dimensions(vector_info, intent=body.intent)
+    logger.warning("DIMENSION-ANALYZE: suggest_dimensions returned keys=%s error=%r", list(result.keys()), result.get("error"))
+
+    # Run code on real data for distribution preview
+    code = result.get("code", "")
+    logger.warning("DIMENSION-ANALYZE: code present=%s len=%d", bool(code), len(code))
+    if code:
+        try:
+            from intuitiveness.services.dimension_suggester import execute_dimension_code
+            logger.warning("DIMENSION-ANALYZE: running preview on %d rows", min(200, len(series)))
+            preview_df = execute_dimension_code(series.head(200), code)
+            logger.warning("DIMENSION-ANALYZE: preview_df cols=%s shape=%s", list(preview_df.columns), preview_df.shape)
+            for col in preview_df.columns:
+                if col != "value":
+                    dist = preview_df[col].value_counts().to_dict()
+                    result["sample_distribution"] = {str(k): int(v) for k, v in dist.items()}
+                    logger.warning("DIMENSION-ANALYZE: distribution for col=%r: %s", col, result["sample_distribution"])
+                    break
+        except Exception as exc:
+            logger.warning("DIMENSION-ANALYZE preview FAILED: %s", exc, exc_info=True)
+
+    logger.warning("DIMENSION-ANALYZE result: cols=%s, code=%s", result.get("proposed_columns"), (result.get("code") or "")[:150])
+    return DimensionAnalyzeResponse(**result)
+
+
+class DimensionConfirmRequest(BaseModel):
+    code: str
+
+
+@router.post("/sessions/{session_id}/dimension-confirm", response_model=SessionState)
+def dimension_confirm(
+    session_id: str,
+    body: DimensionConfirmRequest,
+    svc: SessionService = Depends(get_session_service),
+) -> SessionState:
+    """Execute AI's dimension code and ascend to L2."""
+    from intuitiveness.services.dimension_suggester import execute_dimension_code
+
+    state = svc.get(session_id)
+    if state["current_level"] != 1:
+        raise HTTPException(status_code=409, detail="Can only confirm dimensions at L1.")
+
+    session = svc._load(session_id)
+    series = session.current_dataset.get_data()
+    try:
+        built_df = execute_dimension_code(series, body.code)
+    except Exception as e:
+        raise HTTPException(status_code=422, detail=f"Code execution failed: {str(e)}")
+
+    logger.warning("DIMENSION-CONFIRM: %d cols, %d rows", len(built_df.columns), len(built_df))
+    session.ascend(prebuilt_dataframe=built_df)
+    svc._save(session)
+    return svc.state_of(session)
+
+
+class LinkageAnalyzeResponse(BaseModel):
+    code: str = ""
+    proposed_columns: List[str] = []
+    explanation: str = ""
+    confidence: str = ""
+    graph_description: str = ""
+    sample_distribution: dict = {}
+    error: Optional[str] = None
+
+
+@router.post("/sessions/{session_id}/linkage-analyze", response_model=LinkageAnalyzeResponse)
+def linkage_analyze(
+    session_id: str,
+    body: AnalyzeRequest = AnalyzeRequest(),
+    svc: SessionService = Depends(get_session_service),
+) -> LinkageAnalyzeResponse:
+    """AI writes code to add linkage columns for L2->L3 ascent."""
+    from intuitiveness.services.linkage_suggester import suggest_linkage, execute_linkage_code
+    from intuitiveness.ascent.dimensions import DimensionRegistry
+
+    state = svc.get(session_id)
+    if state["current_level"] != 2:
+        raise HTTPException(status_code=409, detail="Linkage analysis is only available at L2.")
+
+    session = svc._load(session_id)
+    df = session.current_dataset.get_data()
+    table_info = {
+        "columns": list(df.columns) if hasattr(df, "columns") else [],
+        "dtypes": {col: str(df[col].dtype) for col in df.columns} if hasattr(df, "columns") else {},
+        "row_count": len(df) if hasattr(df, "__len__") else 0,
+        "categories": list(df["category"].unique()) if "category" in getattr(df, "columns", []) else [],
+    }
+
+    registry = DimensionRegistry.get_instance()
+    available = [d.name for d in registry.get_all()] if hasattr(registry, "get_all") else []
+
+    ascend_moves = state.get("available_moves", {}).get("ascend", [])
+    if ascend_moves and isinstance(ascend_moves[0], dict):
+        dims_from_moves = [d["name"] for d in ascend_moves[0].get("dimensions", []) if isinstance(d, dict)]
+        if dims_from_moves:
+            available = dims_from_moves
+
+    ascent_context = session.get_ascent_context()
+    sibling_context = ascent_context if ascent_context.get("sibling_columns") else None
+
+    result = suggest_linkage(table_info, available, intent=body.intent, sibling_context=sibling_context)
+    logger.warning("LINKAGE-ANALYZE result: cols=%s, sibling=%s, code=%s",
+                    result.get("proposed_columns"), bool(sibling_context), (result.get("code") or "")[:150])
+
+    # Run code on preview to get distribution
+    code = result.get("code", "")
+    sample_distribution: dict = {}
+    sibling_df = ascent_context.get("sibling_df")
+    if code:
+        try:
+            preview_sibling = sibling_df.head(200) if sibling_df is not None else None
+            preview_df = execute_linkage_code(df.head(200), code, sibling_df=preview_sibling)
+            original_cols = set(df.columns)
+            for col in preview_df.columns:
+                if col not in original_cols:
+                    dist = preview_df[col].value_counts().to_dict()
+                    sample_distribution[col] = {str(k): int(v) for k, v in dist.items()}
+        except Exception as exc:
+            logger.warning("LINKAGE-ANALYZE preview failed: %s", exc, exc_info=True)
+
+    return LinkageAnalyzeResponse(
+        code=code,
+        proposed_columns=result.get("proposed_columns", []),
+        explanation=result.get("explanation", ""),
+        confidence=result.get("confidence", ""),
+        graph_description=result.get("graph_description", ""),
+        sample_distribution=sample_distribution,
+        error=result.get("error"),
+    )
+
+
+class LinkageConfirmRequest(BaseModel):
+    code: str
+
+
+@router.post("/sessions/{session_id}/linkage-confirm", response_model=SessionState)
+def linkage_confirm(
+    session_id: str,
+    body: LinkageConfirmRequest,
+    svc: SessionService = Depends(get_session_service),
+) -> SessionState:
+    """Execute AI's linkage code and ascend to L3."""
+    from intuitiveness.services.linkage_suggester import execute_linkage_code
+
+    state = svc.get(session_id)
+    if state["current_level"] != 2:
+        raise HTTPException(status_code=409, detail="Can only confirm linkage at L2.")
+
+    session = svc._load(session_id)
+    df = session.current_dataset.get_data()
+    ascent_context = session.get_ascent_context()
+    sibling_df = ascent_context.get("sibling_df")
+    try:
+        linked_df = execute_linkage_code(df, body.code, sibling_df=sibling_df)
+    except Exception as e:
+        raise HTTPException(status_code=422, detail=f"Code execution failed: {str(e)}")
+
+    logger.warning("LINKAGE-CONFIRM: %d cols, %d rows", len(linked_df.columns), len(linked_df))
+    session.ascend(prebuilt_dataframe=linked_df)
+    svc._save(session)
+    return svc.state_of(session)
+
+
+class EntityConfirmRequest(BaseModel):
+    catalog: List[dict]
+    join_plan: dict = {}
+    column_transforms: dict = {}
+
+
+@router.post("/sessions/{session_id}/entity-preview")
+def entity_preview(
+    session_id: str,
+    body: EntityConfirmRequest,
+    svc: SessionService = Depends(get_session_service),
+) -> dict:
+    """Dry-run the join and return row count + sample rows without persisting anything."""
+    from intuitiveness.services.entity_matcher import execute_join
+
+    session = svc._load(session_id)
+    data = session.current_dataset.get_data()
+    if not isinstance(data, dict):
+        raise HTTPException(status_code=409, detail="No multi-source payload at current level.")
+
+    import pandas as pd
+    payload: dict = {}
+    for name, val in data.items():
+        if isinstance(val, pd.DataFrame):
+            payload[name] = val
+        elif isinstance(val, str):
+            import zlib, base64
+            raw = zlib.decompress(base64.b64decode(val))
+            import json as _json
+            records = _json.loads(raw)
+            payload[name] = pd.DataFrame(records)
+
+    join_plan = body.join_plan or {}
+    if not join_plan.get("join_key"):
+        for entry in body.catalog:
+            if len(entry.get("mappings", [])) >= 2:
+                join_plan["join_key"] = entry.get("concept", "")
+                join_plan["join_type"] = "inner"
+                break
+
+    # Sample for speed — run join on first 200 rows of each source
+    sampled = {k: v.head(200) for k, v in payload.items()}
+    try:
+        merged, _ = execute_join(sampled, join_plan, body.catalog, body.column_transforms)
+    except Exception as exc:
+        return {"row_count": 0, "unmatched_count": 0, "sample_rows": [], "sample_columns": [], "warnings": [str(exc)]}
+
+    first_size = len(next(iter(sampled.values())))
+    unmatched = max(0, first_size - len(merged))
+    warnings = []
+    if len(merged) == 0:
+        warnings.append("0 rows matched — try excluding a join concept (e.g. Year/Session if the datasets cover different years)")
+
+    sample_cols = list(merged.columns)
+    sample_rows = []
+    for _, row in merged.head(3).iterrows():
+        r = {}
+        for c in sample_cols:
+            v = row[c]
+            r[c] = None if (isinstance(v, float) and v != v) else (v if isinstance(v, (str, int, float, bool, type(None))) else str(v))
+        sample_rows.append(r)
+
+    return {"row_count": len(merged), "unmatched_count": unmatched, "sample_rows": sample_rows, "sample_columns": sample_cols, "warnings": warnings}
+
+
+@router.post("/sessions/{session_id}/entity-confirm", response_model=SessionState)
+def entity_confirm(
+    session_id: str,
+    body: EntityConfirmRequest,
+    svc: SessionService = Depends(get_session_service),
+) -> SessionState:
+    """Confirm the entity matching and descend to L3 with the merged data table."""
+    import networkx as nx
+    from intuitiveness.services.entity_matcher import execute_join
+
+    state = svc.get(session_id)
+    if state["current_level"] != 4:
+        raise HTTPException(status_code=409, detail="Can only confirm entity matching at L4.")
+
+    catalog = body.catalog
+    transforms = body.column_transforms
+
+    def builder_func(payload):
+        if not isinstance(payload, dict):
+            import networkx as nx
+            return nx.DiGraph()
+
+        # Build a proper join plan from the catalog
+        join_plan = body.join_plan or {}
+        if not join_plan.get("join_key"):
+            for entry in catalog:
+                if len(entry.get("mappings", [])) >= 2:
+                    join_plan["join_key"] = entry.get("concept", "")
+                    join_plan["join_type"] = "inner"
+                    break
+
+        # Use execute_join to produce a MERGED DataFrame with renamed columns
+        merged, col_source_map = execute_join(payload, join_plan, catalog, transforms)
+        logger.warning("ENTITY-CONFIRM merged: %d rows × %d cols — %s", len(merged), len(merged.columns), list(merged.columns))
+
+        # Fix 1: Deduplicate before node creation
+        before_dedup = len(merged)
+        merged = merged.drop_duplicates()
+        if len(merged) < before_dedup:
+            logger.warning("ENTITY-CONFIRM: dedup removed %d rows (%d → %d)", before_dedup - len(merged), before_dedup, len(merged))
+
+        # Fix 4: Hard cap with warning
+        MAX_ROWS = 500_000
+        if len(merged) > MAX_ROWS:
+            logger.warning("Merged result %d rows exceeds cap %d, truncating", len(merged), MAX_ROWS)
+            merged = merged.head(MAX_ROWS)
+
+        # Build a graph from the merged data
+        import networkx as nx
+        import json as _json
+        g = nx.DiGraph()
+        g.graph["_catalog"] = _json.dumps(catalog, default=str)
+        g.graph["_sources"] = _json.dumps({
+            name: {"rows": len(df), "columns": list(df.columns)}
+            for name, df in payload.items()
+        }, default=str)
+        g.graph["_col_sources"] = _json.dumps(col_source_map, default=str)
+
+        # Fix 3: Vectorized node creation (replaces iterrows loop)
+        def _sanitize(v):
+            if isinstance(v, float) and v != v:
+                return None
+            return v
+
+        records = merged.to_dict('records')
+        g.add_nodes_from(
+            (f"merged:{i}", {c: _sanitize(v) for c, v in attrs.items()})
+            for i, attrs in enumerate(records)
+        )
+
+        return g
+
+    # --- DB storage side-channel: persist merged DF + graph in databases ---
+    from app.storage import get_database_storage
+    db = get_database_storage()
+
+    def builder_func_with_storage(payload):
+        """Wrap builder_func to also persist to PostgreSQL/Memgraph when enabled."""
+        graph = builder_func(payload)
+
+        if db is not None:
+            try:
+                # Store the merged DataFrame in PostgreSQL (for future SQL joins)
+                if isinstance(payload, dict):
+                    for name, df in payload.items():
+                        db.store_dataframe(session_id, "L4-root", level=4, df=df, table_name=name)
+
+                # Store the graph in Memgraph
+                db.store_graph(session_id, "L3-entity-confirm", graph)
+
+                logger.info("DB storage: persisted L4 sources + L3 graph for session %s", session_id)
+            except Exception as exc:
+                logger.warning("DB storage write failed (non-fatal): %s", exc)
+
+        return graph
+
+    # Capture parent node before descend
+    parent_node_id = None
+    try:
+        pre_session = svc._load(session_id)
+        parent_node_id = pre_session.navigation_tree.current_id
+    except Exception:
+        pass
+
+    result = svc.descend(session_id, params={"builder_func": builder_func_with_storage})
+
+    # Persist tree node to PostgreSQL (non-blocking)
+    if db is not None:
+        try:
+            post_session = svc._load(session_id)
+            result_node_id = post_session.navigation_tree.current_id
+            db.store_tree_node(
+                session_id, result_node_id, parent_node_id,
+                level=3, action="descend", params={},
+            )
+            logger.info("Tree node persisted: %s -> %s", parent_node_id, result_node_id)
+        except Exception as e:
+            logger.warning("Tree node persistence failed: %s", e)
+
+    return result
+
+
+@router.post("/sessions/{session_id}/entity-match", response_model=SessionState)
+def entity_match(
+    session_id: str,
+    body: EntityMatchRequest,
+    svc: SessionService = Depends(get_session_service),
+) -> SessionState:
+    """Use an LLM to match entities across sources, execute the join,
+    and descend to L3 with the result as a knowledge graph."""
+    import networkx as nx
+    from intuitiveness.services.entity_matcher import match_entities, execute_join
+
+    state = svc.get(session_id)
+    if state["current_level"] != 4:
+        raise HTTPException(status_code=409, detail="Entity matching is only available at L4.")
+
+    session = svc._load(session_id)
+    data = session.current_dataset.get_data()
+    if not isinstance(data, dict) or len(data) < 2:
+        raise HTTPException(status_code=422, detail="Need at least 2 sources for entity matching.")
+
+    relationships = [r.model_dump() for r in body.relationships] if body.relationships else []
+    result = match_entities(data, relationships)
+
+    if result.get("error"):
+        raise HTTPException(status_code=502, detail=result["error"])
+
+    catalog = result.get("catalog", [])
+    explanation = result.get("explanation", "")
+    transforms = result.get("column_transforms", {})
+
+    def builder_func(payload):
+        g = nx.DiGraph()
+        # Concept nodes
+        for entry in catalog:
+            concept = entry["concept"]
+            g.add_node(concept, node_type="concept", description=entry.get("description", ""))
+            for m in entry.get("mappings", []):
+                col_id = f"{m['source']}:{m['column']}"
+                g.add_node(col_id, node_type="column", source=m["source"],
+                           column=m["column"], notes=m.get("notes", ""))
+                transform = transforms.get(col_id, "none")
+                g.add_edge(concept, col_id, relationship="maps_to", transform=transform)
+        # Source nodes linking to their columns
+        if isinstance(payload, dict):
+            for source_name, df in payload.items():
+                g.add_node(source_name, node_type="source",
+                           rows=len(df), columns=len(df.columns))
+                for col in df.columns:
+                    col_id = f"{source_name}:{col}"
+                    if col_id not in g:
+                        g.add_node(col_id, node_type="column", source=source_name,
+                                   column=col, notes="")
+                    g.add_edge(source_name, col_id, relationship="has_column")
+        return g
+
+    return svc.descend(session_id, params={"builder_func": builder_func})

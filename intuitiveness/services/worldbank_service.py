@@ -72,6 +72,8 @@ class WorldBankService:
                     score=hit.get("@search.score", 0),
                 )
                 for hit in payload.get("value", [])
+                if hit.get("series_description", {}).get("idno")
+                and hit.get("series_description", {}).get("database_id")
             ]
         except Exception as exc:
             logger.warning("Data360 search failed: %s", exc)

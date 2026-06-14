@@ -268,7 +268,7 @@ class DataGouvMCPService:
 
     MCP_ENDPOINT = "https://mcp.data.gouv.fr/mcp"
 
-    def __init__(self, endpoint: str = MCP_ENDPOINT, timeout: int = 5):
+    def __init__(self, endpoint: str = MCP_ENDPOINT, timeout: int = 15):
         self._endpoint = endpoint
         self._timeout = timeout
         self._client: Optional[MCPClient] = None

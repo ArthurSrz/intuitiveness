@@ -427,34 +427,40 @@ def execute_join(
             attempt = merged.merge(other, left_on=left_on, right_on=right_on, how="inner")
             logger.warning("JOIN: inner join fallback produced %d rows", len(attempt))
 
-        # Join produced no rows — retry each key alone, pick best result
-        # (applies for BOTH single-key and multi-key scenarios)
+        # Join produced no rows — try key subsets from largest to smallest
         if attempt.empty:
-            logger.warning("JOIN: %d-key join produced 0 rows — trying each key individually",
+            from itertools import combinations
+            logger.warning("JOIN: %d-key join produced 0 rows — trying key subsets",
                             len(left_on))
-            best, best_score = None, float("inf")
-            for l_col, r_col in zip(left_on, right_on):
-                m_try = merged.copy()
-                o_try = other.copy()
-                m_try[l_col] = m_try[l_col].astype(str).str.strip()
-                o_try[r_col] = o_try[r_col].astype(str).str.strip()
-                candidate = m_try.merge(o_try, left_on=l_col, right_on=r_col, how="inner")
-                n = len(candidate)
-                logger.warning("JOIN: single-key %s=%s -> %d rows", l_col, r_col, n)
-                if n == 0:
-                    continue
-                # Prefer result closest to max_input size
-                score = abs(n - max_input)
-                # Penalize explosions but DO NOT skip — a large result beats 0 rows
-                if n > explosion_threshold:
-                    score = n  # deprioritize but keep as candidate
-                    logger.warning("JOIN: single-key %s=%s is large (%d > %d) — deprioritized",
-                                    l_col, r_col, n, explosion_threshold)
-                if score < best_score:
-                    best, best_score = candidate, score
+            best, best_score, best_key_count = None, float("inf"), 0
+            key_pairs = list(zip(left_on, right_on))
+            for subset_size in range(len(key_pairs) - 1, 0, -1):
+                for combo in combinations(range(len(key_pairs)), subset_size):
+                    sub_left = [key_pairs[i][0] for i in combo]
+                    sub_right = [key_pairs[i][1] for i in combo]
+                    m_try = merged.copy()
+                    o_try = other.copy()
+                    for lc, rc in zip(sub_left, sub_right):
+                        m_try[lc] = m_try[lc].astype(str).str.strip()
+                        o_try[rc] = o_try[rc].astype(str).str.strip()
+                    candidate = m_try.merge(o_try, left_on=sub_left, right_on=sub_right, how="inner")
+                    n = len(candidate)
+                    logger.warning("JOIN: %d-key %s=%s -> %d rows",
+                                    subset_size, sub_left, sub_right, n)
+                    if n == 0:
+                        continue
+                    score = abs(n - max_input)
+                    if n > explosion_threshold:
+                        score = n
+                        logger.warning("JOIN: %d-key %s=%s is large (%d > %d) — deprioritized",
+                                        subset_size, sub_left, sub_right, n, explosion_threshold)
+                    # Prefer more keys at equal or better score
+                    if score < best_score or (score == best_score and subset_size > best_key_count):
+                        best, best_score, best_key_count = candidate, score, subset_size
             if best is not None:
                 attempt = best
-                logger.warning("JOIN: best single-key produced %d rows", len(attempt))
+                logger.warning("JOIN: best subset (%d keys) produced %d rows",
+                                best_key_count, len(attempt))
 
         # Final explosion guard — cap via inner join on original key columns only
         if len(attempt) > explosion_threshold:

@@ -109,6 +109,7 @@ def export_session(tree, metadata: Optional[Dict[str, Any]] = None) -> Dict[str,
             "level": node.level.value,
             "parent_id": node.parent_id,
             "children_ids": list(node.children_ids),
+            "action": node.action,
             "edge_decision": dict(getattr(node, "edge_decision", {}) or {}),
             "lineage": [ref.to_dict() for ref in ds.lineage.operations],
             "payload_kind": kind,
@@ -164,6 +165,7 @@ def import_session(record: Dict[str, Any]):
             dataset_snapshot=ds,
             parent_id=n["parent_id"],
             children_ids=list(n["children_ids"]),
+            action=n.get("action", "entry"),
             edge_decision=dict(n.get("edge_decision", {})),
         )
 

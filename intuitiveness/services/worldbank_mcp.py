@@ -2,11 +2,8 @@
 World Bank Data360 MCP Service
 ================================
 
-Wraps the generic MCPClient to search and fetch indicator data from a
-Data360 MCP server (https://github.com/worldbank/data360-mcp).
-
-The MCP server must be deployed separately (e.g. on Railway).
-Endpoint URL is read from DATA360_MCP_URL env var.
+Wraps the generic MCPClient to search and fetch indicator data from the
+Data360 MCP server deployed on Railway.
 
 Falls back to the direct REST API (WorldBankService) when the MCP
 server is unavailable.
@@ -15,8 +12,6 @@ server is unavailable.
 from __future__ import annotations
 
 import logging
-import os
-import re
 from dataclasses import dataclass, field
 from typing import List, Optional
 
@@ -25,7 +20,7 @@ from intuitiveness.services.worldbank_service import IndicatorInfo
 
 logger = logging.getLogger(__name__)
 
-_DEFAULT_ENDPOINT = "http://localhost:8021/mcp"
+MCP_ENDPOINT = "https://data360-mcp-production.up.railway.app/mcp"
 
 
 def _extract_text(response: MCPResponse) -> str:
@@ -40,10 +35,8 @@ def _extract_text(response: MCPResponse) -> str:
 class WorldBankMCPService:
     """MCP-based adapter for the World Bank Data360 search API."""
 
-    def __init__(self, endpoint: str | None = None, timeout: int = 15):
-        self._endpoint = endpoint or os.environ.get(
-            "DATA360_MCP_URL", _DEFAULT_ENDPOINT
-        )
+    def __init__(self, endpoint: str = MCP_ENDPOINT, timeout: int = 15):
+        self._endpoint = endpoint
         self._timeout = timeout
         self._client: Optional[MCPClient] = None
         self._available: Optional[bool] = None
@@ -70,9 +63,9 @@ class WorldBankMCPService:
     ) -> List[IndicatorInfo]:
         """Search indicators via the data360_search MCP tool."""
         client = self._get_client()
-        response = client.call_tool("data360_search", {
+        response = client.call_tool("data360_search_indicators", {
             "query": query,
-            "n_results": max_results,
+            "limit": max_results,
         })
 
         if not response.success:
@@ -86,41 +79,26 @@ class WorldBankMCPService:
         return self._parse_search_results(text)
 
     def _parse_search_results(self, text: str) -> List[IndicatorInfo]:
-        """Parse MCP search results text into IndicatorInfo objects.
+        """Parse MCP search results into IndicatorInfo objects.
 
-        The Data360 MCP returns structured text with indicator metadata.
-        We try JSON first, then fall back to regex patterns.
+        The Data360 MCP returns JSON with an `indicators` array.
         """
         import json
         try:
             data = json.loads(text)
-            if isinstance(data, dict) and "value" in data:
-                return [
-                    IndicatorInfo(
-                        id=hit["series_description"]["idno"],
-                        name=hit["series_description"]["name"],
-                        database_id=hit["series_description"]["database_id"],
-                        score=hit.get("@search.score", 0),
-                    )
-                    for hit in data["value"]
-                ]
+            indicators = data.get("indicators", [])
+            return [
+                IndicatorInfo(
+                    id=ind["idno"],
+                    name=ind["name"],
+                    database_id=ind["database_id"],
+                )
+                for ind in indicators
+                if ind.get("idno") and ind.get("database_id")
+            ]
         except (json.JSONDecodeError, KeyError, TypeError):
             pass
-
-        results = []
-        pattern = re.compile(
-            r"(?:idno|ID)[:\s]+(\S+).*?"
-            r"(?:name|Name)[:\s]+(.+?)(?:\n|$).*?"
-            r"(?:database_id|Database)[:\s]+(\S+)",
-            re.DOTALL | re.IGNORECASE,
-        )
-        for m in pattern.finditer(text):
-            results.append(IndicatorInfo(
-                id=m.group(1).strip(),
-                name=m.group(2).strip(),
-                database_id=m.group(3).strip(),
-            ))
-        return results
+        return []
 
     def close(self):
         if self._client:
