@@ -118,25 +118,8 @@ def _sql_join(
                 pass
         return None
 
-_CHAT_MODEL = "anthropic/claude-sonnet-4"
-
-
-def _get_chat_client():
-    api_key = (
-        os.getenv("OPENROUTER_API_KEY")
-        or os.getenv("EMBEDDING_API_KEY")
-        or os.getenv("OPENAI_API_KEY")
-    )
-    if not api_key:
-        return None
-    try:
-        from openai import OpenAI
-    except ImportError:
-        return None
-    return OpenAI(
-        api_key=api_key,
-        base_url=os.getenv("OPENROUTER_BASE_URL", "https://openrouter.ai/api/v1"),
-    )
+from intuitiveness.services.llm_client import call_llm_structured
+from intuitiveness.services.transition_models import EntityMatchSuggestion
 
 
 def _sample_values(df: pd.DataFrame, col: str, n: int = 5) -> list:
@@ -164,10 +147,6 @@ def match_entities(
     sources: Dict[str, pd.DataFrame],
     relationships: List[Dict[str, str]],
 ) -> Dict[str, Any]:
-    client = _get_chat_client()
-    if client is None:
-        return {"error": "No API key configured. Set OPENROUTER_API_KEY.", "catalog": [], "join_plan": {}}
-
     profiles = {name: _build_source_profile(name, df) for name, df in sources.items()}
 
     prompt = f"""You are a data integration expert. You have {len(sources)} datasets that a user wants to connect.
@@ -230,18 +209,18 @@ Available transform operations (use these exact names):
 - "none": no transform needed"""
 
     try:
-        response = client.chat.completions.create(
-            model=os.getenv("ENTITY_MATCH_MODEL", _CHAT_MODEL),
-            messages=[{"role": "user", "content": prompt}],
-            temperature=0.1,
-            response_format={"type": "json_object"},
+        suggestion = call_llm_structured(
+            "", prompt, EntityMatchSuggestion,
+            model_env_var="ENTITY_MATCH_MODEL",
         )
-        content = response.choices[0].message.content or ""
-        if "```json" in content:
-            content = content.split("```json", 1)[1].split("```", 1)[0]
-        elif "```" in content:
-            content = content.split("```", 1)[1].split("```", 1)[0]
-        return json.loads(content.strip())
+        return {
+            "catalog": [entry.model_dump() for entry in suggestion.catalog],
+            "join_plan": suggestion.join_plan,
+            "column_transforms": suggestion.column_transforms,
+            "explanation": suggestion.explanation,
+        }
+    except RuntimeError as exc:
+        return {"error": str(exc), "catalog": [], "join_plan": {}}
     except Exception as exc:
         logger.warning("Entity matching LLM call failed: %s", exc)
         return {"error": str(exc), "catalog": [], "join_plan": {}}

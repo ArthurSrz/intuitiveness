@@ -10,45 +10,14 @@ from __future__ import annotations
 
 import json
 import logging
-import os
 from typing import Any, Dict, List
 
 import pandas as pd
 
+from intuitiveness.services.llm_client import call_llm_structured
+from intuitiveness.services.transition_models import LinkageSuggestion
+
 logger = logging.getLogger(__name__)
-
-_CHAT_MODEL = "anthropic/claude-sonnet-4"
-
-
-def _get_chat_client():
-    or_key = os.getenv("OPENROUTER_API_KEY")
-    if or_key:
-        try:
-            from openai import OpenAI
-            return ("openai", OpenAI(
-                api_key=or_key,
-                base_url=os.getenv("OPENROUTER_BASE_URL", "https://openrouter.ai/api/v1"),
-            ))
-        except ImportError:
-            pass
-    anthropic_key = os.getenv("ANTHROPIC_API_KEY")
-    if anthropic_key:
-        try:
-            import anthropic
-            return ("anthropic", anthropic.Anthropic(api_key=anthropic_key))
-        except ImportError:
-            pass
-    api_key = os.getenv("EMBEDDING_API_KEY") or os.getenv("OPENAI_API_KEY")
-    if not api_key:
-        return None
-    try:
-        from openai import OpenAI
-    except ImportError:
-        return None
-    return ("openai", OpenAI(
-        api_key=api_key,
-        base_url=os.getenv("OPENROUTER_BASE_URL", "https://openrouter.ai/api/v1"),
-    ))
 
 
 _SYSTEM_PROMPT = """You are a Python data analyst. You write pandas code to add linkage columns that connect a domain table to other domains.
@@ -69,34 +38,6 @@ CRITICAL NAMING RULES — the user is non-technical:
 11. ONLY derive columns from data that actually exists in df. Never invent data that is not present. If the user asks to link to external data (e.g., World Bank indicators), explain in the explanation field that external data must be imported first — do NOT fabricate columns to simulate it."""
 
 
-def _call_llm(client_tuple, prompt: str) -> str:
-    kind, client = client_tuple
-    if kind == "anthropic":
-        response = client.messages.create(
-            model="claude-sonnet-4-20250514",
-            max_tokens=1024,
-            system=_SYSTEM_PROMPT,
-            messages=[{"role": "user", "content": prompt}],
-        )
-        content = response.content[0].text
-    else:
-        response = client.chat.completions.create(
-            model=os.getenv("LINKAGE_SUGGEST_MODEL", _CHAT_MODEL),
-            messages=[
-                {"role": "system", "content": _SYSTEM_PROMPT},
-                {"role": "user", "content": prompt},
-            ],
-            temperature=0.3,
-            response_format={"type": "json_object"},
-        )
-        content = response.choices[0].message.content or ""
-    if "```json" in content:
-        content = content.split("```json", 1)[1].split("```", 1)[0]
-    elif "```" in content:
-        content = content.split("```", 1)[1].split("```", 1)[0]
-    return content
-
-
 def _sample_values(df: pd.DataFrame, col: str, n: int = 5) -> list:
     vals = df[col].dropna().unique()[:n]
     return [str(v) for v in vals]
@@ -108,18 +49,6 @@ def suggest_linkage(
     intent: str = "",
 ) -> Dict[str, Any]:
     """Ask the LLM for executable Python code to link the L2 table for L2->L3 ascent."""
-    client = _get_chat_client()
-
-    if client is None:
-        return {
-            "code": "linked_df = df.copy()\nlinked_df['linkage_group'] = np.where(linked_df['value'] > linked_df['value'].median(), 'above average', 'below average')",
-            "proposed_columns": ["value_level"],
-            "explanation": "Split values into above/below average groups based on the median.",
-            "graph_description": "Your table with an additional column showing whether each value is above or below the average.",
-            "confidence": "heuristic",
-            "error": None,
-        }
-
     columns_info = json.dumps(table_info.get("columns", []))
     categories_info = json.dumps(table_info.get("categories", []))
     dtypes_info = json.dumps(table_info.get("dtypes", {}))
@@ -173,8 +102,16 @@ Respond in JSON:
 }}"""
 
     try:
-        content = _call_llm(client, prompt)
-        result = json.loads(content.strip())
+        suggestion = call_llm_structured(_SYSTEM_PROMPT, prompt, LinkageSuggestion, model_env_var="LINKAGE_SUGGEST_MODEL")
+    except RuntimeError:
+        return {
+            "code": "linked_df = df.copy()\nlinked_df['linkage_group'] = np.where(linked_df['value'] > linked_df['value'].median(), 'above average', 'below average')",
+            "proposed_columns": ["value_level"],
+            "explanation": "Split values into above/below average groups based on the median.",
+            "graph_description": "Your table with an additional column showing whether each value is above or below the average.",
+            "confidence": "heuristic",
+            "error": None,
+        }
     except Exception as exc:
         logger.warning("Linkage suggestion failed: %s", exc)
         return {
@@ -187,10 +124,10 @@ Respond in JSON:
         }
 
     return {
-        "code": result.get("code", ""),
-        "proposed_columns": result.get("proposed_columns", []),
-        "explanation": result.get("explanation", ""),
-        "graph_description": result.get("graph_description", ""),
+        "code": suggestion.code,
+        "proposed_columns": suggestion.proposed_columns,
+        "explanation": suggestion.explanation,
+        "graph_description": suggestion.graph_description,
         "confidence": "high",
         "error": None,
     }

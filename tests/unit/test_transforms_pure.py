@@ -25,7 +25,6 @@ import pytest
 LIVE_TRANSFORM_MODULES = [
     "intuitiveness.ascent.enrichment",
     "intuitiveness.ascent.dimensions",
-    "intuitiveness.descent.semantic_join",
 ]
 
 # Deleted legacy modules that used to construct datasets — must not return.
@@ -33,6 +32,7 @@ DELETED_LEGACY_MODULES = [
     "intuitiveness/ascent/unfold.py",
     "intuitiveness/ascent/graph_builder.py",
     "intuitiveness/ascent/enrich.py",
+    "intuitiveness/descent/semantic_join.py",
 ]
 
 LEVEL_DATASET_NAMES = {

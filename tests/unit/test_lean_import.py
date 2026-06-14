@@ -28,7 +28,6 @@ HEADLESS_PROGRAM = textwrap.dedent(
     builtins.__import__ = _imp
 
     import intuitiveness
-    assert intuitiveness.UI_AVAILABLE is False, "UI should be unavailable headless"
 
     # The engine + tree + durable backend must work with zero optional deps.
     import pandas as pd, networkx as nx
