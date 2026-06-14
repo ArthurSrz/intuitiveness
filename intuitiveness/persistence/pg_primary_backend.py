@@ -58,7 +58,7 @@ CREATE TABLE IF NOT EXISTS node_payloads (
     session_id       TEXT NOT NULL,
     node_id          TEXT NOT NULL,
     payload_kind     TEXT NOT NULL,
-    payload          JSONB NOT NULL,
+    payload          TEXT NOT NULL,
     PRIMARY KEY (session_id, node_id),
     FOREIGN KEY (session_id, node_id) REFERENCES tree_nodes(session_id, node_id) ON DELETE CASCADE
 );
@@ -123,6 +123,14 @@ class PgPrimaryBackend:
             with conn.cursor() as cur:
                 cur.execute(_CREATE_SESSIONS)
                 cur.execute(_CREATE_TREE_NODES)
+                # Drop and recreate node_payloads if payload column is JSONB (migration)
+                cur.execute("""
+                    SELECT data_type FROM information_schema.columns
+                    WHERE table_name = 'node_payloads' AND column_name = 'payload'
+                """)
+                row = cur.fetchone()
+                if row and row[0] == 'jsonb':
+                    cur.execute("DROP TABLE IF EXISTS node_payloads")
                 cur.execute(_CREATE_PAYLOADS)
             conn.commit()
 
@@ -179,7 +187,10 @@ class PgPrimaryBackend:
                         node.get("l0_aggregation"),
                     ))
 
-                    # 4. Insert payload separately
+                    # 4. Insert payload separately (as JSON text — payloads can be
+                    #    dicts, strings, or base64 blobs depending on payload_kind)
+                    raw_payload = node.get("payload", {})
+                    payload_text = json.dumps(raw_payload, default=str) if not isinstance(raw_payload, str) else raw_payload
                     cur.execute("""
                         INSERT INTO node_payloads (session_id, node_id, payload_kind, payload)
                         VALUES (%s, %s, %s, %s)
@@ -187,7 +198,7 @@ class PgPrimaryBackend:
                         session_id,
                         node_id,
                         node.get("payload_kind", "unknown"),
-                        self._Json(node.get("payload", {})),
+                        payload_text,
                     ))
 
             conn.commit()
@@ -257,10 +268,14 @@ class PgPrimaryBackend:
                 """, (session_id,))
                 payload_rows = cur.fetchall()
 
-        # 4. Index payloads by node_id
+        # 4. Index payloads by node_id — deserialize TEXT back to original form
         payloads = {}
-        for node_id, kind, payload in payload_rows:
-            payloads[node_id] = (kind, payload if isinstance(payload, dict) else json.loads(payload))
+        for node_id, kind, payload_text in payload_rows:
+            try:
+                payload = json.loads(payload_text) if payload_text else {}
+            except (json.JSONDecodeError, TypeError):
+                payload = payload_text  # base64 strings stay as-is
+            payloads[node_id] = (kind, payload)
 
         # 5. Assemble nodes dict
         nodes = {}
