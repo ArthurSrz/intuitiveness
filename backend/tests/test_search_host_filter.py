@@ -1,9 +1,8 @@
-"""Regression: /search must not list datasets the import endpoint will reject.
+"""Search and import: CSV-format filtering.
 
-Import only accepts CSV resources hosted on data.gouv.fr (external hosts are
-unreliable — see _resolve_csv_candidates). Search must therefore apply the
-SAME host filter, or users see datasets that always fail with
-"No data.gouv.fr-hosted CSV found".
+Search only shows datasets that have at least one CSV resource.
+Import accepts any CSV URL returned by the data.gouv.fr API (the platform
+already vets uploads, so no host allowlist is needed).
 """
 
 from __future__ import annotations
@@ -25,8 +24,8 @@ def _fake_datagouv_payload():
             },
             {
                 "id": "ds-external",
-                "title": "CSV only on an external host",
-                "description": "phantom",
+                "title": "CSV on an external host",
+                "description": "external but valid",
                 "organization": {"name": "Org B"},
                 "resources": [
                     {"format": "csv", "url": "https://data-atmoaura.opendata.arcgis.com/x.csv", "title": "x"},
@@ -60,29 +59,22 @@ class _FakeResp:
         return self._payload
 
 
-def test_search_excludes_datasets_without_hosted_csv(client):
-    with patch("app.routers.search.requests.get", return_value=_FakeResp(_fake_datagouv_payload())):
+def test_search_shows_all_csv_datasets(client):
+    """Both .gouv.fr-hosted and external CSVs should appear in results."""
+    with patch("app.routers.search._search_via_mcp", return_value=None), \
+         patch("app.routers.search.requests.get", return_value=_FakeResp(_fake_datagouv_payload())):
         resp = client.get("/search", params={"q": "sante"})
     assert resp.status_code == 200
     ids = [d["id"] for d in resp.json()["datasets"]]
     assert "ds-hosted" in ids
+    assert "ds-external" in ids
     assert "ds-no-csv" not in ids
-    # The phantom: import would 404 on it, so search must not show it.
-    assert "ds-external" not in ids
 
 
-def test_import_rejects_external_only_dataset(client):
-    """The import-side behavior the search filter must mirror."""
-    dataset_payload = {
-        "id": "ds-external",
-        "resources": [
-            {"format": "CSV", "url": "https://data-atmoaura.opendata.arcgis.com/x.csv", "title": "x"},
-        ],
-    }
-    with patch("app.routers.search.requests.get", return_value=_FakeResp(dataset_payload)):
-        resp = client.post(
-            "/sessions/import-url",
-            json={"url": "https://www.data.gouv.fr/fr/datasets/ds-external/"},
-        )
-    assert resp.status_code == 404
-    assert "No data.gouv.fr-hosted CSV" in resp.json()["detail"]
+def test_search_excludes_non_csv_datasets(client):
+    with patch("app.routers.search._search_via_mcp", return_value=None), \
+         patch("app.routers.search.requests.get", return_value=_FakeResp(_fake_datagouv_payload())):
+        resp = client.get("/search", params={"q": "sante"})
+    assert resp.status_code == 200
+    ids = [d["id"] for d in resp.json()["datasets"]]
+    assert "ds-no-csv" not in ids

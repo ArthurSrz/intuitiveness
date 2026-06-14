@@ -52,19 +52,16 @@ class SearchResponse(BaseModel):
     source: str = "rest"
 
 
-def _hosted_csv_resources(resources: list) -> list:
-    """CSV resources hosted on trusted French open-data domains.
+def _csv_resources(resources: list) -> list:
+    """CSV resources from the data.gouv.fr catalog.
 
-    Search and import MUST share this predicate: anything search counts as a
-    CSV here is something import-url will actually download.  data.gouv.fr is
-    a federation hub — most files live on ministry portals (*.gouv.fr), which
-    are reliable.  Untrusted third-party hosts are still excluded.
+    The data.gouv.fr API already vets uploads, so we trust any URL it returns.
+    We only filter on format (CSV).
     """
     return [
         r
         for r in resources
-        if ((r.get("format") or "").lower() == "csv" or str(r.get("url", "")).endswith(".csv"))
-        and ".gouv.fr" in str(r.get("url", ""))
+        if (r.get("format") or "").lower() == "csv" or str(r.get("url", "")).endswith(".csv")
     ]
 
 
@@ -129,7 +126,7 @@ def _search_via_rest(q: str, page: int, size: int) -> SearchResponse:
 
     datasets = []
     for ds in data.get("data", []):
-        csv_resources = _hosted_csv_resources(ds.get("resources", []))
+        csv_resources = _csv_resources(ds.get("resources", []))
         if not csv_resources:
             continue
         org = ds.get("organization") or {}
@@ -202,11 +199,11 @@ def _resolve_csv_candidates(url: str) -> list[tuple[str, str]]:
             data = api_resp.json()
         except requests.exceptions.RequestException as exc:
             raise HTTPException(status_code=502, detail=f"Could not resolve CSV for dataset '{dataset_id}': {exc}") from exc
-        hosted = _hosted_csv_resources(data.get("resources", []))
+        hosted = _csv_resources(data.get("resources", []))
         if not hosted:
             raise HTTPException(
                 status_code=404,
-                detail=f"No .gouv.fr-hosted CSV found for dataset '{dataset_id}'. Try another dataset.",
+                detail=f"No CSV resource found for dataset '{dataset_id}'. Try another dataset.",
             )
         return [(res["url"], (res.get("title") or dataset_id) + ".csv") for res in hosted]
     return [(url, url.split("/")[-1].split("?")[0] or "dataset.csv")]
@@ -393,6 +390,8 @@ def _wb_search_via_rest(q: str, size: int) -> WBSearchResponse:
             score=hit.get("@search.score", 0),
         )
         for hit in payload.get("value", [])
+        if hit.get("series_description", {}).get("idno")
+        and hit.get("series_description", {}).get("database_id")
     ]
     total = payload.get("@odata.count", len(indicators))
     return WBSearchResponse(indicators=indicators, total=total, source="rest")
