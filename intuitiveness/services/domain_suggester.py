@@ -16,7 +16,8 @@ import pandas as pd
 
 logger = logging.getLogger(__name__)
 
-from intuitiveness.services.llm_client import call_llm
+from intuitiveness.services.llm_client import call_llm_structured
+from intuitiveness.services.transition_models import DomainSuggestion
 
 
 def _safe_category_to_str(series: "pd.Series") -> "pd.Series":
@@ -233,35 +234,33 @@ Respond ONLY with JSON:
 }}"""
 
     try:
-        content = call_llm(_SYSTEM_PROMPT, prompt, model_env_var="DOMAIN_SUGGEST_MODEL")
-        result = json.loads(content.strip())
+        suggestion = call_llm_structured(
+            _SYSTEM_PROMPT, prompt, DomainSuggestion,
+            model_env_var="DOMAIN_SUGGEST_MODEL",
+        )
     except Exception as exc:
         logger.warning("Domain suggestion LLM call failed: %s", exc)
         return _heuristic_fallback(df)
 
-    # Run the code on a sample to compute distribution preview
-    code = result.get("code", "")
+    code = _sanitize_code(suggestion.code)
     logger.warning("LLM_CODE: %s", code[:300])
-    code = _sanitize_code(code)
     sample = df.head(200).copy()
     dist = {}
     if code:
         dist = _run_categorize_preview(code, sample)
         if not dist:
-            # Claude's code failed — try a simple fallback using proposed column + domains
-            col = result.get("proposed_column", "")
-            domains = result.get("proposed_domains", [])
-            if col and col in sample.columns and domains:
-                fallback = _build_fallback_code(sample, col, domains)
+            col = suggestion.proposed_column
+            if col and col in sample.columns and suggestion.proposed_domains:
+                fallback = _build_fallback_code(sample, col, suggestion.proposed_domains)
                 if fallback:
                     code = fallback
                     dist = _run_categorize_preview(code, sample.copy())
 
     logger.warning("FINAL_DIST: %s — code: %s", dist, code[:200])
     return {
-        "proposed_column": result.get("proposed_column", ""),
-        "proposed_domains": result.get("proposed_domains", ["low", "high"]),
-        "explanation": result.get("explanation", ""),
+        "proposed_column": suggestion.proposed_column,
+        "proposed_domains": suggestion.proposed_domains,
+        "explanation": suggestion.explanation,
         "confidence": "high",
         "code": code,
         "columns": columns,

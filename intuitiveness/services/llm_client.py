@@ -117,3 +117,77 @@ def call_llm_parse_json(
     except (json.JSONDecodeError, TypeError) as exc:
         logger.warning("LLM response is not valid JSON: %s — raw: %s", exc, raw[:200])
         return {}
+
+
+def call_llm_structured(
+    system_prompt: str,
+    user_prompt: str,
+    output_model: type,
+    model_env_var: str | None = None,
+):
+    """Call an LLM and return a validated Pydantic model instance.
+
+    Uses structured output (tool_use for Anthropic, json_schema for OpenAI)
+    to constrain the LLM to produce exactly the right shape. Falls back to
+    parse-and-validate if structured output isn't available.
+
+    Args:
+        system_prompt: the system message
+        user_prompt: the user message
+        output_model: a Pydantic BaseModel class defining the expected output
+        model_env_var: optional env var name for model override
+
+    Returns:
+        An instance of output_model, validated.
+
+    Raises:
+        RuntimeError: if no API key is configured.
+        ValidationError: if the LLM output doesn't match the schema after retries.
+    """
+    client_tuple = _get_client()
+    if client_tuple is None:
+        raise RuntimeError("No LLM API key configured.")
+
+    kind, client = client_tuple
+    model = os.getenv(model_env_var, DEFAULT_MODEL) if model_env_var else DEFAULT_MODEL
+    schema = output_model.model_json_schema()
+
+    if kind == "anthropic":
+        tool_name = output_model.__name__
+        response = client.messages.create(
+            model=ANTHROPIC_MODEL,
+            max_tokens=2048,
+            system=system_prompt,
+            messages=[{"role": "user", "content": user_prompt}],
+            tools=[{
+                "name": tool_name,
+                "description": f"Return the analysis result as a {tool_name}.",
+                "input_schema": schema,
+            }],
+            tool_choice={"type": "tool", "name": tool_name},
+        )
+        for block in response.content:
+            if block.type == "tool_use":
+                return output_model.model_validate(block.input)
+        raw = response.content[0].text if response.content else ""
+    else:
+        response = client.chat.completions.create(
+            model=model,
+            messages=[
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_prompt},
+            ],
+            temperature=0.1,
+            response_format={
+                "type": "json_schema",
+                "json_schema": {
+                    "name": output_model.__name__,
+                    "schema": schema,
+                    "strict": False,
+                },
+            },
+        )
+        raw = response.choices[0].message.content or ""
+
+    content = _extract_json(raw)
+    return output_model.model_validate_json(content)
