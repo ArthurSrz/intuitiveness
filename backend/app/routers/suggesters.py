@@ -238,6 +238,76 @@ class IntentSuggestResponse(IntentSuggestion):
     error: Optional[str] = None
 
 
+def _build_descent_story(session, svc, session_id: str) -> dict:
+    """Walk the navigation tree and build a rich context for intent suggestion.
+
+    Collects what happened at each level during descent so the LLM can
+    suggest questions grounded in the actual data, not generic templates.
+    """
+    tree = session.navigation_tree
+    current_id = tree.current_id
+    story = {"steps": []}
+
+    # Walk from current node up to root, collecting each level's context
+    node_id = current_id
+    while node_id:
+        node = tree.nodes.get(node_id)
+        if not node:
+            break
+        step = {
+            "level": node.level.value,
+            "action": node.action,
+            "decision": node.decision_description,
+        }
+        ds = node.dataset_snapshot
+        if ds:
+            s = ds.summary() if hasattr(ds, "summary") else {}
+            level = node.level.value
+            if level == 4:
+                data = ds.get_data()
+                if isinstance(data, dict):
+                    step["sources"] = {
+                        name: {"rows": len(df), "columns": list(df.columns)[:10]}
+                        for name, df in data.items()
+                        if hasattr(df, "columns")
+                    }
+            elif level == 3:
+                data = ds.get_data()
+                if hasattr(data, "columns"):
+                    step["columns"] = list(data.columns)[:15]
+                elif hasattr(data, "number_of_nodes"):
+                    step["node_count"] = data.number_of_nodes()
+                    step["edge_count"] = data.number_of_edges()
+            elif level == 2:
+                data = ds.get_data()
+                if hasattr(data, "columns"):
+                    step["columns"] = list(data.columns)[:10]
+                    if "category" in data.columns:
+                        step["categories"] = list(data["category"].dropna().unique()[:8])
+                    step["row_count"] = len(data)
+            elif level == 1:
+                data = ds.get_data()
+                if hasattr(data, "describe"):
+                    desc = data.describe()
+                    step["stats"] = {
+                        "count": int(desc.get("count", 0)),
+                        "mean": round(float(desc["mean"]), 2) if "mean" in desc.index else None,
+                        "min": round(float(desc["min"]), 2) if "min" in desc.index else None,
+                        "max": round(float(desc["max"]), 2) if "max" in desc.index else None,
+                    }
+                    step["name"] = getattr(data, "name", "value")
+            elif level == 0:
+                step["value"] = s.get("value")
+                step["description"] = s.get("description")
+                step["aggregation"] = s.get("aggregation_method")
+
+        story["steps"].append(step)
+        node_id = node.parent_id
+
+    story["steps"].reverse()  # root → leaf order
+    return story
+
+
 @router.post("/{session_id}/intent-suggest", response_model=IntentSuggestResponse)
 def intent_suggest(
     session_id: str,
@@ -246,48 +316,15 @@ def intent_suggest(
     """AI suggests analytical intents based on the descent path."""
     from intuitiveness.services.intent_suggester import suggest_intents
 
-    state = svc.get(session_id)
     session = svc._load(session_id)
 
-    summary = state.get("summary", {})
-
-    data_context = {}
     try:
-        tree = session.navigation_tree.export_to_json()
-        for node in tree.get("nodes", []):
-            nid = node.get("id")
-            lvl = node.get("level")
-            if lvl == 4:
-                try:
-                    nd = svc.node(session_id, nid)
-                    shapes = nd.get("summary", {}).get("shapes", {})
-                    data_context["sources"] = list(shapes.keys()) if shapes else []
-                except Exception:
-                    pass
-            elif lvl == 3:
-                try:
-                    nd = svc.node(session_id, nid)
-                    cols = nd.get("summary", {}).get("columns", [])
-                    if cols:
-                        data_context["l3_columns"] = cols[:15]
-                except Exception:
-                    pass
-    except Exception:
-        pass
+        descent_story = _build_descent_story(session, svc, session_id)
+    except Exception as exc:
+        logger.warning("Failed to build descent story: %s", exc)
+        descent_story = {"steps": []}
 
-    descent_summary = {
-        "current_level": state["current_level"],
-        "datum_value": summary.get("value"),
-        "datum_description": summary.get("description"),
-        "aggregation_method": summary.get("aggregation_method"),
-        "parent_column": summary.get("parent_name"),
-        "entity_count": summary.get("parent_length"),
-        "columns_seen": state.get("options", {}).get("columns", []),
-        "data_sources": data_context.get("sources", []),
-        "data_columns": data_context.get("l3_columns", []),
-    }
-
-    result = suggest_intents(descent_summary)
+    result = suggest_intents(descent_story)
     logger.warning("INTENT-SUGGEST result: %s", [i.get("short") for i in result.get("intents", [])])
     return IntentSuggestResponse(**result)
 
