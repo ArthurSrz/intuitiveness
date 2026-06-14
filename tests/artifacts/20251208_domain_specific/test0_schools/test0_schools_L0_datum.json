@@ -1,6 +1,0 @@
-{
-  "value": 88.25365853658536,
-  "description": "Average middle school success rate",
-  "aggregation_method": "mean",
-  "type": "float"
-}

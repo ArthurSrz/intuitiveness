@@ -1,7 +1,0 @@
-{
-  "domains": "PRIVE, PUBLIC",
-  "domain_column": "Secteur",
-  "entity_type": "Data",
-  "feature": "Taux de r\u00e9ussite G",
-  "aggregation": "mean"
-}
