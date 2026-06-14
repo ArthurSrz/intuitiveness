@@ -22,9 +22,23 @@ def _mock_anthropic_tool_response(model_class, data: dict):
     return response
 
 
-def _mock_openai_json_response(data: str):
-    """Simulate an OpenAI chat completion with JSON content."""
+def _mock_openai_tool_response(data: dict):
+    """Simulate an OpenAI chat completion with tool_call response."""
+    import json as _json
+    tool_call = MagicMock()
+    tool_call.function.arguments = _json.dumps(data)
     choice = MagicMock()
+    choice.message.tool_calls = [tool_call]
+    choice.message.content = None
+    response = MagicMock()
+    response.choices = [choice]
+    return response
+
+
+def _mock_openai_json_response(data: str):
+    """Simulate an OpenAI chat completion with plain JSON (no tool_calls)."""
+    choice = MagicMock()
+    choice.message.tool_calls = None
     choice.message.content = data
     response = MagicMock()
     response.choices = [choice]
@@ -56,19 +70,16 @@ class TestDomainSuggestionStructured:
         assert "category" in result.code
 
     @patch("intuitiveness.services.llm_client._get_client")
-    def test_openai_json_schema_returns_validated_model(self, mock_get):
-        import json
+    def test_openai_tool_call_returns_validated_model(self, mock_get):
         client = MagicMock()
         mock_get.return_value = ("openai", client)
 
-        client.chat.completions.create.return_value = _mock_openai_json_response(
-            json.dumps({
-                "proposed_column": "price",
-                "proposed_domains": ["cheap", "expensive"],
-                "code": "df['category'] = 'cheap'",
-                "explanation": "Simple split.",
-            })
-        )
+        client.chat.completions.create.return_value = _mock_openai_tool_response({
+            "proposed_column": "price",
+            "proposed_domains": ["cheap", "expensive"],
+            "code": "df['category'] = 'cheap'",
+            "explanation": "Simple split.",
+        })
 
         result = call_llm_structured("system", "user", DomainSuggestion)
 
@@ -77,16 +88,13 @@ class TestDomainSuggestionStructured:
 
     @patch("intuitiveness.services.llm_client._get_client")
     def test_missing_required_field_raises_validation_error(self, mock_get):
-        import json
         client = MagicMock()
         mock_get.return_value = ("openai", client)
 
-        client.chat.completions.create.return_value = _mock_openai_json_response(
-            json.dumps({
-                "proposed_column": "score",
-                # missing: proposed_domains, code, explanation
-            })
-        )
+        client.chat.completions.create.return_value = _mock_openai_tool_response({
+            "proposed_column": "score",
+            # missing: proposed_domains, code, explanation
+        })
 
         from pydantic import ValidationError
         with pytest.raises(ValidationError):

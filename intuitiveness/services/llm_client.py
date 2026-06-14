@@ -171,6 +171,7 @@ def call_llm_structured(
                 return output_model.model_validate(block.input)
         raw = response.content[0].text if response.content else ""
     else:
+        tool_name = output_model.__name__
         response = client.chat.completions.create(
             model=model,
             messages=[
@@ -178,16 +179,22 @@ def call_llm_structured(
                 {"role": "user", "content": user_prompt},
             ],
             temperature=0.1,
-            response_format={
-                "type": "json_schema",
-                "json_schema": {
-                    "name": output_model.__name__,
-                    "schema": schema,
-                    "strict": False,
+            tools=[{
+                "type": "function",
+                "function": {
+                    "name": tool_name,
+                    "description": f"Return the analysis result as a {tool_name}.",
+                    "parameters": schema,
                 },
-            },
+            }],
+            tool_choice={"type": "function", "function": {"name": tool_name}},
         )
-        raw = response.choices[0].message.content or ""
+        choice = response.choices[0]
+        if choice.message.tool_calls:
+            import json as _json
+            args = _json.loads(choice.message.tool_calls[0].function.arguments)
+            return output_model.model_validate(args)
+        raw = choice.message.content or ""
 
     content = _extract_json(raw)
     return output_model.model_validate_json(content)
