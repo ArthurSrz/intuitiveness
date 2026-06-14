@@ -15,6 +15,8 @@ import pandas as pd
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 
+from intuitiveness.services.transition_models import EntityMatchSuggestion
+
 from ..deps import get_session_service
 from ..models import SessionState
 from ..service import SessionService
@@ -39,18 +41,11 @@ class EntityMatchRequest(BaseModel):
     relationships: List[RelationshipDeclaration]
 
 
-class EntityMatchResponse(BaseModel):
-    catalog: List[dict] = []
-    join_plan: dict = {}
-    explanation: str = ""
+class EntityMatchResponse(EntityMatchSuggestion):
     error: Optional[str] = None
 
 
-class EntityAnalyzeResponse(BaseModel):
-    catalog: List[dict] = []
-    join_plan: dict = {}
-    column_transforms: dict = {}
-    explanation: str = ""
+class EntityAnalyzeResponse(EntityMatchSuggestion):
     error: Optional[str] = None
 
 

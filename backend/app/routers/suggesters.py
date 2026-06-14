@@ -18,6 +18,17 @@ import pandas as pd
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 
+from intuitiveness.services.transition_models import (
+    AggregationSuggestion,
+    ColumnSuggestion,
+    DatumDescription,
+    DimensionSuggestion,
+    DomainSuggestion,
+    EnrichmentSuggestion,
+    IntentSuggestion,
+    LinkageSuggestion,
+)
+
 from ..deps import get_session_service
 from ..models import SessionState
 from ..service import SessionService
@@ -39,12 +50,8 @@ class AnalyzeRequest(BaseModel):
 # Domain: L3 → L2 (descent)
 # --------------------------------------------------------------------------- #
 
-class DomainAnalyzeResponse(BaseModel):
-    proposed_column: str = ""
-    proposed_domains: List[str] = []
-    explanation: str = ""
+class DomainAnalyzeResponse(DomainSuggestion):
     confidence: str = ""
-    code: str = ""
     sample_distribution: dict = {}
     columns: List[str] = []
     error: Optional[str] = None
@@ -105,12 +112,8 @@ def domain_confirm(
 # Column: L2 → L1 (descent)
 # --------------------------------------------------------------------------- #
 
-class ColumnAnalyzeResponse(BaseModel):
-    proposed_column: str = ""
-    proposed_filter: str = ""
-    explanation: str = ""
+class ColumnAnalyzeResponse(ColumnSuggestion):
     confidence: str = ""
-    code: str = ""
     columns: List[str] = []
     preview_stats: dict = {}
     error: Optional[str] = None
@@ -173,12 +176,8 @@ def column_confirm(
 # Aggregation: L1 → L0 (descent)
 # --------------------------------------------------------------------------- #
 
-class AggregationAnalyzeResponse(BaseModel):
-    proposed_aggregation: str = ""
-    explanation: str = ""
+class AggregationAnalyzeResponse(AggregationSuggestion):
     confidence: str = ""
-    code: str = ""
-    preview_value: Optional[float] = None
     vector_profile: dict = {}
     error: Optional[str] = None
 
@@ -235,8 +234,7 @@ def aggregation_confirm(
 # Intent + Datum: at L0
 # --------------------------------------------------------------------------- #
 
-class IntentSuggestResponse(BaseModel):
-    intents: List[dict] = []
+class IntentSuggestResponse(IntentSuggestion):
     error: Optional[str] = None
 
 
@@ -294,9 +292,7 @@ def intent_suggest(
     return IntentSuggestResponse(**result)
 
 
-class DatumDescribeResponse(BaseModel):
-    title: str = ""
-    description: str = ""
+class DatumDescribeResponse(DatumDescription):
     error: Optional[str] = None
 
 
@@ -338,11 +334,8 @@ def datum_describe(
 # Enrichment: L0 → L1 (ascent)
 # --------------------------------------------------------------------------- #
 
-class EnrichmentAnalyzeResponse(BaseModel):
-    code: str = ""
-    explanation: str = ""
+class EnrichmentAnalyzeResponse(EnrichmentSuggestion):
     confidence: str = ""
-    preview_description: str = ""
     preview_stats: dict = {}
     error: Optional[str] = None
 
@@ -440,11 +433,8 @@ def enrichment_confirm(
 # Dimension: L1 → L2 (ascent)
 # --------------------------------------------------------------------------- #
 
-class DimensionAnalyzeResponse(BaseModel):
-    explanation: str = ""
+class DimensionAnalyzeResponse(DimensionSuggestion):
     confidence: str = ""
-    code: str = ""
-    proposed_columns: List[str] = []
     sample_distribution: dict = {}
     error: Optional[str] = None
 
@@ -546,12 +536,8 @@ def dimension_confirm(
 # Linkage: L2 → L3 (ascent)
 # --------------------------------------------------------------------------- #
 
-class LinkageAnalyzeResponse(BaseModel):
-    code: str = ""
-    proposed_columns: List[str] = []
-    explanation: str = ""
+class LinkageAnalyzeResponse(LinkageSuggestion):
     confidence: str = ""
-    graph_description: str = ""
     sample_distribution: dict = {}
     error: Optional[str] = None
 
