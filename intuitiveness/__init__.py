@@ -7,6 +7,12 @@ from .complexity import (
     Level1Dataset,
     Level0Dataset
 )
+from .complexity_measure import (
+    complexity as dataset_complexity,
+    linking_complexity,
+    reduction_ratio,
+    complexity_report,
+)
 # Redesigner = the unified spec-015 engine (single transition chokepoint)
 from .redesign import Redesigner
 from .interactive import (

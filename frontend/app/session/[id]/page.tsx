@@ -679,6 +679,7 @@ function buildStats(
   level: number,
 ): { k: string; v: string; accent?: boolean }[] {
   const summary = session?.summary ?? {};
+  const cx = session?.complexity;
   const stats: { k: string; v: string; accent?: boolean }[] = [];
 
   const rows = num(summary.rows ?? summary.n_rows ?? summary.length);
@@ -687,6 +688,13 @@ function buildStats(
     stats.push({ k: "Current shape", v: `${rows} × ${cols}` });
   } else if (rows != null) {
     stats.push({ k: "Current shape", v: `${rows} values` });
+  }
+
+  if (cx?.value != null) {
+    stats.push({ k: "C(D)", v: cx.value.toLocaleString() });
+  }
+  if (cx?.reduction != null) {
+    stats.push({ k: "Reduction", v: `${cx.reduction}%`, accent: true });
   }
 
   stats.push({ k: "Level", v: NAV_LEVELS[level].code });

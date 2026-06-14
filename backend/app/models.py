@@ -48,6 +48,14 @@ class SessionState(BaseModel):
             "(enrichment_functions, dimensions) ride on available_moves."
         ),
     )
+    complexity: Dict[str, Any] = Field(
+        default_factory=dict,
+        description=(
+            "Dataset complexity C(D) from Section 4 of the paper: "
+            "`value` is the count of extractable atomic relationships, "
+            "`reduction` is the percentage reduction vs. the previous level (null at entry)."
+        ),
+    )
 
 
 class SessionSummary(BaseModel):

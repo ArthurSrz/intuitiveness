@@ -34,6 +34,21 @@ from intuitiveness.ui import (
 )
 from intuitiveness.utils import SessionStateKeys
 from intuitiveness.persistence.session_graph import SessionGraph
+from intuitiveness.complexity_measure import complexity, complexity_report
+
+
+def render_complexity_badge(current_dataset, previous_dataset=None):
+    """Display the complexity C(D) of the current dataset and the reduction
+    from the previous level (if available).
+
+    TODO(human): Implement this function using Streamlit display components.
+    - `current_dataset`: the dataset at the current level (has .complexity_level)
+    - `previous_dataset`: the dataset at the previous (higher) level, or None
+    - Use `complexity(dataset)` to get C(D) as an integer
+    - Use `reduction_ratio(previous, current)` to get the fraction reduced (0-1)
+    - Consider st.metric(), st.columns(), or any layout you find clear
+    """
+    pass
 
 
 def _ensure_datasets_dict():
@@ -275,6 +290,17 @@ def render_results_view(l0_dataset: Level0Dataset):
         aggregation_method=getattr(l0_dataset, 'aggregation_method', 'computed'),
         source_info=getattr(l0_dataset, 'description', None),
     )
+
+    # Complexity report across the descent trail
+    datasets = st.session_state.get('datasets', {})
+    trail = []
+    for key in ('l4', 'l3', 'l2', 'l1', 'l0'):
+        if key in datasets:
+            trail.append(datasets[key])
+    if len(trail) >= 2:
+        with st.expander("Complexity C(D) — how much was reduced at each step"):
+            report = complexity_report(trail)
+            st.dataframe(report, use_container_width=True)
 
     # Show metadata
     with st.expander(t('show_metadata')):
