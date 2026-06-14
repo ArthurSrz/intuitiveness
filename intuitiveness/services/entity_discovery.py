@@ -69,6 +69,18 @@ _CONCEPT_SETS = {
     "Entity ID": _ENTITY_NAMES,
 }
 
+# Measurement columns: same name ≠ same data. "value" in GDP ≠ "value" in
+# life expectancy. These must NOT be proposed as join keys by name alone;
+# only Tier 2 (value overlap) or Tier 3 (LLM) may promote them.
+_MEASUREMENT_NAMES = {
+    "value", "valeur", "values", "amount", "montant", "count", "nombre",
+    "total", "sum", "score", "rate", "taux", "ratio", "percent",
+    "percentage", "mean", "average", "median", "min", "max", "std",
+    "quantity", "quantite", "result", "resultat", "measure", "mesure",
+    "indicator", "indicateur", "observation", "data", "donnee",
+    "unit", "unite", "units", "currency", "devise",
+}
+
 
 def _normalize_col(name: str) -> str:
     """Normalize a column name for comparison."""
@@ -106,8 +118,10 @@ def tier1_name_heuristics(
                     norm_b = _normalize_col(cb)
                     concept_b = _col_concept(cb)
 
-                    # Exact name match
+                    # Exact name match — but skip measurement columns
                     if norm_a == norm_b and norm_a:
+                        if norm_a in _MEASUREMENT_NAMES:
+                            continue
                         results.append(ColumnRelationship(
                             source_a=src_a, column_a=ca,
                             source_b=src_b, column_b=cb,
