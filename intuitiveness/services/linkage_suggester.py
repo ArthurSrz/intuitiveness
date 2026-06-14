@@ -106,11 +106,30 @@ def suggest_linkage(
     table_info: Dict[str, Any],
     available_dimensions: List[str],
     intent: str = "",
+    sibling_context: Dict[str, Any] | None = None,
 ) -> Dict[str, Any]:
-    """Ask the LLM for executable Python code to link the L2 table for L2->L3 ascent."""
+    """Ask the LLM for executable Python code to link the L2 table for L2->L3 ascent.
+
+    When sibling_context is provided (from session.get_ascent_context()),
+    the LLM can reconnect columns from the original L3 graph — e.g. life
+    expectancy data that was dropped during the L2→L1 feature projection.
+    """
     client = _get_chat_client()
 
+    has_siblings = sibling_context and sibling_context.get("sibling_columns")
+
     if client is None:
+        if has_siblings:
+            sibling_cols = sibling_context["sibling_columns"]
+            join_code = "linked_df = df.merge(sibling_df, left_index=True, right_index=True, how='left')"
+            return {
+                "code": join_code,
+                "proposed_columns": sibling_cols,
+                "explanation": f"Reconnected columns from the original linked data: {', '.join(sibling_cols)}.",
+                "graph_description": "Your table enriched with the related data from the original dataset.",
+                "confidence": "heuristic",
+                "error": None,
+            }
         return {
             "code": "linked_df = df.copy()\nlinked_df['linkage_group'] = np.where(linked_df['value'] > linked_df['value'].median(), 'above average', 'below average')",
             "proposed_columns": ["value_level"],
@@ -124,6 +143,22 @@ def suggest_linkage(
     categories_info = json.dumps(table_info.get("categories", []))
     dtypes_info = json.dumps(table_info.get("dtypes", {}))
 
+    sibling_section = ""
+    if has_siblings:
+        sib_cols = sibling_context["sibling_columns"]
+        l3_cols = sibling_context.get("l3_columns", [])
+        sibling_section = f"""
+## Related data available (from the original linked dataset)
+You also have access to a DataFrame called `sibling_df` which contains columns from the original linked data that were dropped during simplification.
+Sibling columns: {json.dumps(sib_cols)}
+Original L3 columns: {json.dumps(l3_cols)}
+
+PRIORITY: If sibling_df contains related variables (e.g. life expectancy alongside GDP, or population alongside income),
+your FIRST action should be to merge those columns back into the table. This reconnects the data the user originally linked.
+Use: `linked_df = df.merge(sibling_df[relevant_cols], left_index=True, right_index=True, how='left')` or join on shared keys.
+THEN add computed columns (ratios, correlations, ranks) that leverage BOTH the current and sibling data.
+"""
+
     prompt = f"""A user has a categorized table (L2) and wants to add computed columns that help evaluate their insight from different angles.
 
 ## The Table
@@ -134,26 +169,22 @@ Categories: {categories_info}
 
 IMPORTANT: Only use numeric operations (mean, sum, rank, qcut) on NUMERIC columns (int64, float64).
 String/object columns can only be used for groupby keys, value_counts, or categorical mapping — NEVER for arithmetic.
-
+{sibling_section}
 ## User's Intent
 {intent if intent else "Not specified -- suggest the most useful computed columns."}
 
 ## What's happening
 The user has grouped their data and now wants to evaluate their insight by looking at it from additional angles.
-This means computing NEW columns from the EXISTING data — such as ranks, shares, ratios between existing columns, or group-level statistics.
-
-CRITICAL: You must ONLY use columns that exist in df. If the user mentions external data (World Bank, population data, GDP, etc.),
-do NOT invent fake columns. Instead, compute what you can from the existing data and explain in the explanation field
-that the user should import external datasets first via the search function if they want to cross-reference.
+{"If sibling_df is available, RECONNECT those columns first — they contain related data the user originally loaded." if has_siblings else ""}
 
 ## Your Task
 Write Python code that:
 1. Starts with `linked_df = df.copy()`
-2. Adds new columns to `linked_df` computed from existing data
-3. These can be: ranks, shares of total, group averages, ratios between existing numeric columns, percentile positions
+{"2. Merge relevant sibling columns from sibling_df back into linked_df" if has_siblings else ""}
+{"3" if has_siblings else "2"}. Adds new columns to `linked_df` computed from {"existing + sibling" if has_siblings else "existing"} data
 
 NAMING: Use plain, descriptive names that a non-technical user would understand:
-- Good: 'rank', 'share_of_total', 'above_average', 'price_level', 'group_average'
+- Good: 'rank', 'share_of_total', 'above_average', 'life_expectancy', 'gdp_per_capita'
 - Bad: 'cross_domain_tier', 'segment_performance_ratio', 'quartile_segment_interaction'
 
 Example:
@@ -196,14 +227,26 @@ Respond in JSON:
     }
 
 
-def execute_linkage_code(df: pd.DataFrame, code: str) -> pd.DataFrame:
-    """Execute AI's linkage code on the L2 DataFrame."""
+def execute_linkage_code(
+    df: pd.DataFrame,
+    code: str,
+    sibling_df: pd.DataFrame | None = None,
+) -> pd.DataFrame:
+    """Execute AI's linkage code on the L2 DataFrame.
+
+    When sibling_df is provided, it is injected into the exec namespace
+    so the LLM-generated code can merge columns from the original L3 data.
+    """
     import numpy as np
 
     logger.warning("EXECUTE-LINKAGE: df shape=%s columns=%s", df.shape, list(df.columns))
+    if sibling_df is not None:
+        logger.warning("EXECUTE-LINKAGE: sibling_df shape=%s columns=%s", sibling_df.shape, list(sibling_df.columns))
     logger.warning("EXECUTE-LINKAGE: code (first 400):\n%s", code[:400])
 
     namespace = {"df": df, "pd": pd, "np": np}
+    if sibling_df is not None:
+        namespace["sibling_df"] = sibling_df
     exec(code, namespace)
 
     linked_df = namespace.get("linked_df")

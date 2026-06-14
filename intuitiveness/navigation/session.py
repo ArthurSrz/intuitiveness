@@ -132,6 +132,29 @@ class NavigationSession:
         """Current dataset wrapper."""
         return self._current_dataset
 
+    def get_ascent_context(self) -> Dict[str, Any]:
+        """Assemble historical context for ascent suggesters.
+
+        Returns sibling columns from the L3 graph that are not in the
+        current dataset, so the linkage step can reconnect them.
+        """
+        context: Dict[str, Any] = {}
+
+        l3_dataset = self._accumulated_outputs.get(3)
+        if l3_dataset is not None:
+            l3_data = l3_dataset.get_data()
+            if hasattr(l3_data, 'columns'):
+                current_data = self._current_dataset.get_data()
+                current_cols = set(current_data.columns) if hasattr(current_data, 'columns') else set()
+                sibling_cols = [c for c in l3_data.columns if c not in current_cols]
+                if sibling_cols:
+                    context["sibling_df"] = l3_data[sibling_cols + [c for c in l3_data.columns if c in current_cols]].copy()
+                    context["sibling_columns"] = sibling_cols
+                context["l3_columns"] = list(l3_data.columns)
+
+        context["accumulated_levels"] = list(self._accumulated_outputs.keys())
+        return context
+
     # -------------------------------------------------------------------------
     # descend() - Move down one level
     # -------------------------------------------------------------------------

@@ -1103,15 +1103,21 @@ def linkage_analyze(
         if dims_from_moves:
             available = dims_from_moves
 
-    result = suggest_linkage(table_info, available, intent=body.intent)
-    logger.warning("LINKAGE-ANALYZE result: cols=%s, code=%s", result.get("proposed_columns"), (result.get("code") or "")[:150])
+    ascent_context = session.get_ascent_context()
+    sibling_context = ascent_context if ascent_context.get("sibling_columns") else None
+
+    result = suggest_linkage(table_info, available, intent=body.intent, sibling_context=sibling_context)
+    logger.warning("LINKAGE-ANALYZE result: cols=%s, sibling=%s, code=%s",
+                    result.get("proposed_columns"), bool(sibling_context), (result.get("code") or "")[:150])
 
     # Run code on preview to get distribution
     code = result.get("code", "")
     sample_distribution: dict = {}
+    sibling_df = ascent_context.get("sibling_df")
     if code:
         try:
-            preview_df = execute_linkage_code(df.head(200), code)
+            preview_sibling = sibling_df.head(200) if sibling_df is not None else None
+            preview_df = execute_linkage_code(df.head(200), code, sibling_df=preview_sibling)
             original_cols = set(df.columns)
             for col in preview_df.columns:
                 if col not in original_cols:
@@ -1150,8 +1156,10 @@ def linkage_confirm(
 
     session = svc._load(session_id)
     df = session.current_dataset.get_data()
+    ascent_context = session.get_ascent_context()
+    sibling_df = ascent_context.get("sibling_df")
     try:
-        linked_df = execute_linkage_code(df, body.code)
+        linked_df = execute_linkage_code(df, body.code, sibling_df=sibling_df)
     except Exception as e:
         raise HTTPException(status_code=422, detail=f"Code execution failed: {str(e)}")
 
