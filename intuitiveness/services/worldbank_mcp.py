@@ -15,7 +15,7 @@ import logging
 from dataclasses import dataclass, field
 from typing import List, Optional
 
-from intuitiveness.data_sources.mcp_client import MCPClient, MCPResponse
+from intuitiveness.services.mcp_client import MCPClient, MCPResponse
 from intuitiveness.services.worldbank_service import IndicatorInfo
 
 logger = logging.getLogger(__name__)
