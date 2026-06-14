@@ -18,7 +18,7 @@ import pandas as pd
 import logging
 
 # Import NL query engine for natural language understanding
-from intuitiveness.data_sources.nl_query import NLQueryEngine, NLQueryResult
+from intuitiveness.services.nl_query import NLQueryEngine, NLQueryResult
 
 # Import DataGouvAPI from local copy (now used as fallback)
 from intuitiveness.services.datagouv_api import DataGouvAPI

@@ -17,7 +17,7 @@ import logging
 from dataclasses import dataclass, field
 from typing import List, Optional, Any
 
-from intuitiveness.data_sources.mcp_client import MCPClient, MCPResponse
+from intuitiveness.services.mcp_client import MCPClient, MCPResponse
 
 # Late-import DatasetInfo, ResourceInfo, SearchResult to avoid circular import
 # (datagouv_client.py imports from this module)
