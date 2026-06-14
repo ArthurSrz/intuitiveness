@@ -272,16 +272,29 @@ class PostgresDurableBackend:
 def get_durable_backend():
     """Return the configured durable backend.
 
-    PostgreSQL when a connection URL is configured AND the driver is importable;
-    otherwise the local file backend. This means the app and the offline tests
-    work with zero configuration, and switching to the Railway database is a
-    secrets-only change (no code change) — verified live like the graph DB.
+    Normalized PostgreSQL (PgPrimaryBackend) when USE_PRIMARY_PG=1 and a
+    connection URL is configured; legacy JSONB blob (PostgresDurableBackend)
+    when only DATABASE_URL is set; local files otherwise. This means the app
+    works with zero configuration, and switching to the Railway database is
+    a secrets-only change.
     """
     url = get_database_url()
     if url:
+        use_primary = os.getenv("USE_PRIMARY_PG", "").strip() in ("1", "true", "yes")
+        if use_primary:
+            try:
+                from intuitiveness.persistence.pg_primary_backend import PgPrimaryBackend
+                from intuitiveness.neo4j_client import get_graph_db_credentials
+                creds = get_graph_db_credentials()
+                memgraph_url = creds.get("uri")
+                return PgPrimaryBackend(url, memgraph_url=memgraph_url)
+            except Exception as e:
+                logger.warning(
+                    "PgPrimaryBackend unavailable (%s); trying legacy Postgres.", e
+                )
         try:
             return PostgresDurableBackend(url)
-        except Exception as e:  # driver missing or DB unreachable → fall back
+        except Exception as e:
             logger.warning(
                 "Postgres session store unavailable (%s); falling back to file backend.", e
             )
