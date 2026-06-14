@@ -55,30 +55,7 @@ def suggest_linkage(
     the LLM can reconnect columns from the original L3 graph — e.g. life
     expectancy data that was dropped during the L2→L1 feature projection.
     """
-    client = _get_chat_client()
-
     has_siblings = sibling_context and sibling_context.get("sibling_columns")
-
-    if client is None:
-        if has_siblings:
-            sibling_cols = sibling_context["sibling_columns"]
-            join_code = "linked_df = df.merge(sibling_df, left_index=True, right_index=True, how='left')"
-            return {
-                "code": join_code,
-                "proposed_columns": sibling_cols,
-                "explanation": f"Reconnected columns from the original linked data: {', '.join(sibling_cols)}.",
-                "graph_description": "Your table enriched with the related data from the original dataset.",
-                "confidence": "heuristic",
-                "error": None,
-            }
-        return {
-            "code": "linked_df = df.copy()\nlinked_df['linkage_group'] = np.where(linked_df['value'] > linked_df['value'].median(), 'above average', 'below average')",
-            "proposed_columns": ["value_level"],
-            "explanation": "Split values into above/below average groups based on the median.",
-            "graph_description": "Your table with an additional column showing whether each value is above or below the average.",
-            "confidence": "heuristic",
-            "error": None,
-        }
 
     columns_info = json.dumps(table_info.get("columns", []))
     categories_info = json.dumps(table_info.get("categories", []))
