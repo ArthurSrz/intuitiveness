@@ -100,7 +100,7 @@ export function SelectFeatureButton({
         >
           <Icon name="vector" size={16} />
           <span style={{ fontWeight: 600, color: "var(--blue)" }}>
-            {analyzing ? "AI is analyzing your table..." : "Select feature for extraction"}
+            {analyzing ? "Finding the best column..." : "Pick the number you care about"}
           </span>
           {error && (
             <span style={{ color: "var(--error)", fontSize: 12, marginLeft: "auto" }}>
@@ -132,7 +132,7 @@ export function SelectFeatureButton({
       >
         <Icon name="vector" size={16} />
         <span style={{ fontWeight: 700, fontSize: 14, color: "var(--blue)" }}>
-          Feature Preview
+          Column Preview
         </span>
         <span className="chip mono" style={{ fontSize: 11 }}>
           {selectedColumn}

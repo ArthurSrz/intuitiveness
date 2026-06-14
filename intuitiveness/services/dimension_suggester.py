@@ -21,6 +21,16 @@ _CHAT_MODEL = "anthropic/claude-sonnet-4"
 
 
 def _get_chat_client():
+    or_key = os.getenv("OPENROUTER_API_KEY")
+    if or_key:
+        try:
+            from openai import OpenAI
+            return ("openai", OpenAI(
+                api_key=or_key,
+                base_url=os.getenv("OPENROUTER_BASE_URL", "https://openrouter.ai/api/v1"),
+            ))
+        except ImportError:
+            pass
     anthropic_key = os.getenv("ANTHROPIC_API_KEY")
     if anthropic_key:
         try:
@@ -28,11 +38,7 @@ def _get_chat_client():
             return ("anthropic", anthropic.Anthropic(api_key=anthropic_key))
         except ImportError:
             pass
-    api_key = (
-        os.getenv("OPENROUTER_API_KEY")
-        or os.getenv("EMBEDDING_API_KEY")
-        or os.getenv("OPENAI_API_KEY")
-    )
+    api_key = os.getenv("EMBEDDING_API_KEY") or os.getenv("OPENAI_API_KEY")
     if not api_key:
         return None
     try:
@@ -52,8 +58,15 @@ RULES:
 2. Your code MUST add one or more new columns to `df` that create meaningful groups.
 3. ALWAYS end categorical columns with .fillna('uncategorized').astype(str).
 4. Use pd.qcut for equal-count bins, np.where for threshold splits.
-5. The df index may contain entity names — use them if relevant to the user's intent.
-6. Respond ONLY with valid JSON, no markdown."""
+5. IMPORTANT: The index may be numeric integers (0, 1, 2...). NEVER use df.index.str on a numeric index. Only use index string methods if the sample_index values are clearly non-numeric strings.
+6. If the user's intent requires geographic or categorical data not present in 'value', split on the numeric value instead (e.g., above/below median, quantile bins).
+7. Respond ONLY with valid JSON, no markdown.
+
+CRITICAL NAMING RULES — the user is non-technical:
+8. Column names MUST be plain and descriptive. Use names like 'level' (with labels 'high', 'medium', 'low'), 'above_average', 'size_group'.
+9. NEVER use abstract statistical names like 'magnitude_tier', 'value_percentile', 'z_score_bucket'.
+10. Group LABELS must also be plain: use 'high', 'medium', 'low' or 'above average', 'below average' — not 'Q1', 'Q2', 'Q3', 'Q4'.
+11. The explanation field must describe what you did in plain language a non-programmer can understand."""
 
 
 def _call_llm(client_tuple, prompt: str) -> str:
@@ -116,14 +129,21 @@ def suggest_dimensions(vector_info: Dict[str, Any], intent: str = "") -> Dict[st
             "error": None,
         }
 
+    dtypes_info = json.dumps(vector_info.get("dtypes", {"value": "unknown"}))
+
     prompt = f"""A user has a feature vector and wants to add categorical dimensions for group comparison.
 
 ## The Vector
 Name: {vector_info.get('name', 'value')}
 Length: {vector_info.get('length', '?')} entities
 Min: {vector_info.get('min', '?')}, Max: {vector_info.get('max', '?')}, Mean: {vector_info.get('mean', '?')}
-Sample entity names (index): {json.dumps(vector_info.get('sample_index', []))}
+Column types: {dtypes_info}
+Index type: {"NUMERIC (row numbers — do NOT use df.index.str, only split on 'value')" if vector_info.get('index_is_numeric') else "string labels"}
+Sample index: {json.dumps(vector_info.get('sample_index', []))}
 Sample values: {json.dumps(vector_info.get('sample_values', []))}
+
+IMPORTANT: Only use numeric operations (mean, median, sum, qcut, comparisons) on NUMERIC columns (int64, float64).
+For STRING columns (object), use string operations (.str.contains, .isin, value_counts, etc.).
 
 ## User's Intent
 {intent if intent else "Not specified — suggest the most useful dimension to compare groups."}
@@ -285,6 +305,15 @@ def execute_dimension_code(series: pd.Series, code: str) -> pd.DataFrame:
     try:
         exec(code, {"df": df, "pd": pd, "np": np})
         logger.warning("EXECUTE-DIMENSION: exec succeeded — df columns=%s shape=%s", list(df.columns), df.shape)
+    except TypeError as exc:
+        if "not supported between" in str(exc) or "unsupported operand" in str(exc):
+            logger.warning("EXECUTE-DIMENSION: dtype mismatch error: %s", exc)
+            raise TypeError(
+                f"Dimension code tried a numeric operation on a non-numeric column. "
+                f"Column 'value' dtype is {series.dtype}. Original error: {exc}"
+            ) from exc
+        logger.warning("EXECUTE-DIMENSION: exec FAILED: %s", exc, exc_info=True)
+        raise
     except Exception as exec_exc:
         logger.warning("EXECUTE-DIMENSION: exec FAILED: %s", exec_exc, exc_info=True)
         raise

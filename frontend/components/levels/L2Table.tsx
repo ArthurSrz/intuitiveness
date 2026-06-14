@@ -29,6 +29,8 @@ export function L2Table({
   edgeProps,
   sessionId,
   onConfirm,
+  phase,
+  initialIntent,
 }: {
   node: NodeDetail;
   code?: string;
@@ -36,6 +38,8 @@ export function L2Table({
   edgeProps?: InlineEdgeProps;
   sessionId?: string;
   onConfirm?: () => void;
+  phase?: "descent" | "ascent";
+  initialIntent?: string;
 }) {
   const table: DecodedTable | null = useMemo(() => {
     if (typeof node.payload === "string") {
@@ -114,8 +118,8 @@ export function L2Table({
     </div>
     {sessionId && (
       <>
-        <SelectFeatureButton sessionId={sessionId} onConfirm={onConfirm} />
-        <LinkDomainsButton sessionId={sessionId} onConfirm={onConfirm} />
+        {phase !== "ascent" && <SelectFeatureButton sessionId={sessionId} onConfirm={onConfirm} />}
+        {phase !== "descent" && <LinkDomainsButton sessionId={sessionId} onConfirm={onConfirm} initialIntent={initialIntent} />}
       </>
     )}
     </>

@@ -7,7 +7,10 @@ from __future__ import annotations
 
 import csv
 import io
+import logging
 from typing import List
+
+logger = logging.getLogger(__name__)
 
 import pandas as pd
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, status
@@ -37,7 +40,11 @@ def _parse_csv(upload: UploadFile) -> pd.DataFrame:
         sep = dialect.delimiter
     except csv.Error:
         sep = ","
-    return pd.read_csv(io.StringIO(text), sep=sep)
+    df = pd.read_csv(io.StringIO(text), sep=sep)
+    if len(df) > 100:
+        logger.info("Truncating %s from %d to 100 rows (schema + intent, not volume)", getattr(df, 'name', '?'), len(df))
+        df = df.head(100)
+    return df
 
 
 @router.post("", response_model=SessionState, status_code=status.HTTP_201_CREATED)

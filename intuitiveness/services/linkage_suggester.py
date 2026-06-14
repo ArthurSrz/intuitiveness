@@ -1,9 +1,9 @@
 """
-LLM-powered Linkage Suggestion for L2→L3 ascent.
+LLM-powered Linkage Code for L2->L3 ascent.
 
 "Amplifies inter-domain linkage at the cost of domain isolation."
-AI suggests which relationships and dimensions to add to link
-the domain table back into a knowledge graph.
+AI sees the L2 table + user intent, writes Python code that adds
+linkage columns to connect domains in the evaluation stage.
 """
 
 from __future__ import annotations
@@ -21,6 +21,16 @@ _CHAT_MODEL = "anthropic/claude-sonnet-4"
 
 
 def _get_chat_client():
+    or_key = os.getenv("OPENROUTER_API_KEY")
+    if or_key:
+        try:
+            from openai import OpenAI
+            return ("openai", OpenAI(
+                api_key=or_key,
+                base_url=os.getenv("OPENROUTER_BASE_URL", "https://openrouter.ai/api/v1"),
+            ))
+        except ImportError:
+            pass
     anthropic_key = os.getenv("ANTHROPIC_API_KEY")
     if anthropic_key:
         try:
@@ -28,11 +38,7 @@ def _get_chat_client():
             return ("anthropic", anthropic.Anthropic(api_key=anthropic_key))
         except ImportError:
             pass
-    api_key = (
-        os.getenv("OPENROUTER_API_KEY")
-        or os.getenv("EMBEDDING_API_KEY")
-        or os.getenv("OPENAI_API_KEY")
-    )
+    api_key = os.getenv("EMBEDDING_API_KEY") or os.getenv("OPENAI_API_KEY")
     if not api_key:
         return None
     try:
@@ -45,14 +51,31 @@ def _get_chat_client():
     ))
 
 
+_SYSTEM_PROMPT = """You are a Python data analyst. You write pandas code to add linkage columns that connect a domain table to other domains.
+
+RULES:
+1. You receive a DataFrame `df` (the L2 categorized table). It has various columns including a 'value' column and category columns.
+2. Your code MUST produce a variable `linked_df` that is a copy of `df` with new columns added.
+3. Start with `linked_df = df.copy()`.
+4. Add columns that create cross-domain linkages: computed ratios, derived categories, rank-based groupings, interaction terms between existing columns.
+5. ALWAYS end categorical columns with .fillna('uncategorized').astype(str).
+6. You have `df`, `pd`, and `np` available. The code runs via exec().
+7. Respond ONLY with valid JSON, no markdown.
+
+CRITICAL NAMING RULES — the user is non-technical:
+8. Column names MUST be plain, descriptive English (or match the user's language). Use names like 'price_level', 'size_group', 'above_average', 'share_of_total'.
+9. NEVER use abstract business jargon like 'client_segment', 'financial_view', 'segment_performance_ratio', 'cross_domain_tier', 'quartile_segment_interaction'.
+10. Each new column name should clearly describe WHAT it measures. A non-programmer should understand the column name without explanation.
+11. ONLY derive columns from data that actually exists in df. Never invent data that is not present. If the user asks to link to external data (e.g., World Bank indicators), explain in the explanation field that external data must be imported first — do NOT fabricate columns to simulate it."""
+
+
 def _call_llm(client_tuple, prompt: str) -> str:
-    _sys = "You help users link their data to other domains. Write plain language, no jargon. Respond only with JSON."
     kind, client = client_tuple
     if kind == "anthropic":
         response = client.messages.create(
             model="claude-sonnet-4-20250514",
             max_tokens=1024,
-            system=_sys,
+            system=_SYSTEM_PROMPT,
             messages=[{"role": "user", "content": prompt}],
         )
         content = response.content[0].text
@@ -60,7 +83,7 @@ def _call_llm(client_tuple, prompt: str) -> str:
         response = client.chat.completions.create(
             model=os.getenv("LINKAGE_SUGGEST_MODEL", _CHAT_MODEL),
             messages=[
-                {"role": "system", "content": _sys},
+                {"role": "system", "content": _SYSTEM_PROMPT},
                 {"role": "user", "content": prompt},
             ],
             temperature=0.3,
@@ -84,50 +107,69 @@ def suggest_linkage(
     available_dimensions: List[str],
     intent: str = "",
 ) -> Dict[str, Any]:
-    """Suggest how to link the L2 table into an L3 graph."""
+    """Ask the LLM for executable Python code to link the L2 table for L2->L3 ascent."""
     client = _get_chat_client()
 
     if client is None:
         return {
-            "proposed_dimensions": available_dimensions[:2] if available_dimensions else [],
-            "proposed_relationships": [],
-            "explanation": "Link the table to other domains to test your insight.",
+            "code": "linked_df = df.copy()\nlinked_df['linkage_group'] = np.where(linked_df['value'] > linked_df['value'].median(), 'above average', 'below average')",
+            "proposed_columns": ["value_level"],
+            "explanation": "Split values into above/below average groups based on the median.",
+            "graph_description": "Your table with an additional column showing whether each value is above or below the average.",
             "confidence": "heuristic",
-            "available_dimensions": available_dimensions,
             "error": None,
         }
 
-    prompt = f"""A user has a categorized table and wants to link it to other data domains.
+    columns_info = json.dumps(table_info.get("columns", []))
+    categories_info = json.dumps(table_info.get("categories", []))
+    dtypes_info = json.dumps(table_info.get("dtypes", {}))
+
+    prompt = f"""A user has a categorized table (L2) and wants to add computed columns that help evaluate their insight from different angles.
 
 ## The Table
-Columns: {json.dumps(table_info.get('columns', []))}
+Columns: {columns_info}
+Column types: {dtypes_info}
 Rows: {table_info.get('row_count', 'unknown')}
-Categories: {json.dumps(table_info.get('categories', []))}
+Categories: {categories_info}
 
-## Available Dimensions to Add
-{json.dumps(available_dimensions, indent=2) if available_dimensions else "No pre-registered dimensions. Suggest what external data would strengthen the analysis."}
+IMPORTANT: Only use numeric operations (mean, sum, rank, qcut) on NUMERIC columns (int64, float64).
+String/object columns can only be used for groupby keys, value_counts, or categorical mapping — NEVER for arithmetic.
 
 ## User's Intent
-{intent if intent else "Not specified — suggest the most useful linkages."}
+{intent if intent else "Not specified -- suggest the most useful computed columns."}
 
-## What's happening (from the paper)
-L2→L3 "amplifies inter-domain linkage at the cost of domain isolation."
-The user trades focus on one coherent domain for connecting to OTHER domains.
-This is the "evaluation" stage: putting the insight on trial by bringing in external evidence.
+## What's happening
+The user has grouped their data and now wants to evaluate their insight by looking at it from additional angles.
+This means computing NEW columns from the EXISTING data — such as ranks, shares, ratios between existing columns, or group-level statistics.
 
-For example, if the user found that some schools perform better, L2→L3 would link school performance
-to school size, location, or funding — testing WHETHER the pattern holds against other variables.
+CRITICAL: You must ONLY use columns that exist in df. If the user mentions external data (World Bank, population data, GDP, etc.),
+do NOT invent fake columns. Instead, compute what you can from the existing data and explain in the explanation field
+that the user should import external datasets first via the search function if they want to cross-reference.
 
 ## Your Task
-Suggest 1-3 dimensions or relationships to add. These should help the user TEST their insight
-by connecting to a different data domain.
+Write Python code that:
+1. Starts with `linked_df = df.copy()`
+2. Adds new columns to `linked_df` computed from existing data
+3. These can be: ranks, shares of total, group averages, ratios between existing numeric columns, percentile positions
+
+NAMING: Use plain, descriptive names that a non-technical user would understand:
+- Good: 'rank', 'share_of_total', 'above_average', 'price_level', 'group_average'
+- Bad: 'cross_domain_tier', 'segment_performance_ratio', 'quartile_segment_interaction'
+
+Example:
+```
+linked_df = df.copy()
+linked_df['rank'] = linked_df['value'].rank(ascending=False).astype(int)
+linked_df['share_of_total'] = (linked_df['value'] / linked_df['value'].sum() * 100).round(1)
+linked_df['level'] = pd.qcut(linked_df['value'], q=3, labels=['low', 'medium', 'high'], duplicates='drop').fillna('uncategorized').astype(str)
+```
 
 Respond in JSON:
 {{
-  "proposed_dimensions": ["dimension1", "dimension2"],
-  "proposed_relationships": ["relationship between entities"],
-  "explanation": "2-3 sentences explaining how this linkage helps test the user's insight.",
-  "graph_description": "What the resulting knowledge graph will show"
+  "code": "Python code that creates linked_df from df",
+  "proposed_columns": ["names of new columns added"],
+  "explanation": "2-3 sentences in plain language explaining what each new column shows and how it helps answer the user's question. If the user asked for external data, mention that they need to import it first.",
+  "graph_description": "What the resulting table will show"
 }}"""
 
     try:
@@ -136,20 +178,57 @@ Respond in JSON:
     except Exception as exc:
         logger.warning("Linkage suggestion failed: %s", exc)
         return {
-            "proposed_dimensions": available_dimensions[:2] if available_dimensions else [],
-            "proposed_relationships": [],
-            "explanation": "Link to other domains to test your insight.",
+            "code": "linked_df = df.copy()\nlinked_df['linkage_group'] = np.where(linked_df['value'] > linked_df['value'].median(), 'above average', 'below average')",
+            "proposed_columns": ["value_level"],
+            "explanation": "Split values into above/below average groups based on the median.",
+            "graph_description": "Your table with an additional column showing whether each value is above or below the average.",
             "confidence": "heuristic",
-            "available_dimensions": available_dimensions,
             "error": None,
         }
 
     return {
-        "proposed_dimensions": result.get("proposed_dimensions", []),
-        "proposed_relationships": result.get("proposed_relationships", []),
+        "code": result.get("code", ""),
+        "proposed_columns": result.get("proposed_columns", []),
         "explanation": result.get("explanation", ""),
-        "confidence": "high",
         "graph_description": result.get("graph_description", ""),
-        "available_dimensions": available_dimensions,
+        "confidence": "high",
         "error": None,
     }
+
+
+def execute_linkage_code(df: pd.DataFrame, code: str) -> pd.DataFrame:
+    """Execute AI's linkage code on the L2 DataFrame."""
+    import numpy as np
+
+    logger.warning("EXECUTE-LINKAGE: df shape=%s columns=%s", df.shape, list(df.columns))
+    logger.warning("EXECUTE-LINKAGE: code (first 400):\n%s", code[:400])
+
+    namespace = {"df": df, "pd": pd, "np": np}
+    exec(code, namespace)
+
+    linked_df = namespace.get("linked_df")
+    if linked_df is None:
+        raise ValueError("Code did not produce a 'linked_df' variable.")
+    if not isinstance(linked_df, pd.DataFrame):
+        raise ValueError(f"'linked_df' is not a DataFrame, got {type(linked_df).__name__}.")
+
+    logger.warning("EXECUTE-LINKAGE: linked_df shape=%s columns=%s", linked_df.shape, list(linked_df.columns))
+
+    # Clean up new categorical columns
+    original_cols = set(df.columns)
+    for col in linked_df.columns:
+        if col in original_cols:
+            continue
+        s = linked_df[col]
+        if s.dtype == object or hasattr(s, "cat"):
+            try:
+                if hasattr(s, "cat"):
+                    if "uncategorized" not in s.cat.categories:
+                        s = s.cat.add_categories("uncategorized")
+                    linked_df[col] = s.fillna("uncategorized").astype(str)
+                else:
+                    linked_df[col] = s.fillna("uncategorized").astype(str)
+            except Exception:
+                linked_df[col] = linked_df[col].astype(str).replace("nan", "uncategorized")
+
+    return linked_df

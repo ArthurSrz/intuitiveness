@@ -14,7 +14,7 @@ interface InlineEdgeProps {
   phase?: "descent" | "ascent";
 }
 
-export function L1Vector({ node, edgeProps, sessionId, onConfirm }: { node: NodeDetail; edgeProps?: InlineEdgeProps; sessionId?: string; onConfirm?: () => void }) {
+export function L1Vector({ node, edgeProps, sessionId, onConfirm, phase, initialIntent }: { node: NodeDetail; edgeProps?: InlineEdgeProps; sessionId?: string; onConfirm?: () => void; phase?: "descent" | "ascent"; initialIntent?: string }) {
   const entries = decodeVector(node.payload);
   const values = entries.map((e) => e.value);
   const max = values.length ? Math.max(...values) : 1;
@@ -22,7 +22,7 @@ export function L1Vector({ node, edgeProps, sessionId, onConfirm }: { node: Node
   const metricLabel =
     (typeof node.summary?.metric_label === "string" && node.summary.metric_label) ||
     node.decision_description ||
-    "Feature vector";
+    "Values list";
 
   return (
     <>
@@ -30,7 +30,7 @@ export function L1Vector({ node, edgeProps, sessionId, onConfirm }: { node: Node
       <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 16 }}>
         <span className="t-label">{metricLabel}</span>
         <span className="t-meta" style={{ marginLeft: "auto" }}>
-          one scalar per entity · <span className="mono">{entries.length} dims</span>
+          one value per item · <span className="mono">{entries.length} items</span>
         </span>
       </div>
 
@@ -74,8 +74,8 @@ export function L1Vector({ node, edgeProps, sessionId, onConfirm }: { node: Node
     </div>
     {sessionId && (
       <>
-        <AggregateButton sessionId={sessionId} onConfirm={onConfirm} />
-        <AddDimensionsButton sessionId={sessionId} onConfirm={onConfirm} />
+        {phase !== "ascent" && <AggregateButton sessionId={sessionId} onConfirm={onConfirm} />}
+        {phase !== "descent" && <AddDimensionsButton sessionId={sessionId} onConfirm={onConfirm} initialIntent={initialIntent} />}
       </>
     )}
     </>

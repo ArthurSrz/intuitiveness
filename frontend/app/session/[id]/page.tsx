@@ -314,6 +314,8 @@ export default function SessionPage({ params }: { params: Promise<{ id: string }
   const mutationError = (descend.error ?? ascend.error ?? timeTravel.error) as ApiError | null;
   const stats = buildStats(session.data, shownDatum, phase, currentLevel);
   const navState: "entry" | "exploring" = stepsTaken === 0 ? "entry" : "exploring";
+  const [intentText, setIntentText] = useState("");
+
   const copy = LEVEL_COPY[phase === "ascent" ? "ascent" : "descent"][currentLevel];
 
   return (
@@ -396,7 +398,7 @@ export default function SessionPage({ params }: { params: Promise<{ id: string }
                   {stepIndex === 5 ? (
                     <div style={{ display: "flex", flexDirection: "column", gap: "var(--gap)" }}>
                       {node.data && <L0Datum node={node.data} sessionId={id} />}
-                      <IntentCard value={intentId} onChange={setIntentId} active sessionId={id} />
+                      <IntentCard value={intentId} onChange={setIntentId} onTextChange={setIntentText} active sessionId={id} />
                     </div>
                   ) : node.isLoading || !node.data ? (
                     <StagePlaceholder />
@@ -407,6 +409,8 @@ export default function SessionPage({ params }: { params: Promise<{ id: string }
                       onAddSource={currentLevel === 4 ? () => setAddSourcePanel(true) : undefined}
                       sessionId={id}
                       onConnect={invalidate}
+                      phase={step.phase === "pivot" ? "ascent" : step.phase}
+                      initialIntent={intentText}
                     />
                   )}
                 </div>
@@ -416,6 +420,7 @@ export default function SessionPage({ params }: { params: Promise<{ id: string }
                   onPrev={guidedPrev}
                   onNext={guidedNext}
                   pending={pending}
+                  nextDisabled={stepIndex === 6 || stepIndex === 7}
                   lastAction={{ label: "Export dataset", onClick: () => void exportDataset() }}
                 />
               </>
@@ -523,13 +528,14 @@ export default function SessionPage({ params }: { params: Promise<{ id: string }
             <IntentCard
               value={intentId}
               onChange={setIntentId}
+              onTextChange={setIntentText}
               active={mode === "explore" ? phase === "ascent" : true}
               sessionId={id}
               locked={phase === "ascent" && !!intentId && intentId !== ""}
             />
           )}
           <CoreCard reached={coreReached || seenDatum != null} datum={shownDatum ?? undefined} />
-          <JourneyCard stats={stats} />
+          <JourneyCard stats={stats} phase={phase} />
         </aside>
       )}
 

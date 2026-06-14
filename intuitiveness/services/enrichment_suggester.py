@@ -1,7 +1,8 @@
 """
-LLM-powered Enrichment Suggestion for L0→L1 ascent.
+LLM-powered Enrichment Code for L0→L1 ascent.
 
-AI sees the datum + parent data and suggests how to rebuild
+"Amplifies variation along a dimension at the cost of atomic isolation."
+AI sees the datum + parent data and writes Python code that rebuilds
 the vector with purpose, guided by the user's intent.
 """
 
@@ -20,6 +21,17 @@ _CHAT_MODEL = "anthropic/claude-sonnet-4"
 
 
 def _get_chat_client():
+    # OpenRouter first (preferred), then Anthropic as fallback
+    or_key = os.getenv("OPENROUTER_API_KEY")
+    if or_key:
+        try:
+            from openai import OpenAI
+            return ("openai", OpenAI(
+                api_key=or_key,
+                base_url=os.getenv("OPENROUTER_BASE_URL", "https://openrouter.ai/api/v1"),
+            ))
+        except ImportError:
+            pass
     anthropic_key = os.getenv("ANTHROPIC_API_KEY")
     if anthropic_key:
         try:
@@ -27,11 +39,7 @@ def _get_chat_client():
             return ("anthropic", anthropic.Anthropic(api_key=anthropic_key))
         except ImportError:
             pass
-    api_key = (
-        os.getenv("OPENROUTER_API_KEY")
-        or os.getenv("EMBEDDING_API_KEY")
-        or os.getenv("OPENAI_API_KEY")
-    )
+    api_key = os.getenv("EMBEDDING_API_KEY") or os.getenv("OPENAI_API_KEY")
     if not api_key:
         return None
     try:
@@ -44,14 +52,22 @@ def _get_chat_client():
     ))
 
 
+_SYSTEM_PROMPT = """You are a Python data analyst. You write pandas code to rebuild a vector from a single datum value.
+
+RULES:
+1. You receive `scalar` (a single numeric value — the L0 datum) and `parent_series` (a pd.Series of the original L1 data).
+2. Your code MUST produce a variable called `series` (a pd.Series).
+3. You have `scalar`, `parent_series`, `pd`, and `np` available.
+4. Respond ONLY with valid JSON, no markdown."""
+
+
 def _call_llm(client_tuple, prompt: str) -> str:
-    _sys = "You help rebuild data from a single value back into a vector. Write plain language, no jargon. Respond only with JSON."
     kind, client = client_tuple
     if kind == "anthropic":
         response = client.messages.create(
             model="claude-sonnet-4-20250514",
             max_tokens=1024,
-            system=_sys,
+            system=_SYSTEM_PROMPT,
             messages=[{"role": "user", "content": prompt}],
         )
         content = response.content[0].text
@@ -59,7 +75,7 @@ def _call_llm(client_tuple, prompt: str) -> str:
         response = client.chat.completions.create(
             model=os.getenv("ENRICHMENT_SUGGEST_MODEL", _CHAT_MODEL),
             messages=[
-                {"role": "system", "content": _sys},
+                {"role": "system", "content": _SYSTEM_PROMPT},
                 {"role": "user", "content": prompt},
             ],
             temperature=0.3,
@@ -74,15 +90,15 @@ def _call_llm(client_tuple, prompt: str) -> str:
 
 
 def suggest_enrichment(datum_value: Any, parent_info: Dict[str, Any], intent: str = "") -> Dict[str, Any]:
-    """Suggest how to rebuild a vector from the L0 datum."""
+    """AI writes code to rebuild a vector from the L0 datum for L0->L1 ascent."""
     client = _get_chat_client()
 
     if client is None:
         return {
-            "method": "source_expansion",
+            "code": "series = parent_series.copy()",
             "explanation": "Rebuild the full vector from the parent data.",
             "confidence": "heuristic",
-            "preview_length": parent_info.get("parent_length", 0),
+            "preview_description": "Restoring the original vector as-is.",
             "error": None,
         }
 
@@ -98,24 +114,26 @@ Number of entities: {parent_info.get('parent_length', 'unknown')}
 {intent if intent else "Not specified — suggest the most useful way to rebuild."}
 
 ## What's happening (from the paper)
-The ascent REVERSES the descent. L0→L1 "amplifies variation along a dimension at the cost of atomic isolation."
+The ascent REVERSES the descent. L0->L1 "amplifies variation along a dimension at the cost of atomic isolation."
 The user trades their certainty about one number for seeing how each entity varies — guided by their intent.
 
 ## Your Task
-The user wants to unfold this single value back into a vector — one number per entity.
+Write Python code that produces a variable `series` (a pd.Series) from `scalar` (the L0 value) and `parent_series` (the original L1 data).
 This is the "incubation" stage: the user makes unusual connections by seeing individual variation.
 
-Methods available:
-- source_expansion: restore the original vector (each entity's raw value)
-- normalize: rebuild as percentages relative to the datum (who's above/below average?)
-- rank: rebuild as rankings (1st, 2nd, 3rd...)
-- distance: rebuild as distance from the datum (how far is each entity from the center?)
+You have `scalar`, `parent_series`, `pd`, and `np`. The code runs via exec().
 
-Choose the method that best serves the user's INTENT. If they want to compare, use normalize. If they want to find the best/worst, use rank.
+Examples of what the code could do:
+- Source expansion (restore the original vector): `series = parent_series.copy()`
+- Normalize (percentages relative to the datum): `series = parent_series / scalar * 100`
+- Rank (1st, 2nd, 3rd...): `series = parent_series.rank(ascending=False)`
+- Distance (how far from the center): `series = (parent_series - scalar).abs()`
+
+Choose the approach that best serves the user's INTENT. If they want to compare, use normalize. If they want to find the best/worst, use rank.
 
 Respond in JSON:
 {{
-  "method": "source_expansion or normalize or rank or distance",
+  "code": "Python code that produces a `series` variable",
   "explanation": "2-3 sentences in plain language explaining what the user will see and why it helps answer their question.",
   "preview_description": "One sentence describing the rebuilt vector"
 }}"""
@@ -126,18 +144,46 @@ Respond in JSON:
     except Exception as exc:
         logger.warning("Enrichment suggestion failed: %s", exc)
         return {
-            "method": "source_expansion",
+            "code": "series = parent_series.copy()",
             "explanation": "Rebuild the full vector from the parent data.",
             "confidence": "heuristic",
-            "preview_length": parent_info.get("parent_length", 0),
+            "preview_description": "Restoring the original vector as-is.",
             "error": None,
         }
 
     return {
-        "method": result.get("method", "source_expansion"),
+        "code": result.get("code", "series = parent_series.copy()"),
         "explanation": result.get("explanation", ""),
         "confidence": "high",
-        "preview_length": parent_info.get("parent_length", 0),
         "preview_description": result.get("preview_description", ""),
         "error": None,
     }
+
+
+def execute_enrichment_code(scalar: Any, parent_series: pd.Series, code: str) -> pd.Series:
+    """Execute AI's enrichment code on the real data."""
+    import numpy as np
+
+    logger.warning("EXECUTE-ENRICHMENT: scalar=%s parent_series len=%d code=%s",
+                   scalar, len(parent_series), code[:200])
+
+    namespace = {
+        "scalar": scalar,
+        "parent_series": parent_series.copy(),
+        "pd": pd,
+        "np": np,
+    }
+
+    try:
+        exec(code, namespace)
+    except Exception as exec_exc:
+        logger.warning("EXECUTE-ENRICHMENT: exec FAILED: %s", exec_exc, exc_info=True)
+        raise
+
+    series = namespace.get("series")
+    if series is None:
+        raise ValueError("Code did not produce a `series` variable.")
+    if not isinstance(series, pd.Series):
+        series = pd.Series(series)
+
+    return series

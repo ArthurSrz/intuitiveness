@@ -16,7 +16,7 @@ interface InlineEdgeProps {
   phase?: "descent" | "ascent";
 }
 
-export function L0Datum({ node, edgeProps, sessionId, onConfirm }: { node: NodeDetail; edgeProps?: InlineEdgeProps; sessionId?: string; onConfirm?: () => void }) {
+export function L0Datum({ node, edgeProps, sessionId, onConfirm, phase, initialIntent }: { node: NodeDetail; edgeProps?: InlineEdgeProps; sessionId?: string; onConfirm?: () => void; phase?: "descent" | "ascent"; initialIntent?: string }) {
   const decoded = decodeValue(node.payload);
   const value = decoded != null ? decoded : (node.summary?.value as unknown);
   const display =
@@ -56,7 +56,7 @@ export function L0Datum({ node, edgeProps, sessionId, onConfirm }: { node: NodeD
     >
       <span className="chip" style={{ marginBottom: 14 }}>
         <Icon name="core" size={14} />
-        Atomic certainty
+        Your summary number
       </span>
       <div style={{ position: "relative", display: "inline-flex", alignItems: "center", justifyContent: "center" }}>
         <div
@@ -75,31 +75,49 @@ export function L0Datum({ node, edgeProps, sessionId, onConfirm }: { node: NodeD
         </div>
       </div>
       <div className="t-section" style={{ marginTop: 12, fontSize: 16 }}>
-        {aiTitle || "The single truth underneath all the data"}
+        {aiTitle || "One number that captures the big picture"}
       </div>
       <div className="t-meta" style={{ maxWidth: 420, lineHeight: 1.5 }}>
         {aiDesc
           ? aiDesc
           : aggregation && parentName
-            ? `Computed as the ${aggregation} of "${parentName}" — every row, column, entity and category traded away to reach this one certain value.`
-            : "Every row, column, entity and category in the source dataset reduces to this one atomic value. The descent is complete."}
+            ? `Calculated as the ${aggregation} of "${parentName}" across all rows in your data.`
+            : "All your data has been simplified down to this single number. You can now use it as a starting point to explore further."}
       </div>
-      <div style={{ display: "flex", gap: 10, marginTop: 20, alignItems: "center" }}>
-        <span className="chip mono">heterogeneous sources</span>
+      <div style={{ display: "flex", gap: 10, marginTop: 20, alignItems: "center", flexWrap: "wrap" }}>
+        <span className="chip mono">raw files</span>
         <Icon name="arrowRight" size={14} style={{ color: "var(--text-2)" }} />
-        <span className="chip mono">graph</span>
+        <span className="chip mono">connected</span>
         <Icon name="arrowRight" size={14} style={{ color: "var(--text-2)" }} />
-        <span className="chip mono">domain</span>
+        <span className="chip mono">grouped</span>
         <Icon name="arrowRight" size={14} style={{ color: "var(--text-2)" }} />
-        <span className="chip mono">vector</span>
+        <span className="chip mono">one value per item</span>
         <Icon name="arrowRight" size={14} style={{ color: "var(--text-2)" }} />
         <span className="chip mono" style={{ background: "var(--blue)", color: "#fff" }}>
           {display}
         </span>
       </div>
     </div>
+    {sessionId && phase === "ascent" && !initialIntent && (
+      <div
+        className="card"
+        style={{
+          padding: "16px 20px",
+          background: "var(--blue-soft)",
+          border: "1.5px solid var(--blue)",
+          borderRadius: "var(--radius-md)",
+          marginBottom: 8,
+        }}
+      >
+        <p style={{ margin: 0, fontSize: 14, lineHeight: 1.6, color: "var(--text)" }}>
+          <strong style={{ color: "var(--blue)" }}>What happens now?</strong>{" "}
+          You have found your key number. Now let us rebuild the data around a question <em>you</em> care about.
+          Instead of simplifying, we will add detail back — but only what is relevant to your question.
+        </p>
+      </div>
+    )}
     {sessionId && (
-      <EnrichButton sessionId={sessionId} onConfirm={onConfirm} />
+      <EnrichButton sessionId={sessionId} onConfirm={onConfirm} initialIntent={initialIntent} />
     )}
     </>
   );
