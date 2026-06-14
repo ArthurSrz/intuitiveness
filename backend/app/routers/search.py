@@ -1411,3 +1411,172 @@ def entity_match(
         return g
 
     return svc.descend(session_id, params={"builder_func": builder_func})
+
+
+# --------------------------------------------------------------------------- #
+# Catalog-powered ascent: search + merge external data during L2→L3
+# --------------------------------------------------------------------------- #
+
+class CatalogMatchResult(BaseModel):
+    source: str
+    id: str
+    name: str
+    relevance_reason: str
+    database_id: Optional[str] = None
+    organization: Optional[str] = None
+
+
+class CatalogSuggestResponse(BaseModel):
+    world_bank: List[CatalogMatchResult] = []
+    datagouv: List[CatalogMatchResult] = []
+    explanation: str = ""
+    error: Optional[str] = None
+
+
+@router.post("/sessions/{session_id}/linkage-catalog-suggest", response_model=CatalogSuggestResponse)
+def linkage_catalog_suggest(
+    session_id: str,
+    body: AnalyzeRequest = AnalyzeRequest(),
+    svc: SessionService = Depends(get_session_service),
+) -> CatalogSuggestResponse:
+    """Search World Bank + data.gouv.fr for datasets that relate to the user's L2 data."""
+    from intuitiveness.services.linkage_suggester import search_catalog_for_enrichment
+
+    state = svc.get(session_id)
+    if state["current_level"] != 2:
+        raise HTTPException(status_code=409, detail="Catalog search is only available at L2.")
+
+    session = svc._load(session_id)
+    df = session.current_dataset.get_data()
+    table_info = {
+        "columns": list(df.columns) if hasattr(df, "columns") else [],
+        "dtypes": {col: str(df[col].dtype) for col in df.columns} if hasattr(df, "columns") else {},
+        "row_count": len(df) if hasattr(df, "__len__") else 0,
+    }
+
+    try:
+        matches = search_catalog_for_enrichment(table_info, intent=body.intent)
+    except Exception as exc:
+        logger.warning("Catalog search failed: %s", exc)
+        return CatalogSuggestResponse(error=str(exc))
+
+    wb_results = [
+        CatalogMatchResult(
+            source=m.source, id=m.id, name=m.name,
+            relevance_reason=m.relevance_reason,
+            database_id=m.database_id,
+        )
+        for m in matches.get("world_bank", [])
+    ]
+    dg_results = [
+        CatalogMatchResult(
+            source=m.source, id=m.id, name=m.name,
+            relevance_reason=m.relevance_reason,
+            organization=m.organization,
+        )
+        for m in matches.get("datagouv", [])
+    ]
+
+    total = len(wb_results) + len(dg_results)
+    explanation = (
+        f"Found {total} related datasets that could enrich your data."
+        if total > 0
+        else "No related datasets found in public catalogs for this data."
+    )
+
+    return CatalogSuggestResponse(
+        world_bank=wb_results,
+        datagouv=dg_results,
+        explanation=explanation,
+    )
+
+
+class CatalogSource(BaseModel):
+    type: str  # "worldbank" or "datagouv"
+    id: str
+    database_id: Optional[str] = None
+
+
+class CatalogMergeRequest(BaseModel):
+    sources: List[CatalogSource]
+    intent: str = ""
+
+
+@router.post("/sessions/{session_id}/linkage-catalog-merge", response_model=SessionState)
+def linkage_catalog_merge(
+    session_id: str,
+    body: CatalogMergeRequest,
+    svc: SessionService = Depends(get_session_service),
+) -> SessionState:
+    """Fetch external datasets, merge with L2 data, and ascend to L3."""
+    from intuitiveness.services.linkage_suggester import suggest_linkage, execute_linkage_code
+
+    state = svc.get(session_id)
+    if state["current_level"] != 2:
+        raise HTTPException(status_code=409, detail="Catalog merge is only available at L2.")
+
+    if not body.sources:
+        raise HTTPException(status_code=422, detail="No catalog sources selected.")
+
+    session = svc._load(session_id)
+    df = session.current_dataset.get_data()
+
+    external_frames: List[pd.DataFrame] = []
+    external_names: List[str] = []
+
+    for src in body.sources:
+        if src.type == "worldbank" and src.database_id:
+            wb_body = ImportWBRequest(
+                indicator_id=src.id,
+                database_id=src.database_id,
+                indicator_name=src.id,
+            )
+            ext_df, ext_name = _fetch_wb_indicator(wb_body)
+            external_frames.append(ext_df)
+            external_names.append(ext_name)
+        elif src.type == "datagouv":
+            url = f"https://www.data.gouv.fr/fr/datasets/{src.id}/"
+            try:
+                ext_df, ext_name = _fetch_csv_as_df(url, None, 100)
+                external_frames.append(ext_df)
+                external_names.append(ext_name)
+            except Exception as exc:
+                logger.warning("Failed to fetch data.gouv.fr dataset %s: %s", src.id, exc)
+
+    if not external_frames:
+        raise HTTPException(status_code=422, detail="Could not fetch any of the selected datasets.")
+
+    combined_sibling = pd.concat(external_frames, axis=1, ignore_index=False)
+    combined_sibling = combined_sibling.loc[:, ~combined_sibling.columns.duplicated()]
+
+    table_info = {
+        "columns": list(df.columns) if hasattr(df, "columns") else [],
+        "dtypes": {col: str(df[col].dtype) for col in df.columns} if hasattr(df, "columns") else {},
+        "row_count": len(df) if hasattr(df, "__len__") else 0,
+        "categories": list(df["category"].unique()) if "category" in getattr(df, "columns", []) else [],
+    }
+
+    sibling_context = {
+        "sibling_columns": list(combined_sibling.columns),
+        "l3_columns": list(combined_sibling.columns),
+        "source_names": external_names,
+    }
+
+    result = suggest_linkage(
+        table_info, [], intent=body.intent, sibling_context=sibling_context,
+    )
+
+    code = result.get("code", "")
+    if not code:
+        raise HTTPException(status_code=422, detail="Could not generate merge code.")
+
+    try:
+        linked_df = execute_linkage_code(df, code, sibling_df=combined_sibling)
+    except Exception as e:
+        raise HTTPException(status_code=422, detail=f"Merge execution failed: {str(e)}")
+
+    logger.warning("CATALOG-MERGE: %d cols, %d rows from %d external sources",
+                    len(linked_df.columns), len(linked_df), len(external_frames))
+    session.ascend(prebuilt_dataframe=linked_df)
+    svc._save(session)
+    return svc.state_of(session)

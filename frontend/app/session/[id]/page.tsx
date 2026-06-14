@@ -697,7 +697,7 @@ function buildStats(
     stats.push({ k: "Reduction", v: `${cx.reduction}%`, accent: true });
   }
 
-  stats.push({ k: "Level", v: NAV_LEVELS[level].code });
+  stats.push({ k: "Level", v: NAV_LEVELS[level].name });
   stats.push({ k: "Core datum", v: datum ?? "—" });
   stats.push({
     k: "Phase",

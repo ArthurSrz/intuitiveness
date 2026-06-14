@@ -4,13 +4,17 @@ LLM-powered Linkage Code for L2->L3 ascent.
 "Amplifies inter-domain linkage at the cost of domain isolation."
 AI sees the L2 table + user intent, writes Python code that adds
 linkage columns to connect domains in the evaluation stage.
+
+Enhanced with catalog search: proactively searches World Bank and
+data.gouv.fr for datasets that complement the user's data.
 """
 
 from __future__ import annotations
 
 import json
 import logging
-from typing import Any, Dict, List
+from dataclasses import dataclass, field
+from typing import Any, Dict, List, Optional
 
 import pandas as pd
 
@@ -18,6 +22,113 @@ from intuitiveness.services.llm_client import call_llm_structured
 from intuitiveness.services.transition_models import LinkageSuggestion
 
 logger = logging.getLogger(__name__)
+
+
+@dataclass
+class CatalogMatch:
+    source: str  # "worldbank" or "datagouv"
+    id: str
+    name: str
+    relevance_reason: str
+    database_id: Optional[str] = None
+    organization: Optional[str] = None
+
+
+def _extract_search_terms(columns: List[str], intent: str) -> List[str]:
+    """Derive search terms from table columns and user intent."""
+    stop_words = {
+        "value", "category", "level", "group", "rank", "index", "id",
+        "count", "total", "above", "below", "high", "low", "medium",
+        "the", "a", "an", "is", "are", "to", "for", "and", "or", "of",
+        "in", "on", "with", "by", "from", "at", "that", "this", "which",
+        "le", "la", "les", "de", "des", "du", "un", "une", "et", "ou",
+        "en", "dans", "pour", "avec", "sur", "par", "à",
+    }
+    terms = []
+    if intent:
+        words = intent.replace("?", "").replace(",", " ").split()
+        terms.extend(w.strip() for w in words if len(w) > 2 and w.lower() not in stop_words)
+    for col in columns:
+        parts = col.replace("_", " ").split()
+        terms.extend(p for p in parts if len(p) > 2 and p.lower() not in stop_words)
+    seen = set()
+    unique = []
+    for t in terms:
+        tl = t.lower()
+        if tl not in seen:
+            seen.add(tl)
+            unique.append(t)
+    return unique[:8]
+
+
+def search_catalog_for_enrichment(
+    table_info: Dict[str, Any],
+    intent: str = "",
+) -> Dict[str, List[CatalogMatch]]:
+    """Search World Bank and data.gouv.fr for datasets related to the user's data.
+
+    Returns candidate matches grouped by source. Does NOT fetch the actual data.
+    """
+    columns = table_info.get("columns", [])
+    search_terms = _extract_search_terms(columns, intent)
+
+    if not search_terms:
+        return {"world_bank": [], "datagouv": []}
+
+    wb_query = " ".join(search_terms[:4])
+    dg_query = " ".join(search_terms[:3])
+
+    wb_matches: List[CatalogMatch] = []
+    dg_matches: List[CatalogMatch] = []
+
+    try:
+        from intuitiveness.services.worldbank_service import WorldBankService
+        wb_svc = WorldBankService()
+        indicators = wb_svc.search_indicators(wb_query, max_results=5)
+        for ind in indicators:
+            wb_matches.append(CatalogMatch(
+                source="worldbank",
+                id=ind.id,
+                name=ind.name,
+                database_id=ind.database_id,
+                relevance_reason=f"Related to: {wb_query}",
+            ))
+    except Exception as exc:
+        logger.warning("World Bank catalog search failed: %s", exc)
+
+    try:
+        import requests
+        resp = requests.get(
+            "https://www.data.gouv.fr/api/1/datasets/",
+            params={"q": dg_query, "page_size": 15},
+            timeout=10,
+            headers={"Accept": "application/json"},
+        )
+        resp.raise_for_status()
+        data = resp.json()
+        for ds in data.get("data", []):
+            has_csv = any(
+                (r.get("format") or "").lower() == "csv"
+                for r in ds.get("resources", [])
+            )
+            if not has_csv:
+                continue
+            org = ds.get("organization") or {}
+            dg_matches.append(CatalogMatch(
+                source="datagouv",
+                id=ds["id"],
+                name=ds.get("title", "")[:120],
+                organization=org.get("name", "") if isinstance(org, dict) else "",
+                relevance_reason=f"Related to: {dg_query}",
+            ))
+            if len(dg_matches) >= 5:
+                break
+    except Exception as exc:
+        logger.warning("data.gouv.fr catalog search failed: %s", exc)
+
+    logger.info("Catalog search: %d WB, %d DG matches for terms=%s",
+                len(wb_matches), len(dg_matches), search_terms)
+    return {"world_bank": wb_matches, "datagouv": dg_matches}
 
 
 _SYSTEM_PROMPT = """You are a Python data analyst. You write pandas code to add linkage columns that connect a domain table to other domains.

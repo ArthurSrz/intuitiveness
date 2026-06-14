@@ -267,6 +267,16 @@ a {
   .stage-anim-up {
     animation: none !important;
   }
+  .gnode:hover {
+    transform: none !important;
+  }
+  .pill-btn:active {
+    transform: none !important;
+  }
+  * {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
 }
 
 /* node hover */

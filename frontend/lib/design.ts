@@ -17,11 +17,11 @@ export interface LevelMeta {
 }
 
 export const LEVELS: LevelMeta[] = [
-  { n: 4, code: "L4", name: "Your raw files", glyph: "table", tag: "All your data files, not yet connected" },
-  { n: 3, code: "L3", name: "Connected data", glyph: "graph", tag: "Files linked through shared columns" },
-  { n: 2, code: "L2", name: "Grouped table", glyph: "categories", tag: "Data organized into categories" },
-  { n: 1, code: "L1", name: "Values list", glyph: "vector", tag: "One number per item" },
-  { n: 0, code: "L0", name: "Summary number", glyph: "core", tag: "One number that captures the big picture" },
+  { n: 4, code: "L4", name: "Your raw files", glyph: "table", tag: "Everything you uploaded, just as it is" },
+  { n: 3, code: "L3", name: "Files talking to each other", glyph: "graph", tag: "We found what your files have in common" },
+  { n: 2, code: "L2", name: "Sorted into groups", glyph: "categories", tag: "Your data, organized so patterns pop out" },
+  { n: 1, code: "L1", name: "One number per item", glyph: "vector", tag: "Each item boiled down to a single value" },
+  { n: 0, code: "L0", name: "The big picture", glyph: "core", tag: "One number that tells the whole story" },
 ];
 
 /** Free-navigation level identities — the five granularity levels (paper §3). */
@@ -29,11 +29,11 @@ export const NAV_LEVELS: Record<
   number,
   { code: string; name: string; glyph: string; desc: string }
 > = {
-  4: { code: "L4", name: "Raw files", glyph: "table", desc: "Your data files, not yet connected" },
-  3: { code: "L3", name: "Connected", glyph: "graph", desc: "Files linked through shared columns" },
-  2: { code: "L2", name: "Grouped", glyph: "categories", desc: "One table, organized into categories" },
-  1: { code: "L1", name: "Values", glyph: "vector", desc: "One number per item" },
-  0: { code: "L0", name: "Summary", glyph: "core", desc: "One number that captures the big picture" },
+  4: { code: "L4", name: "Your files", glyph: "table", desc: "Everything you uploaded, just as it is" },
+  3: { code: "L3", name: "Connected", glyph: "graph", desc: "We found what your files have in common" },
+  2: { code: "L2", name: "Groups", glyph: "categories", desc: "Your data, organized so patterns pop out" },
+  1: { code: "L1", name: "Values", glyph: "vector", desc: "Each item boiled down to a single value" },
+  0: { code: "L0", name: "Big picture", glyph: "core", desc: "One number that tells the whole story" },
 };
 
 /** Guided-workflow steps — the FULL descent–ascent cycle: L4 → L0, then L0 → L3. */
@@ -49,17 +49,17 @@ export interface Step {
 
 export const STEPS: Step[] = [
   /* ---- descent: trade away complexity for certainty ---- */
-  { id: "upload", glyph: "dataset", title: "Load your data", level: "Step 1", phase: "descent", stageLevel: 4, question: "Start with your raw files. We will simplify them step by step." },
-  { id: "entities", glyph: "graph", title: "Find what connects your files", level: "Step 2", phase: "descent", stageLevel: 3, question: "The app looks for shared columns so your files can talk to each other." },
-  { id: "domains", glyph: "categories", title: "Group into categories", level: "Step 3", phase: "descent", stageLevel: 2, question: "Organize your data into meaningful groups for easier analysis." },
-  { id: "features", glyph: "vector", title: "Pick the key number", level: "Step 4", phase: "descent", stageLevel: 1, question: "Choose the single measurement that matters most to you." },
-  { id: "metric", glyph: "core", title: "Get the summary", level: "Step 5", phase: "descent", stageLevel: 0, question: "Compress everything into one number that captures the big picture." },
+  { id: "upload", glyph: "dataset", title: "Load your data", level: "Step 1", phase: "descent", stageLevel: 4, question: "Let's start with your raw files — we'll simplify them together, one step at a time." },
+  { id: "entities", glyph: "graph", title: "Find what connects your files", level: "Step 2", phase: "descent", stageLevel: 3, question: "We're looking for columns your files share so they can talk to each other." },
+  { id: "domains", glyph: "categories", title: "Group into categories", level: "Step 3", phase: "descent", stageLevel: 2, question: "Now let's organize your data into groups that make the patterns easier to see." },
+  { id: "features", glyph: "vector", title: "Pick the key number", level: "Step 4", phase: "descent", stageLevel: 1, question: "Which measurement matters most to you? Pick the one number you care about." },
+  { id: "metric", glyph: "core", title: "Get the summary", level: "Step 5", phase: "descent", stageLevel: 0, question: "Everything boils down to one number — here's the big picture." },
   /* ---- pivot: the core datum + your intent ---- */
-  { id: "intent", glyph: "intent", title: "Ask your question", level: "Pivot", phase: "pivot", stageLevel: 0, question: "You have one summary number. Now decide: what question do you want your data to answer?" },
+  { id: "intent", glyph: "intent", title: "Ask your question", level: "Pivot", phase: "pivot", stageLevel: 0, question: "You've got the summary. Now, what question do you want your data to answer?" },
   /* ---- ascent: rebuild only what your intent needs ---- */
-  { id: "rebuild", glyph: "vector", title: "Expand the details", level: "Step 6", phase: "ascent", stageLevel: 1, question: "Bring back individual values, but only the ones relevant to your question." },
-  { id: "split", glyph: "categories", title: "Compare groups", level: "Step 7", phase: "ascent", stageLevel: 2, question: "Split into groups so you can spot differences and patterns." },
-  { id: "link", glyph: "graph", title: "Bring in related data", level: "Step 8", phase: "ascent", stageLevel: 3, question: "Connect to other datasets to test whether your insight holds up." },
+  { id: "rebuild", glyph: "vector", title: "Expand the details", level: "Step 6", phase: "ascent", stageLevel: 1, question: "Let's bring back the individual values — only the ones that matter for your question." },
+  { id: "split", glyph: "categories", title: "Compare groups", level: "Step 7", phase: "ascent", stageLevel: 2, question: "Time to split into groups so you can spot who's ahead and who's behind." },
+  { id: "link", glyph: "graph", title: "Bring in related data", level: "Step 8", phase: "ascent", stageLevel: 3, question: "Let's pull in related datasets to see if your insight holds up in a bigger context." },
 ];
 
 /** Header copy keyed by phase + level. */
@@ -72,10 +72,10 @@ export const LEVEL_COPY: Record<"descent" | "ascent", Record<number, { title: st
     0: { title: "The big picture", sub: "Everything compressed into one number. This is your starting point for analysis." },
   },
   ascent: {
-    0: { title: "Your question", sub: "You have the summary. Now choose what question you want to answer — we will rebuild the data around it." },
-    1: { title: "Details restored", sub: "Individual values are back, but only the ones relevant to your question." },
-    2: { title: "Groups compared", sub: "Your data is split into groups so you can see differences and test your question." },
-    3: { title: "Related data added", sub: "Other datasets brought in to put your insight to the test." },
+    0: { title: "Your starting point", sub: "You've got one number that tells the whole story. Now pick a question — we'll rebuild the data to answer it." },
+    1: { title: "Seeing individual values", sub: "Each item's value is back. You can now see who's high, who's low, and where the interesting ones are." },
+    2: { title: "Comparing groups", sub: "Your data is organized into groups so you can see which ones stand out and why." },
+    3: { title: "The bigger picture", sub: "Related data from public catalogs has been connected, giving you context no single dataset could." },
   },
 };
 

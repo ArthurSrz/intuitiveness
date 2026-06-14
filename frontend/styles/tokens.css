@@ -30,7 +30,7 @@
   --surface: #f7f9f9;
   --surface-2: #f7f9f9;
   --text: #0f1419;
-  --text-2: #536471;
+  --text-2: #4a5568;
   --border: #eff3f4;
   --border-strong: #cfd9de;
   --success: #00ba7c;
@@ -132,4 +132,18 @@
 
   --color-surface: var(--bg);
   --color-surface-muted: var(--surface);
+}
+
+@media (prefers-contrast: more) {
+  :root {
+    --text-2: #374151;
+    --border: #d1d5db;
+    --border-strong: #9ca3af;
+    --neutral: #374151;
+  }
+  [data-theme="dark"] {
+    --text-2: #d1d5db;
+    --border: #4b5563;
+    --border-strong: #6b7280;
+  }
 }

@@ -4,6 +4,34 @@ import { useState } from "react";
 import { Icon } from "@/components/ui/Icon";
 import { apiPost } from "@/lib/api/client";
 
+function isFrench(text: string): boolean {
+  const frenchWords = /\b(les|des|dans|pour|avec|sur|qui|que|quoi|est|sont|comment|quels?|quel(?:le)?s?|où|ou)\b/i;
+  return frenchWords.test(text);
+}
+
+function PersonaCard({ icon, name, description }: { icon: string; name: string; description: string }) {
+  return (
+    <div
+      role="banner"
+      style={{
+        display: "flex",
+        alignItems: "center",
+        gap: 10,
+        padding: "10px 14px",
+        background: "var(--blue-soft-2)",
+        borderRadius: "var(--radius-md)",
+        marginBottom: 8,
+      }}
+    >
+      <span style={{ fontSize: 20 }} aria-hidden="true">{icon}</span>
+      <div>
+        <span style={{ fontWeight: 700, fontSize: 13, color: "var(--text)" }}>{name}</span>
+        <p style={{ margin: 0, fontSize: 12, color: "var(--text-2)", lineHeight: 1.4 }}>{description}</p>
+      </div>
+    </div>
+  );
+}
+
 interface EnrichmentAnalyzeResult {
   code: string;
   explanation: string;
@@ -73,6 +101,13 @@ export function EnrichButton({
   if (!result) {
     return (
       <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+        <PersonaCard
+          icon={"🔍"}
+          name="The Magnifier"
+          description={isFrench(intent)
+            ? "Je vais détailler chaque valeur pour vous montrer ce qui se cache derrière ce résumé."
+            : "I'm zooming in on each value so you can see the details behind that summary."}
+        />
         <input
           type="text"
           value={intent}
@@ -88,6 +123,7 @@ export function EnrichButton({
           className="card"
           onClick={analyze}
           disabled={analyzing}
+          aria-label="Expand summary into individual values"
           style={{
             padding: "14px 16px",
             display: "flex",
@@ -102,7 +138,7 @@ export function EnrichButton({
         >
           <Icon name="vector" size={16} />
           <span style={{ fontWeight: 600, color: "var(--blue)" }}>
-            {analyzing ? "Preparing your next view (this can take 15-30 seconds)..." : "Expand into detailed values"}
+            {analyzing ? <span role="status" aria-live="polite">Preparing your next view (this can take 15-30 seconds)...</span> : "See the individual values"}
           </span>
           <span className="chip" style={{ background: "var(--blue)", color: "#fff", fontSize: 10, padding: "2px 6px" }}>Next step
           </span>
@@ -136,7 +172,7 @@ export function EnrichButton({
       >
         <Icon name="vector" size={16} />
         <span style={{ fontWeight: 700, fontSize: 14, color: "var(--blue)" }}>
-          What you will see next
+          Here's what the Magnifier found
         </span>
         <button
           className="pill-btn ghost"
@@ -244,7 +280,7 @@ export function EnrichButton({
           onClick={confirm}
           style={{ height: 36, fontSize: 13 }}
         >
-          {confirming ? "Rebuilding..." : "Confirm and ascend to L1"}
+          {confirming ? <span role="status" aria-live="polite">Rebuilding...</span> : "Confirm and continue"}
         </button>
         {error && (
           <span style={{ color: "var(--error)", fontSize: 12 }}>{error}</span>

@@ -4,6 +4,34 @@ import { useState } from "react";
 import { Icon } from "@/components/ui/Icon";
 import { apiPost } from "@/lib/api/client";
 
+function isFrench(text: string): boolean {
+  const frenchWords = /\b(les|des|dans|pour|avec|sur|qui|que|quoi|est|sont|comment|quels?|quel(?:le)?s?|où|ou)\b/i;
+  return frenchWords.test(text);
+}
+
+function PersonaCard({ icon, name, description }: { icon: string; name: string; description: string }) {
+  return (
+    <div
+      role="banner"
+      style={{
+        display: "flex",
+        alignItems: "center",
+        gap: 10,
+        padding: "10px 14px",
+        background: "var(--blue-soft-2)",
+        borderRadius: "var(--radius-md)",
+        marginBottom: 8,
+      }}
+    >
+      <span style={{ fontSize: 20 }} aria-hidden="true">{icon}</span>
+      <div>
+        <span style={{ fontWeight: 700, fontSize: 13, color: "var(--text)" }}>{name}</span>
+        <p style={{ margin: 0, fontSize: 12, color: "var(--text-2)", lineHeight: 1.4 }}>{description}</p>
+      </div>
+    </div>
+  );
+}
+
 interface DimensionAnalyzeResult {
   explanation: string;
   confidence: string;
@@ -59,6 +87,13 @@ export function AddDimensionsButton({
   if (!result) {
     return (
       <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+        <PersonaCard
+          icon={"📊"}
+          name="The Organizer"
+          description={isFrench(intent)
+            ? "Je vais organiser vos données en groupes pour que vous puissiez les comparer."
+            : "I'll sort your values into groups so you can compare and spot patterns."}
+        />
         <input
           type="text"
           value={intent}
@@ -74,6 +109,7 @@ export function AddDimensionsButton({
           className="card"
           onClick={analyze}
           disabled={analyzing}
+          aria-label="Sort values into comparable groups"
           style={{
             padding: "14px 16px", display: "flex", alignItems: "center", gap: 10,
             width: "100%", border: "1.5px dashed var(--blue)",
@@ -83,7 +119,7 @@ export function AddDimensionsButton({
         >
           <Icon name="categories" size={16} />
           <span style={{ fontWeight: 600, color: "var(--blue)" }}>
-            {analyzing ? "Creating groups (this can take 15-30 seconds)..." : "Split into groups to compare"}
+            {analyzing ? <span role="status" aria-live="polite">Creating groups (this can take 15-30 seconds)...</span> : "Organize into groups"}
           </span>
           <span className="chip" style={{ background: "var(--blue)", color: "#fff", fontSize: 10, padding: "2px 6px" }}>Next step
           </span>
@@ -100,7 +136,7 @@ export function AddDimensionsButton({
     <div className="card" style={{ padding: 0, overflow: "hidden", border: "1.5px solid var(--blue)" }}>
       <div style={{ padding: "12px 16px", borderBottom: "1px solid var(--border)", display: "flex", alignItems: "center", gap: 10, background: "var(--blue-soft)" }}>
         <Icon name="categories" size={16} />
-        <span style={{ fontWeight: 700, fontSize: 14, color: "var(--blue)" }}>Preview: how your values will be grouped</span>
+        <span style={{ fontWeight: 700, fontSize: 14, color: "var(--blue)" }}>Here's how the Organizer will group your data</span>
         {result.proposed_columns.length > 0 && (
           <span className="chip mono" style={{ fontSize: 11 }}>
             {result.proposed_columns.join(", ")}
@@ -169,7 +205,7 @@ export function AddDimensionsButton({
           onClick={confirm}
           style={{ height: 36, fontSize: 13 }}
         >
-          {confirming ? "Adding dimensions..." : "Confirm and ascend to L2"}
+          {confirming ? <span role="status" aria-live="polite">Adding dimensions...</span> : "Confirm and continue"}
         </button>
         {error && <span style={{ color: "var(--error)", fontSize: 12 }}>{error}</span>}
       </div>
