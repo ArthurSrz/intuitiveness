@@ -10,42 +10,14 @@ from __future__ import annotations
 
 import json
 import logging
-import os
 from typing import Any, Dict
 
 import pandas as pd
 
 logger = logging.getLogger(__name__)
 
-_CHAT_MODEL = "anthropic/claude-sonnet-4"
-
-
-def _get_chat_client():
-    # Try Anthropic SDK first (direct, no routing)
-    anthropic_key = os.getenv("ANTHROPIC_API_KEY")
-    if anthropic_key:
-        try:
-            import anthropic
-            return ("anthropic", anthropic.Anthropic(api_key=anthropic_key))
-        except ImportError:
-            pass
-
-    # Fall back to OpenRouter / OpenAI-compatible
-    api_key = (
-        os.getenv("OPENROUTER_API_KEY")
-        or os.getenv("EMBEDDING_API_KEY")
-        or os.getenv("OPENAI_API_KEY")
-    )
-    if not api_key:
-        return None
-    try:
-        from openai import OpenAI
-    except ImportError:
-        return None
-    return ("openai", OpenAI(
-        api_key=api_key,
-        base_url=os.getenv("OPENROUTER_BASE_URL", "https://openrouter.ai/api/v1"),
-    ))
+from intuitiveness.services.llm_client import call_llm_structured
+from intuitiveness.services.transition_models import DomainSuggestion
 
 
 def _safe_category_to_str(series: "pd.Series") -> "pd.Series":
@@ -141,33 +113,6 @@ ABSOLUTE RULES for your code:
 5. Respond ONLY with valid JSON, no markdown."""
 
 
-def _call_llm(client_tuple, prompt: str) -> str:
-    """Call LLM via Anthropic or OpenAI-compatible API."""
-    kind, client = client_tuple
-    if kind == "anthropic":
-        response = client.messages.create(
-            model="claude-sonnet-4-20250514",
-            max_tokens=1024,
-            system=_SYSTEM_PROMPT,
-            messages=[{"role": "user", "content": prompt}],
-        )
-        content = response.content[0].text
-    else:
-        response = client.chat.completions.create(
-            model=os.getenv("DOMAIN_SUGGEST_MODEL", _CHAT_MODEL),
-            messages=[
-                {"role": "system", "content": _SYSTEM_PROMPT},
-                {"role": "user", "content": prompt},
-            ],
-            temperature=0.1,
-            response_format={"type": "json_object"},
-        )
-        content = response.choices[0].message.content or ""
-    if "```json" in content:
-        content = content.split("```json", 1)[1].split("```", 1)[0]
-    elif "```" in content:
-        content = content.split("```", 1)[1].split("```", 1)[0]
-    return content
 
 
 def _sample_values(df: pd.DataFrame, col: str, n: int = 8) -> list:
@@ -254,11 +199,6 @@ def suggest_domains(data: Any, intent: str = "") -> Dict[str, Any]:
         return {"error": "Empty dataset", "proposed_domains": [], "columns": []}
 
     columns = list(df.columns)
-    client = _get_chat_client()
-
-    if client is None:
-        return _heuristic_fallback(df)
-
     profile = _build_data_profile(df)
 
     prompt = f"""You are a data analyst. You have a dataset with {profile['rows']} rows.
@@ -294,35 +234,33 @@ Respond ONLY with JSON:
 }}"""
 
     try:
-        content = _call_llm(client, prompt)
-        result = json.loads(content.strip())
+        suggestion = call_llm_structured(
+            _SYSTEM_PROMPT, prompt, DomainSuggestion,
+            model_env_var="DOMAIN_SUGGEST_MODEL",
+        )
     except Exception as exc:
         logger.warning("Domain suggestion LLM call failed: %s", exc)
         return _heuristic_fallback(df)
 
-    # Run the code on a sample to compute distribution preview
-    code = result.get("code", "")
+    code = _sanitize_code(suggestion.code)
     logger.warning("LLM_CODE: %s", code[:300])
-    code = _sanitize_code(code)
     sample = df.head(200).copy()
     dist = {}
     if code:
         dist = _run_categorize_preview(code, sample)
         if not dist:
-            # Claude's code failed — try a simple fallback using proposed column + domains
-            col = result.get("proposed_column", "")
-            domains = result.get("proposed_domains", [])
-            if col and col in sample.columns and domains:
-                fallback = _build_fallback_code(sample, col, domains)
+            col = suggestion.proposed_column
+            if col and col in sample.columns and suggestion.proposed_domains:
+                fallback = _build_fallback_code(sample, col, suggestion.proposed_domains)
                 if fallback:
                     code = fallback
                     dist = _run_categorize_preview(code, sample.copy())
 
     logger.warning("FINAL_DIST: %s — code: %s", dist, code[:200])
     return {
-        "proposed_column": result.get("proposed_column", ""),
-        "proposed_domains": result.get("proposed_domains", ["low", "high"]),
-        "explanation": result.get("explanation", ""),
+        "proposed_column": suggestion.proposed_column,
+        "proposed_domains": suggestion.proposed_domains,
+        "explanation": suggestion.explanation,
         "confidence": "high",
         "code": code,
         "columns": columns,

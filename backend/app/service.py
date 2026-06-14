@@ -21,6 +21,8 @@ from intuitiveness.navigation.exceptions import NavigationError, SessionNotFound
 from intuitiveness.persistence.durable_backend import get_durable_backend
 from intuitiveness.persistence.session_export import export_session, import_session
 
+from intuitiveness.complexity_measure import complexity, reduction_ratio
+
 from .builders import DESCENT_BUILDERS, resolve_builder
 from .categorizers import categorize
 from .demo import load_demo
@@ -84,7 +86,30 @@ class SessionService:
             "summary": self._summary(session),
             "available_moves": session.get_available_moves(),
             "options": self._options(session),
+            "complexity": self._complexity(session),
         }
+
+    def _complexity(self, session: NavigationSession) -> Dict[str, Any]:
+        """Compute C(D) and reduction ratio for the current dataset."""
+        ds = session.current_dataset
+        try:
+            c = complexity(ds)
+        except Exception:
+            return {"value": None, "reduction": None}
+        result: Dict[str, Any] = {"value": c, "reduction": None}
+        # Walk up the tree to find the parent node for reduction ratio
+        tree = session.navigation_tree
+        current_id = tree.current_id
+        current_node = tree.nodes.get(current_id)
+        if current_node and current_node.parent_id:
+            parent_node = tree.nodes.get(current_node.parent_id)
+            if parent_node and parent_node.dataset_snapshot:
+                try:
+                    ratio = reduction_ratio(parent_node.dataset_snapshot, ds)
+                    result["reduction"] = round(ratio * 100, 1)
+                except Exception:
+                    pass
+        return result
 
     def _options(self, session: NavigationSession) -> Dict[str, Any]:
         """Introspection for the UI's per-edge controls: the real choices

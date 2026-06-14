@@ -23,7 +23,7 @@ from fastapi.responses import JSONResponse
 from intuitiveness.navigation.exceptions import NavigationError, SessionNotFoundError
 from intuitiveness.persistence.durable_backend import get_database_url, get_durable_backend
 
-from .routers import artifacts, health, search, sessions, transitions, tree
+from .routers import artifacts, entities, health, search, sessions, suggesters, transitions, tree
 
 logger = logging.getLogger("intuitiveness.api")
 
@@ -96,6 +96,8 @@ app.include_router(transitions.router)
 app.include_router(tree.router)
 app.include_router(artifacts.router)
 app.include_router(search.router)
+app.include_router(suggesters.router)
+app.include_router(entities.router)
 
 
 @app.get("/", tags=["meta"])

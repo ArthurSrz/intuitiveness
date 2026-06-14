@@ -1,6 +1,0 @@
-{
-  "value": 0.0,
-  "description": "Total energy imports from foreign countries",
-  "aggregation_method": "sum",
-  "type": "float"
-}

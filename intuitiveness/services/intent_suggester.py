@@ -9,111 +9,80 @@ from __future__ import annotations
 
 import json
 import logging
-import os
 from typing import Any, Dict, List
+
+from intuitiveness.services.llm_client import call_llm_structured
+from intuitiveness.services.transition_models import IntentSuggestion
 
 logger = logging.getLogger(__name__)
 
-_CHAT_MODEL = "anthropic/claude-sonnet-4"
+_SYSTEM_PROMPT = "You write questions like a normal person — a teacher, parent, or school principal. Never use data science jargon. Respond only with JSON."
 
 
-def _get_chat_client():
-    anthropic_key = os.getenv("ANTHROPIC_API_KEY")
-    if anthropic_key:
-        try:
-            import anthropic
-            return ("anthropic", anthropic.Anthropic(api_key=anthropic_key))
-        except ImportError:
-            pass
-    api_key = (
-        os.getenv("OPENROUTER_API_KEY")
-        or os.getenv("EMBEDDING_API_KEY")
-        or os.getenv("OPENAI_API_KEY")
-    )
-    if not api_key:
-        return None
-    try:
-        from openai import OpenAI
-    except ImportError:
-        return None
-    return ("openai", OpenAI(
-        api_key=api_key,
-        base_url=os.getenv("OPENROUTER_BASE_URL", "https://openrouter.ai/api/v1"),
-    ))
+def suggest_intents(descent_story: Dict[str, Any]) -> Dict[str, Any]:
+    """Propose analytical intents based on the full descent path."""
+    steps = descent_story.get("steps", [])
 
+    # Build a human-readable narrative of what happened at each level
+    level_descriptions = []
+    for step in steps:
+        lvl = step.get("level")
+        if lvl == 4:
+            sources = step.get("sources", {})
+            names = list(sources.keys())
+            level_descriptions.append(f"L4 (raw data): uploaded {len(names)} source(s): {', '.join(names)}. " +
+                "; ".join(f"{n}: {s.get('rows',0)} rows, columns {s.get('columns',[])}" for n, s in sources.items()))
+        elif lvl == 3:
+            cols = step.get("columns", [])
+            nodes = step.get("node_count")
+            if nodes:
+                level_descriptions.append(f"L3 (knowledge graph): {nodes} nodes, {step.get('edge_count',0)} edges")
+            elif cols:
+                level_descriptions.append(f"L3 (linked table): columns {cols}")
+        elif lvl == 2:
+            cats = step.get("categories", [])
+            cols = step.get("columns", [])
+            desc = f"L2 (categorized table): {step.get('row_count',0)} rows, columns {cols}"
+            if cats:
+                desc += f", categories: {cats}"
+            level_descriptions.append(desc)
+        elif lvl == 1:
+            stats = step.get("stats", {})
+            name = step.get("name", "value")
+            level_descriptions.append(f"L1 (vector): extracted '{name}' — " +
+                f"count={stats.get('count')}, min={stats.get('min')}, max={stats.get('max')}, mean={stats.get('mean')}")
+        elif lvl == 0:
+            level_descriptions.append(f"L0 (datum): {step.get('description', '')} = {step.get('value')}, " +
+                f"aggregation: {step.get('aggregation', 'unknown')}")
 
-def _call_llm(client_tuple, prompt: str) -> str:
-    kind, client = client_tuple
-    _sys = "You write questions like a normal person — a teacher, parent, or school principal. Never use data science jargon. Respond only with JSON."
-    if kind == "anthropic":
-        response = client.messages.create(
-            model="claude-sonnet-4-20250514",
-            max_tokens=1024,
-            system=_sys,
-            messages=[{"role": "user", "content": prompt}],
-        )
-        content = response.content[0].text
-    else:
-        response = client.chat.completions.create(
-            model=os.getenv("INTENT_SUGGEST_MODEL", _CHAT_MODEL),
-            messages=[
-                {"role": "system", "content": _sys},
-                {"role": "user", "content": prompt},
-            ],
-            temperature=0.3,
-            response_format={"type": "json_object"},
-        )
-        content = response.choices[0].message.content or ""
-    if "```json" in content:
-        content = content.split("```json", 1)[1].split("```", 1)[0]
-    elif "```" in content:
-        content = content.split("```", 1)[1].split("```", 1)[0]
-    return content
+    descent_narrative = "\n".join(f"  Step {i+1}. {d}" for i, d in enumerate(level_descriptions))
 
+    # Collect decisions made at each step
+    decisions = [s.get("decision", "") for s in steps if s.get("decision")]
+    decisions_text = "\n".join(f"  - {d}" for d in decisions) if decisions else "  (no decisions recorded)"
 
-def suggest_intents(descent_summary: Dict[str, Any]) -> Dict[str, Any]:
-    """Propose analytical intents based on the descent path."""
-    client = _get_chat_client()
+    prompt = f"""A user explored a dataset step by step, reducing it from raw data to a single number.
 
-    if client is None:
-        return {
-            "intents": [
-                {"question": "Which groups have the highest values?", "short": "Top groups"},
-                {"question": "Are there regional differences?", "short": "Regional differences"},
-                {"question": "How does this compare over time?", "short": "Trends over time"},
-            ],
-            "error": None,
-        }
+## The full descent path
+{descent_narrative}
 
-    prompt = f"""A user has been exploring a dataset and reduced it to a single number.
+## Decisions they made along the way
+{decisions_text}
 
-## What they found
-{json.dumps(descent_summary, indent=2, default=str)}
-
-## Your Task
-Suggest 3-4 questions this person might want to answer NEXT by rebuilding the data with a purpose.
+## Your task
+Suggest 3-4 questions this person might want to answer NEXT by rebuilding the data with a specific purpose.
 
 CRITICAL RULES:
-- Write questions like a NORMAL PERSON curious about THIS data — not like a data scientist.
-- Use the actual column names, values, and descriptions from the descent summary to make questions SPECIFIC.
-- NO jargon: no "correlate", "factor", "dimension", "categorical", "predictive".
-- The short label should be plain: "By region", "Over time", not "Factor Analysis".
-- Questions should be answerable by adding groups or comparisons to the data.
-
-Respond in JSON:
-{{
-  "intents": [
-    {{"question": "A question a normal person would ask about this data", "short": "plain 3-5 word label"}},
-    {{"question": "...", "short": "..."}},
-    {{"question": "...", "short": "..."}}
-  ]
-}}"""
+- Use the ACTUAL column names, category names, source names, and values from the descent path above.
+- Write questions like a NORMAL PERSON curious about THIS specific data — a teacher, a mayor, a journalist.
+- NO jargon: no "correlate", "factor", "dimension", "categorical", "predictive", "distribution".
+- Each question should reference something concrete from the descent: a category, a source, a column.
+- The short label should be plain: "By school size", "Urban vs rural", not "Factor Analysis"."""
 
     try:
-        content = _call_llm(client, prompt)
-        result = json.loads(content.strip())
-        return {"intents": result.get("intents", []), "error": None}
-    except Exception as exc:
+        suggestion = call_llm_structured(_SYSTEM_PROMPT, prompt, IntentSuggestion, model_env_var="INTENT_SUGGEST_MODEL")
+        return {"intents": suggestion.intents, "error": None}
+    except (RuntimeError, Exception) as exc:
         logger.warning("Intent suggestion failed: %s", exc)
         return {
             "intents": [

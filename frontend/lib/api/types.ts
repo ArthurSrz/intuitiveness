@@ -46,6 +46,7 @@ export interface AscendMove {
  */
 export type SessionState = components["schemas"]["SessionState"] & {
   options?: SessionOptions;
+  complexity?: { value?: number | null; reduction?: number | null };
 };
 export type SessionSummary = components["schemas"]["SessionSummary"];
 export type CreateSessionRequest =

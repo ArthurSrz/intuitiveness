@@ -1,6 +1,0 @@
-{
-  "value": "200",
-  "description": "count of node_id",
-  "aggregation_method": "count",
-  "has_parent": true
-}
