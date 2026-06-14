@@ -85,4 +85,4 @@ def test_import_rejects_external_only_dataset(client):
             json={"url": "https://www.data.gouv.fr/fr/datasets/ds-external/"},
         )
     assert resp.status_code == 404
-    assert "No data.gouv.fr-hosted CSV" in resp.json()["detail"]
+    assert "No .gouv.fr-hosted CSV" in resp.json()["detail"]
