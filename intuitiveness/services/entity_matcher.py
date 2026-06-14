@@ -118,7 +118,8 @@ def _sql_join(
                 pass
         return None
 
-from intuitiveness.services.llm_client import call_llm
+from intuitiveness.services.llm_client import call_llm_structured
+from intuitiveness.services.transition_models import EntityMatchSuggestion
 
 
 def _sample_values(df: pd.DataFrame, col: str, n: int = 5) -> list:
@@ -208,8 +209,16 @@ Available transform operations (use these exact names):
 - "none": no transform needed"""
 
     try:
-        content = call_llm("", prompt, model_env_var="ENTITY_MATCH_MODEL")
-        return json.loads(content.strip())
+        suggestion = call_llm_structured(
+            "", prompt, EntityMatchSuggestion,
+            model_env_var="ENTITY_MATCH_MODEL",
+        )
+        return {
+            "catalog": [entry.model_dump() for entry in suggestion.catalog],
+            "join_plan": suggestion.join_plan,
+            "column_transforms": suggestion.column_transforms,
+            "explanation": suggestion.explanation,
+        }
     except RuntimeError as exc:
         return {"error": str(exc), "catalog": [], "join_plan": {}}
     except Exception as exc:

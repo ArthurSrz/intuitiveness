@@ -14,7 +14,8 @@ from typing import Any, Dict
 
 import pandas as pd
 
-from intuitiveness.services.llm_client import call_llm
+from intuitiveness.services.llm_client import call_llm_structured
+from intuitiveness.services.transition_models import ColumnSuggestion
 
 logger = logging.getLogger(__name__)
 
@@ -105,8 +106,7 @@ Respond in JSON:
 }}"""
 
     try:
-        content = call_llm("", prompt, model_env_var="COLUMN_SUGGEST_MODEL")
-        result = json.loads(content.strip())
+        suggestion = call_llm_structured("", prompt, ColumnSuggestion, model_env_var="COLUMN_SUGGEST_MODEL")
     except (RuntimeError, Exception) as exc:
         logger.warning("Column suggestion LLM call failed: %s", exc)
         col = _pick_column_heuristic(df)
@@ -122,7 +122,7 @@ Respond in JSON:
         }
 
     # Run the code on a sample to compute preview stats
-    code = result.get("code", "")
+    code = suggestion.code
     preview_stats: Dict[str, Any] = {}
     if code:
         try:
@@ -143,9 +143,9 @@ Respond in JSON:
             logger.warning("Column suggestion code failed on sample: %s", exc)
 
     return {
-        "proposed_column": result.get("proposed_column", ""),
-        "proposed_filter": result.get("proposed_filter", ""),
-        "explanation": result.get("explanation", ""),
+        "proposed_column": suggestion.proposed_column,
+        "proposed_filter": suggestion.proposed_filter,
+        "explanation": suggestion.explanation,
         "confidence": "high",
         "code": code,
         "columns": columns,

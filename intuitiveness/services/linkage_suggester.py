@@ -14,7 +14,8 @@ from typing import Any, Dict, List
 
 import pandas as pd
 
-from intuitiveness.services.llm_client import call_llm
+from intuitiveness.services.llm_client import call_llm_structured
+from intuitiveness.services.transition_models import LinkageSuggestion
 
 logger = logging.getLogger(__name__)
 
@@ -101,8 +102,7 @@ Respond in JSON:
 }}"""
 
     try:
-        content = call_llm(_SYSTEM_PROMPT, prompt, model_env_var="LINKAGE_SUGGEST_MODEL")
-        result = json.loads(content.strip())
+        suggestion = call_llm_structured(_SYSTEM_PROMPT, prompt, LinkageSuggestion, model_env_var="LINKAGE_SUGGEST_MODEL")
     except RuntimeError:
         return {
             "code": "linked_df = df.copy()\nlinked_df['linkage_group'] = np.where(linked_df['value'] > linked_df['value'].median(), 'above average', 'below average')",
@@ -124,10 +124,10 @@ Respond in JSON:
         }
 
     return {
-        "code": result.get("code", ""),
-        "proposed_columns": result.get("proposed_columns", []),
-        "explanation": result.get("explanation", ""),
-        "graph_description": result.get("graph_description", ""),
+        "code": suggestion.code,
+        "proposed_columns": suggestion.proposed_columns,
+        "explanation": suggestion.explanation,
+        "graph_description": suggestion.graph_description,
         "confidence": "high",
         "error": None,
     }

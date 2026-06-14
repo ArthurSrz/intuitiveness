@@ -13,7 +13,8 @@ from typing import Any, Dict
 
 import pandas as pd
 
-from intuitiveness.services.llm_client import call_llm
+from intuitiveness.services.llm_client import call_llm_structured
+from intuitiveness.services.transition_models import AggregationSuggestion
 
 logger = logging.getLogger(__name__)
 
@@ -84,8 +85,7 @@ Respond in JSON:
 }}"""
 
     try:
-        content = call_llm("", prompt, model_env_var="AGGREGATION_SUGGEST_MODEL")
-        result = json.loads(content.strip())
+        suggestion = call_llm_structured("", prompt, AggregationSuggestion, model_env_var="AGGREGATION_SUGGEST_MODEL")
     except RuntimeError:
         agg = "mean" if pd.api.types.is_numeric_dtype(series) else "count"
         try:
@@ -114,7 +114,7 @@ Respond in JSON:
         }
 
     # Run code to compute preview value
-    code = result.get("code", "datum = series.mean()")
+    code = suggestion.code or "datum = series.mean()"
     preview_value = None
     try:
         import numpy as np
@@ -127,8 +127,8 @@ Respond in JSON:
         logger.warning("Aggregation code failed: %s", exc)
 
     return {
-        "proposed_aggregation": result.get("proposed_aggregation", "mean"),
-        "explanation": result.get("explanation", ""),
+        "proposed_aggregation": suggestion.proposed_aggregation,
+        "explanation": suggestion.explanation,
         "confidence": "high",
         "code": code,
         "preview_value": preview_value,

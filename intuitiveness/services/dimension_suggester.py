@@ -14,7 +14,8 @@ from typing import Any, Dict
 
 import pandas as pd
 
-from intuitiveness.services.llm_client import call_llm
+from intuitiveness.services.llm_client import call_llm_structured
+from intuitiveness.services.transition_models import DimensionSuggestion
 
 logger = logging.getLogger(__name__)
 
@@ -100,11 +101,8 @@ Respond in JSON:
 
     logger.warning("DIMENSION-SUGGEST: sending prompt to LLM (len=%d)", len(prompt))
     try:
-        content = call_llm(_SYSTEM_PROMPT, prompt, model_env_var="DIMENSION_SUGGEST_MODEL")
-        logger.warning("DIMENSION-SUGGEST LLM raw response (first 500): %s", content[:500])
-        result = json.loads(content.strip())
-        logger.warning("DIMENSION-SUGGEST parsed result keys=%s proposed_columns=%s",
-                       list(result.keys()), result.get("proposed_columns"))
+        suggestion = call_llm_structured(_SYSTEM_PROMPT, prompt, DimensionSuggestion, model_env_var="DIMENSION_SUGGEST_MODEL")
+        logger.warning("DIMENSION-SUGGEST parsed result proposed_columns=%s", suggestion.proposed_columns)
     except RuntimeError:
         logger.warning("DIMENSION-SUGGEST: no API key — returning heuristic fallback")
         return {
@@ -127,7 +125,7 @@ Respond in JSON:
         }
 
     # Run code on sample to preview
-    code = result.get("code", "")
+    code = suggestion.code
     logger.warning("DIMENSION LLM_CODE: %s", code[:300])
     dist = {}
     if code:
@@ -140,10 +138,10 @@ Respond in JSON:
             pass
 
     return {
-        "explanation": result.get("explanation", ""),
+        "explanation": suggestion.explanation,
         "confidence": "high",
         "code": code,
-        "proposed_columns": result.get("proposed_columns", []),
+        "proposed_columns": suggestion.proposed_columns,
         "sample_distribution": dist,
         "error": None,
     }

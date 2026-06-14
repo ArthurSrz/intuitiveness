@@ -157,3 +157,69 @@ class LinkageSuggestion(BaseModel):
         default="",
         description="How the resulting structure could be interpreted as a graph."
     )
+
+
+# --------------------------------------------------------------------------- #
+# L0: Intent suggestion (at the bottom of descent)
+# --------------------------------------------------------------------------- #
+
+class IntentSuggestion(BaseModel):
+    """LLM output for suggesting analytical intents at L0.
+
+    After reaching L0, the LLM suggests what questions the user could
+    explore during the ascent phase.
+    """
+    intents: List[dict] = Field(
+        description="List of intent objects, each with 'short' (title) and 'long' (description) keys."
+    )
+
+
+# --------------------------------------------------------------------------- #
+# L0: Datum description (plain language summary)
+# --------------------------------------------------------------------------- #
+
+class DatumDescription(BaseModel):
+    """LLM output for describing an L0 datum in plain language."""
+    title: str = Field(
+        description="Short title for the datum (e.g. 'Average school score')."
+    )
+    description: str = Field(
+        description="1-2 sentence plain-language description of what this value means."
+    )
+
+
+# --------------------------------------------------------------------------- #
+# L4 → L3: Entity matching
+# --------------------------------------------------------------------------- #
+
+class EntityCatalogMapping(BaseModel):
+    source: str = Field(description="Source filename.")
+    column: str = Field(description="Column name in that source.")
+    notes: str = Field(default="", description="How the column maps to the concept.")
+
+class EntityCatalogEntry(BaseModel):
+    concept: str = Field(description="The real-world concept (e.g. 'Time Period').")
+    description: str = Field(default="", description="What this concept represents.")
+    mappings: List[EntityCatalogMapping] = Field(description="Which source columns map to this concept.")
+
+class EntityMatchSuggestion(BaseModel):
+    """LLM output for L4→L3 entity matching.
+
+    The LLM analyzes multiple data sources and identifies shared concepts
+    (entities) that can be used to join them into a knowledge graph.
+    """
+    catalog: List[EntityCatalogEntry] = Field(
+        description="Entity catalog: concepts shared across sources with their column mappings."
+    )
+    join_plan: dict = Field(
+        default_factory=dict,
+        description="Join strategy with join_key, join_type, and confidence."
+    )
+    column_transforms: dict = Field(
+        default_factory=dict,
+        description="Per-column transforms needed before joining (e.g. extract_year)."
+    )
+    explanation: str = Field(
+        default="",
+        description="How the sources are related and why these join keys were chosen."
+    )

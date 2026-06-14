@@ -11,7 +11,8 @@ import json
 import logging
 from typing import Any, Dict, List
 
-from intuitiveness.services.llm_client import call_llm
+from intuitiveness.services.llm_client import call_llm_structured
+from intuitiveness.services.transition_models import IntentSuggestion
 
 logger = logging.getLogger(__name__)
 
@@ -45,9 +46,8 @@ Respond in JSON:
 }}"""
 
     try:
-        content = call_llm(_SYSTEM_PROMPT, prompt, model_env_var="INTENT_SUGGEST_MODEL")
-        result = json.loads(content.strip())
-        return {"intents": result.get("intents", []), "error": None}
+        suggestion = call_llm_structured(_SYSTEM_PROMPT, prompt, IntentSuggestion, model_env_var="INTENT_SUGGEST_MODEL")
+        return {"intents": suggestion.intents, "error": None}
     except (RuntimeError, Exception) as exc:
         logger.warning("Intent suggestion failed: %s", exc)
         return {

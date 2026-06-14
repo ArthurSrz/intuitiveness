@@ -8,13 +8,13 @@ the vector with purpose, guided by the user's intent.
 
 from __future__ import annotations
 
-import json
 import logging
 from typing import Any, Dict
 
 import pandas as pd
 
-from intuitiveness.services.llm_client import call_llm
+from intuitiveness.services.llm_client import call_llm_structured
+from intuitiveness.services.transition_models import EnrichmentSuggestion
 
 logger = logging.getLogger(__name__)
 
@@ -67,8 +67,7 @@ Respond in JSON:
 }}"""
 
     try:
-        content = call_llm(_SYSTEM_PROMPT, prompt, model_env_var="ENRICHMENT_SUGGEST_MODEL")
-        result = json.loads(content.strip())
+        suggestion = call_llm_structured(_SYSTEM_PROMPT, prompt, EnrichmentSuggestion, model_env_var="ENRICHMENT_SUGGEST_MODEL")
     except (RuntimeError, Exception) as exc:
         logger.warning("Enrichment suggestion failed: %s", exc)
         return {
@@ -80,10 +79,10 @@ Respond in JSON:
         }
 
     return {
-        "code": result.get("code", "series = parent_series.copy()"),
-        "explanation": result.get("explanation", ""),
+        "code": suggestion.code or "series = parent_series.copy()",
+        "explanation": suggestion.explanation,
         "confidence": "high",
-        "preview_description": result.get("preview_description", ""),
+        "preview_description": suggestion.preview_description,
         "error": None,
     }
 
