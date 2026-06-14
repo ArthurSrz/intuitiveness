@@ -636,7 +636,7 @@ def domain_confirm(
 
 class ColumnAnalyzeResponse(BaseModel):
     proposed_column: str = ""
-    proposed_filter: str = ""
+    proposed_filter: Optional[str] = ""
     explanation: str = ""
     confidence: str = ""
     code: str = ""
