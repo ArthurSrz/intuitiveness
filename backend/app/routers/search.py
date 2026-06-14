@@ -20,6 +20,8 @@ import requests
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
 
+from intuitiveness.navigation.exceptions import NavigationError
+
 from ..deps import get_session_service
 from ..models import SessionState
 from ..routers.sessions import _parse_csv as _parse_csv_bytes
@@ -268,7 +270,11 @@ def _fetch_csv_as_df(url: str, filename: str | None, max_rows: int | None) -> tu
     except _csv.Error:
         sep = ","
 
-    return pd.read_csv(io.StringIO(text), sep=sep), name
+    df = pd.read_csv(io.StringIO(text), sep=sep)
+    if len(df) > 100:
+        logger.info("Truncating %s from %d to 100 rows (schema + intent, not volume)", name, len(df))
+        df = df.head(100)
+    return df, name
 
 
 @router.post("/sessions/import-url", response_model=SessionState, status_code=201)
@@ -356,23 +362,28 @@ def _wb_search_via_mcp(q: str, size: int) -> Optional[WBSearchResponse]:
 
 def _wb_search_via_rest(q: str, size: int) -> WBSearchResponse:
     """Search World Bank indicators via the REST API (fallback)."""
-    try:
-        resp = requests.post(
-            f"{_DATA360_BASE}/searchv2",
-            json={
-                "search": q,
-                "searchFields": "series_description/name",
-                "select": "series_description/idno, series_description/name, series_description/database_id",
-                "top": size,
-                "count": True,
-            },
-            timeout=15,
-        )
-        resp.raise_for_status()
-        payload = resp.json()
-    except Exception as exc:
-        logger.warning("Data360 REST search failed: %s", exc)
-        raise HTTPException(status_code=502, detail=f"World Bank search unavailable: {exc}") from exc
+    last_exc: Exception | None = None
+    for attempt in range(3):
+        try:
+            resp = requests.post(
+                f"{_DATA360_BASE}/searchv2",
+                json={
+                    "search": q,
+                    "searchFields": "series_description/name",
+                    "select": "series_description/idno, series_description/name, series_description/database_id",
+                    "top": size,
+                    "count": True,
+                },
+                timeout=20,
+            )
+            resp.raise_for_status()
+            payload = resp.json()
+            break
+        except Exception as exc:
+            last_exc = exc
+            logger.warning("Data360 REST search attempt %d failed: %s", attempt + 1, exc)
+    else:
+        raise HTTPException(status_code=502, detail=f"World Bank search unavailable after 3 attempts: {last_exc}") from last_exc
 
     indicators = [
         WBIndicator(
@@ -614,7 +625,10 @@ def domain_confirm(
 
     session = svc._load(session_id)
     data = session.current_dataset.get_data()
-    categorized = execute_categorization(data, body.code)
+    try:
+        categorized = execute_categorization(data, body.code)
+    except Exception as e:
+        raise HTTPException(status_code=422, detail=f"Code execution failed: {str(e)}")
 
     session.descend(query_func=lambda _data: categorized)
     svc._save(session)
@@ -673,7 +687,10 @@ def column_confirm(
 
     session = svc._load(session_id)
     data = session.current_dataset.get_data()
-    series = execute_column_extraction(data, body.code)
+    try:
+        series = execute_column_extraction(data, body.code)
+    except Exception as e:
+        raise HTTPException(status_code=422, detail=f"Code execution failed: {str(e)}")
     col_name = body.column or (series.name if series.name else "value")
     series.name = col_name
 
@@ -843,11 +860,11 @@ def datum_describe(
 
 
 class EnrichmentAnalyzeResponse(BaseModel):
-    method: str = ""
+    code: str = ""
     explanation: str = ""
     confidence: str = ""
-    preview_length: int = 0
     preview_description: str = ""
+    preview_stats: dict = {}
     error: Optional[str] = None
 
 
@@ -857,8 +874,8 @@ def enrichment_analyze(
     body: AnalyzeRequest = AnalyzeRequest(),
     svc: SessionService = Depends(get_session_service),
 ) -> EnrichmentAnalyzeResponse:
-    """AI suggests how to enrich the L0 datum back to L1 vector."""
-    from intuitiveness.services.enrichment_suggester import suggest_enrichment
+    """AI writes code to rebuild the L0 datum back to L1 vector."""
+    from intuitiveness.services.enrichment_suggester import suggest_enrichment, execute_enrichment_code
 
     state = svc.get(session_id)
     if state["current_level"] != 0:
@@ -872,8 +889,73 @@ def enrichment_analyze(
     }
 
     result = suggest_enrichment(summary.get("value"), parent_info, intent=body.intent)
-    logger.warning("ENRICHMENT-ANALYZE result: method=%s, explanation=%s", result.get("method"), (result.get("explanation") or "")[:100])
-    return EnrichmentAnalyzeResponse(**result)
+    logger.warning("ENRICHMENT-ANALYZE result: code=%s, explanation=%s", (result.get("code") or "")[:100], (result.get("explanation") or "")[:100])
+
+    # Run code on preview to get stats
+    code = result.get("code", "")
+    preview_stats = {}
+    if code:
+        try:
+            session = svc._load(session_id)
+            dataset = session.current_dataset
+            scalar = dataset.get_data()
+            parent_series = dataset.get_parent_data()
+            if parent_series is not None:
+                preview_parent = parent_series.head(200)
+                preview_series = execute_enrichment_code(scalar, preview_parent, code)
+                preview_stats = {
+                    "count": int(len(preview_series)),
+                    "mean": round(float(preview_series.mean()), 4) if preview_series.dtype.kind in "iufb" else None,
+                    "min": round(float(preview_series.min()), 4) if preview_series.dtype.kind in "iufb" else None,
+                    "max": round(float(preview_series.max()), 4) if preview_series.dtype.kind in "iufb" else None,
+                }
+        except Exception as exc:
+            logger.warning("ENRICHMENT-ANALYZE preview failed: %s", exc, exc_info=True)
+
+    return EnrichmentAnalyzeResponse(
+        code=code,
+        explanation=result.get("explanation", ""),
+        confidence=result.get("confidence", ""),
+        preview_description=result.get("preview_description", ""),
+        preview_stats=preview_stats,
+        error=result.get("error"),
+    )
+
+
+class EnrichmentConfirmRequest(BaseModel):
+    code: str
+
+
+@router.post("/sessions/{session_id}/enrichment-confirm", response_model=SessionState)
+def enrichment_confirm(
+    session_id: str,
+    body: EnrichmentConfirmRequest,
+    svc: SessionService = Depends(get_session_service),
+) -> SessionState:
+    """Execute AI's enrichment code and ascend to L1."""
+    from intuitiveness.services.enrichment_suggester import execute_enrichment_code
+
+    state = svc.get(session_id)
+    if state["current_level"] != 0:
+        raise HTTPException(status_code=409, detail="Can only confirm enrichment at L0.")
+
+    session = svc._load(session_id)
+    dataset = session.current_dataset
+    scalar = dataset.get_data()
+    parent_series = dataset.get_parent_data()
+
+    if parent_series is None:
+        raise HTTPException(status_code=422, detail="No parent data available for enrichment.")
+
+    try:
+        result_series = execute_enrichment_code(scalar, parent_series, body.code)
+    except Exception as e:
+        raise HTTPException(status_code=422, detail=f"Code execution failed: {str(e)}")
+
+    logger.warning("ENRICHMENT-CONFIRM: %d values produced", len(result_series))
+    session.ascend(prebuilt_series=result_series)
+    svc._save(session)
+    return svc.state_of(session)
 
 
 class DimensionAnalyzeResponse(BaseModel):
@@ -895,11 +977,22 @@ def dimension_analyze(
     from intuitiveness.services.dimension_suggester import suggest_dimensions
 
     state = svc.get(session_id)
+    logger.warning("DIMENSION-ANALYZE: session=%s current_level=%s intent=%r", session_id, state["current_level"], body.intent)
     if state["current_level"] != 1:
+        logger.warning("DIMENSION-ANALYZE: REJECTED — level is %s not 1", state["current_level"])
         raise HTTPException(status_code=409, detail="Dimension analysis is only available at L1.")
 
     session = svc._load(session_id)
-    series = session.current_dataset.get_data()
+    raw_data = session.current_dataset.get_data()
+    logger.warning("DIMENSION-ANALYZE: raw_data type=%s", type(raw_data).__name__)
+
+    series = raw_data
+    logger.warning("DIMENSION-ANALYZE: series dtype=%s len=%s name=%r notna_count=%s",
+                   getattr(series, "dtype", "?"),
+                   len(series) if hasattr(series, "__len__") else "?",
+                   getattr(series, "name", "?"),
+                   series.notna().sum() if hasattr(series, "notna") else "?")
+
     vector_info = {
         "name": getattr(series, "name", "value"),
         "length": len(series) if hasattr(series, "__len__") else 0,
@@ -908,23 +1001,31 @@ def dimension_analyze(
         "mean": round(float(series.mean()), 2) if hasattr(series, "mean") and series.notna().any() else None,
         "sample_index": [str(i) for i in series.index[:10]],
         "sample_values": [str(v) for v in series.dropna()[:10]],
+        "index_is_numeric": pd.api.types.is_integer_dtype(series.index) or pd.api.types.is_float_dtype(series.index),
+        "dtypes": {"value": str(series.dtype)},
     }
+    logger.warning("DIMENSION-ANALYZE: vector_info=%s", vector_info)
 
     result = suggest_dimensions(vector_info, intent=body.intent)
+    logger.warning("DIMENSION-ANALYZE: suggest_dimensions returned keys=%s error=%r", list(result.keys()), result.get("error"))
 
     # Run code on real data for distribution preview
     code = result.get("code", "")
+    logger.warning("DIMENSION-ANALYZE: code present=%s len=%d", bool(code), len(code))
     if code:
         try:
             from intuitiveness.services.dimension_suggester import execute_dimension_code
+            logger.warning("DIMENSION-ANALYZE: running preview on %d rows", min(200, len(series)))
             preview_df = execute_dimension_code(series.head(200), code)
+            logger.warning("DIMENSION-ANALYZE: preview_df cols=%s shape=%s", list(preview_df.columns), preview_df.shape)
             for col in preview_df.columns:
                 if col != "value":
                     dist = preview_df[col].value_counts().to_dict()
                     result["sample_distribution"] = {str(k): int(v) for k, v in dist.items()}
+                    logger.warning("DIMENSION-ANALYZE: distribution for col=%r: %s", col, result["sample_distribution"])
                     break
         except Exception as exc:
-            logger.warning("DIMENSION preview failed: %s", exc)
+            logger.warning("DIMENSION-ANALYZE preview FAILED: %s", exc, exc_info=True)
 
     logger.warning("DIMENSION-ANALYZE result: cols=%s, code=%s", result.get("proposed_columns"), (result.get("code") or "")[:150])
     return DimensionAnalyzeResponse(**result)
@@ -949,7 +1050,10 @@ def dimension_confirm(
 
     session = svc._load(session_id)
     series = session.current_dataset.get_data()
-    built_df = execute_dimension_code(series, body.code)
+    try:
+        built_df = execute_dimension_code(series, body.code)
+    except Exception as e:
+        raise HTTPException(status_code=422, detail=f"Code execution failed: {str(e)}")
 
     logger.warning("DIMENSION-CONFIRM: %d cols, %d rows", len(built_df.columns), len(built_df))
     session.ascend(prebuilt_dataframe=built_df)
@@ -958,12 +1062,12 @@ def dimension_confirm(
 
 
 class LinkageAnalyzeResponse(BaseModel):
-    proposed_dimensions: List[str] = []
-    proposed_relationships: List[str] = []
+    code: str = ""
+    proposed_columns: List[str] = []
     explanation: str = ""
     confidence: str = ""
     graph_description: str = ""
-    available_dimensions: List[str] = []
+    sample_distribution: dict = {}
     error: Optional[str] = None
 
 
@@ -973,8 +1077,8 @@ def linkage_analyze(
     body: AnalyzeRequest = AnalyzeRequest(),
     svc: SessionService = Depends(get_session_service),
 ) -> LinkageAnalyzeResponse:
-    """AI suggests linkages for L2→L3 ascent."""
-    from intuitiveness.services.linkage_suggester import suggest_linkage
+    """AI writes code to add linkage columns for L2->L3 ascent."""
+    from intuitiveness.services.linkage_suggester import suggest_linkage, execute_linkage_code
     from intuitiveness.ascent.dimensions import DimensionRegistry
 
     state = svc.get(session_id)
@@ -985,6 +1089,7 @@ def linkage_analyze(
     df = session.current_dataset.get_data()
     table_info = {
         "columns": list(df.columns) if hasattr(df, "columns") else [],
+        "dtypes": {col: str(df[col].dtype) for col in df.columns} if hasattr(df, "columns") else {},
         "row_count": len(df) if hasattr(df, "__len__") else 0,
         "categories": list(df["category"].unique()) if "category" in getattr(df, "columns", []) else [],
     }
@@ -999,8 +1104,61 @@ def linkage_analyze(
             available = dims_from_moves
 
     result = suggest_linkage(table_info, available, intent=body.intent)
-    logger.warning("LINKAGE-ANALYZE result: dims=%s, rels=%s", result.get("proposed_dimensions"), result.get("proposed_relationships"))
-    return LinkageAnalyzeResponse(**result)
+    logger.warning("LINKAGE-ANALYZE result: cols=%s, code=%s", result.get("proposed_columns"), (result.get("code") or "")[:150])
+
+    # Run code on preview to get distribution
+    code = result.get("code", "")
+    sample_distribution: dict = {}
+    if code:
+        try:
+            preview_df = execute_linkage_code(df.head(200), code)
+            original_cols = set(df.columns)
+            for col in preview_df.columns:
+                if col not in original_cols:
+                    dist = preview_df[col].value_counts().to_dict()
+                    sample_distribution[col] = {str(k): int(v) for k, v in dist.items()}
+        except Exception as exc:
+            logger.warning("LINKAGE-ANALYZE preview failed: %s", exc, exc_info=True)
+
+    return LinkageAnalyzeResponse(
+        code=code,
+        proposed_columns=result.get("proposed_columns", []),
+        explanation=result.get("explanation", ""),
+        confidence=result.get("confidence", ""),
+        graph_description=result.get("graph_description", ""),
+        sample_distribution=sample_distribution,
+        error=result.get("error"),
+    )
+
+
+class LinkageConfirmRequest(BaseModel):
+    code: str
+
+
+@router.post("/sessions/{session_id}/linkage-confirm", response_model=SessionState)
+def linkage_confirm(
+    session_id: str,
+    body: LinkageConfirmRequest,
+    svc: SessionService = Depends(get_session_service),
+) -> SessionState:
+    """Execute AI's linkage code and ascend to L3."""
+    from intuitiveness.services.linkage_suggester import execute_linkage_code
+
+    state = svc.get(session_id)
+    if state["current_level"] != 2:
+        raise HTTPException(status_code=409, detail="Can only confirm linkage at L2.")
+
+    session = svc._load(session_id)
+    df = session.current_dataset.get_data()
+    try:
+        linked_df = execute_linkage_code(df, body.code)
+    except Exception as e:
+        raise HTTPException(status_code=422, detail=f"Code execution failed: {str(e)}")
+
+    logger.warning("LINKAGE-CONFIRM: %d cols, %d rows", len(linked_df.columns), len(linked_df))
+    session.ascend(prebuilt_dataframe=linked_df)
+    svc._save(session)
+    return svc.state_of(session)
 
 
 class EntityConfirmRequest(BaseModel):
@@ -1103,6 +1261,18 @@ def entity_confirm(
         merged, col_source_map = execute_join(payload, join_plan, catalog, transforms)
         logger.warning("ENTITY-CONFIRM merged: %d rows × %d cols — %s", len(merged), len(merged.columns), list(merged.columns))
 
+        # Fix 1: Deduplicate before node creation
+        before_dedup = len(merged)
+        merged = merged.drop_duplicates()
+        if len(merged) < before_dedup:
+            logger.warning("ENTITY-CONFIRM: dedup removed %d rows (%d → %d)", before_dedup - len(merged), before_dedup, len(merged))
+
+        # Fix 4: Hard cap with warning
+        MAX_ROWS = 500_000
+        if len(merged) > MAX_ROWS:
+            logger.warning("Merged result %d rows exceeds cap %d, truncating", len(merged), MAX_ROWS)
+            merged = merged.head(MAX_ROWS)
+
         # Build a graph from the merged data
         import networkx as nx
         import json as _json
@@ -1114,20 +1284,68 @@ def entity_confirm(
         }, default=str)
         g.graph["_col_sources"] = _json.dumps(col_source_map, default=str)
 
-        for idx, row in merged.iterrows():
-            node_id = f"merged:{idx}"
-            attrs = {}
-            for c in merged.columns:
-                v = row[c]
-                if isinstance(v, float) and v != v:
-                    attrs[c] = None
-                else:
-                    attrs[c] = v
-            g.add_node(node_id, **attrs)
+        # Fix 3: Vectorized node creation (replaces iterrows loop)
+        def _sanitize(v):
+            if isinstance(v, float) and v != v:
+                return None
+            return v
+
+        records = merged.to_dict('records')
+        g.add_nodes_from(
+            (f"merged:{i}", {c: _sanitize(v) for c, v in attrs.items()})
+            for i, attrs in enumerate(records)
+        )
 
         return g
 
-    return svc.descend(session_id, params={"builder_func": builder_func})
+    # --- DB storage side-channel: persist merged DF + graph in databases ---
+    from app.storage import get_database_storage
+    db = get_database_storage()
+
+    def builder_func_with_storage(payload):
+        """Wrap builder_func to also persist to PostgreSQL/Memgraph when enabled."""
+        graph = builder_func(payload)
+
+        if db is not None:
+            try:
+                # Store the merged DataFrame in PostgreSQL (for future SQL joins)
+                if isinstance(payload, dict):
+                    for name, df in payload.items():
+                        db.store_dataframe(session_id, "L4-root", level=4, df=df, table_name=name)
+
+                # Store the graph in Memgraph
+                db.store_graph(session_id, "L3-entity-confirm", graph)
+
+                logger.info("DB storage: persisted L4 sources + L3 graph for session %s", session_id)
+            except Exception as exc:
+                logger.warning("DB storage write failed (non-fatal): %s", exc)
+
+        return graph
+
+    # Capture parent node before descend
+    parent_node_id = None
+    try:
+        pre_session = svc._load(session_id)
+        parent_node_id = pre_session.navigation_tree.current_id
+    except Exception:
+        pass
+
+    result = svc.descend(session_id, params={"builder_func": builder_func_with_storage})
+
+    # Persist tree node to PostgreSQL (non-blocking)
+    if db is not None:
+        try:
+            post_session = svc._load(session_id)
+            result_node_id = post_session.navigation_tree.current_id
+            db.store_tree_node(
+                session_id, result_node_id, parent_node_id,
+                level=3, action="descend", params={},
+            )
+            logger.info("Tree node persisted: %s -> %s", parent_node_id, result_node_id)
+        except Exception as e:
+            logger.warning("Tree node persistence failed: %s", e)
+
+    return result
 
 
 @router.post("/sessions/{session_id}/entity-match", response_model=SessionState)

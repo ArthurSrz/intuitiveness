@@ -37,14 +37,16 @@ export const queryKeys = {
   health: ["health"] as const,
 };
 
-/** Invalidate everything that depends on a session's state. */
-function invalidateSession(
+/** Invalidate everything that depends on a session's state and wait for refetch. */
+async function invalidateSession(
   queryClient: ReturnType<typeof useQueryClient>,
   sessionId: string,
 ) {
-  queryClient.invalidateQueries({ queryKey: queryKeys.session(sessionId) });
-  queryClient.invalidateQueries({ queryKey: queryKeys.tree(sessionId) });
-  queryClient.invalidateQueries({ queryKey: ["node", sessionId] });
+  await Promise.all([
+    queryClient.invalidateQueries({ queryKey: queryKeys.session(sessionId) }),
+    queryClient.invalidateQueries({ queryKey: queryKeys.tree(sessionId) }),
+    queryClient.invalidateQueries({ queryKey: ["node", sessionId] }),
+  ]);
 }
 
 export function useInvalidateSession(sessionId: string) {

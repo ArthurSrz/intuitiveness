@@ -21,6 +21,16 @@ _CHAT_MODEL = "anthropic/claude-sonnet-4"
 
 
 def _get_chat_client():
+    or_key = os.getenv("OPENROUTER_API_KEY")
+    if or_key:
+        try:
+            from openai import OpenAI
+            return ("openai", OpenAI(
+                api_key=or_key,
+                base_url=os.getenv("OPENROUTER_BASE_URL", "https://openrouter.ai/api/v1"),
+            ))
+        except ImportError:
+            pass
     anthropic_key = os.getenv("ANTHROPIC_API_KEY")
     if anthropic_key:
         try:
@@ -28,11 +38,7 @@ def _get_chat_client():
             return ("anthropic", anthropic.Anthropic(api_key=anthropic_key))
         except ImportError:
             pass
-    api_key = (
-        os.getenv("OPENROUTER_API_KEY")
-        or os.getenv("EMBEDDING_API_KEY")
-        or os.getenv("OPENAI_API_KEY")
-    )
+    api_key = os.getenv("EMBEDDING_API_KEY") or os.getenv("OPENAI_API_KEY")
     if not api_key:
         return None
     try:
@@ -52,8 +58,15 @@ RULES:
 2. Your code MUST add one or more new columns to `df` that create meaningful groups.
 3. ALWAYS end categorical columns with .fillna('uncategorized').astype(str).
 4. Use pd.qcut for equal-count bins, np.where for threshold splits.
-5. The df index may contain entity names — use them if relevant to the user's intent.
-6. Respond ONLY with valid JSON, no markdown."""
+5. IMPORTANT: The index may be numeric integers (0, 1, 2...). NEVER use df.index.str on a numeric index. Only use index string methods if the sample_index values are clearly non-numeric strings.
+6. If the user's intent requires geographic or categorical data not present in 'value', split on the numeric value instead (e.g., above/below median, quantile bins).
+7. Respond ONLY with valid JSON, no markdown.
+
+CRITICAL NAMING RULES — the user is non-technical:
+8. Column names MUST be plain and descriptive. Use names like 'level' (with labels 'high', 'medium', 'low'), 'above_average', 'size_group'.
+9. NEVER use abstract statistical names like 'magnitude_tier', 'value_percentile', 'z_score_bucket'.
+10. Group LABELS must also be plain: use 'high', 'medium', 'low' or 'above average', 'below average' — not 'Q1', 'Q2', 'Q3', 'Q4'.
+11. The explanation field must describe what you did in plain language a non-programmer can understand."""
 
 
 def _call_llm(client_tuple, prompt: str) -> str:
@@ -96,9 +109,17 @@ def _sample_values(series: pd.Series, n: int = 10) -> list:
 
 def suggest_dimensions(vector_info: Dict[str, Any], intent: str = "") -> Dict[str, Any]:
     """AI writes code to add dimensions to a vector for L1→L2 ascent."""
+    logger.warning("DIMENSION-SUGGEST START: intent=%r vector_name=%r length=%s min=%s max=%s mean=%s",
+                   intent, vector_info.get("name"), vector_info.get("length"),
+                   vector_info.get("min"), vector_info.get("max"), vector_info.get("mean"))
+    logger.warning("DIMENSION-SUGGEST sample_index=%s sample_values=%s",
+                   vector_info.get("sample_index"), vector_info.get("sample_values"))
+
     client = _get_chat_client()
+    logger.warning("DIMENSION-SUGGEST client=%s", "None (no API key)" if client is None else client[0])
 
     if client is None:
+        logger.warning("DIMENSION-SUGGEST: no API key — returning heuristic fallback")
         return {
             "explanation": "Split values into above/below median.",
             "confidence": "heuristic",
@@ -108,14 +129,21 @@ def suggest_dimensions(vector_info: Dict[str, Any], intent: str = "") -> Dict[st
             "error": None,
         }
 
+    dtypes_info = json.dumps(vector_info.get("dtypes", {"value": "unknown"}))
+
     prompt = f"""A user has a feature vector and wants to add categorical dimensions for group comparison.
 
 ## The Vector
 Name: {vector_info.get('name', 'value')}
 Length: {vector_info.get('length', '?')} entities
 Min: {vector_info.get('min', '?')}, Max: {vector_info.get('max', '?')}, Mean: {vector_info.get('mean', '?')}
-Sample entity names (index): {json.dumps(vector_info.get('sample_index', []))}
+Column types: {dtypes_info}
+Index type: {"NUMERIC (row numbers — do NOT use df.index.str, only split on 'value')" if vector_info.get('index_is_numeric') else "string labels"}
+Sample index: {json.dumps(vector_info.get('sample_index', []))}
 Sample values: {json.dumps(vector_info.get('sample_values', []))}
+
+IMPORTANT: Only use numeric operations (mean, median, sum, qcut, comparisons) on NUMERIC columns (int64, float64).
+For STRING columns (object), use string operations (.str.contains, .isin, value_counts, etc.).
 
 ## User's Intent
 {intent if intent else "Not specified — suggest the most useful dimension to compare groups."}
@@ -144,11 +172,15 @@ Respond in JSON:
   "explanation": "2-3 sentences explaining how these dimensions help answer the user's question."
 }}"""
 
+    logger.warning("DIMENSION-SUGGEST: sending prompt to LLM (len=%d)", len(prompt))
     try:
         content = _call_llm(client, prompt)
+        logger.warning("DIMENSION-SUGGEST LLM raw response (first 500): %s", content[:500])
         result = json.loads(content.strip())
+        logger.warning("DIMENSION-SUGGEST parsed result keys=%s proposed_columns=%s",
+                       list(result.keys()), result.get("proposed_columns"))
     except Exception as exc:
-        logger.warning("Dimension suggestion LLM failed: %s", exc)
+        logger.warning("DIMENSION-SUGGEST LLM failed: %s", exc, exc_info=True)
         return {
             "explanation": "Split values into above/below median.",
             "confidence": "heuristic",
@@ -181,23 +213,68 @@ Respond in JSON:
     }
 
 
-def _sanitize_dimension_code(code: str) -> str:
-    """Rewrite pd.qcut/pd.cut chains to avoid .fillna() on numpy arrays.
+def _find_matching_paren(code: str, start: int) -> int:
+    """Return index just past the closing ')' that matches the '(' at start-1."""
+    depth = 1
+    i = start
+    while i < len(code) and depth > 0:
+        if code[i] == "(":
+            depth += 1
+        elif code[i] == ")":
+            depth -= 1
+        i += 1
+    return i  # points one past the closing ')'
 
-    pd.qcut(..., labels=[...]).fillna(...) fails when bin edges duplicate
-    (qcut returns ndarray in that case). Split into assign-then-fillna.
+
+def _sanitize_dimension_code(code: str) -> str:
+    """Rewrite pd.qcut chains so .fillna() is never called on the raw qcut return value.
+
+    pd.qcut can return a numpy ndarray (not a Categorical) when bin edges
+    duplicate even with duplicates='drop'. Splitting the assignment into two
+    lines ensures .fillna() runs on the Series (which always has the method).
+
+    Before: df['col'] = pd.qcut(...).fillna('uncategorized').astype(str)
+    After:
+        df['col'] = pd.qcut(..., duplicates='drop')
+        df['col'] = df['col'].fillna('uncategorized').astype(str)
     """
     import re
-    # Match: df['col'] = pd.qcut(...).fillna(...).astype(...)
-    # Rewrite to: df['col'] = pd.qcut(..., duplicates='drop'); df['col'] = df['col'].fillna(...).astype(...)
+
     lines = []
     for line in code.splitlines():
-        # Add duplicates='drop' to pd.qcut calls that don't already have it
-        if "pd.qcut(" in line and "duplicates=" not in line:
-            line = line.replace("pd.qcut(", "pd.qcut(").rstrip()
-            # Insert duplicates='drop' before the closing ) of pd.qcut
-            line = re.sub(r"pd\.qcut\(([^)]+)\)", lambda m: f"pd.qcut({m.group(1)}, duplicates='drop')", line)
-        lines.append(line)
+        if "pd.qcut(" not in line:
+            lines.append(line)
+            continue
+
+        # Find the pd.qcut( call and locate its matching closing paren
+        needle = "pd.qcut("
+        qcut_start = line.find(needle)
+        if qcut_start == -1:
+            lines.append(line)
+            continue
+
+        args_start = qcut_start + len(needle)
+        args_end = _find_matching_paren(line, args_start)  # index just past ')'
+        inner = line[args_start:args_end - 1]
+        if "duplicates=" not in inner:
+            inner = inner + ", duplicates='drop'"
+
+        # Everything before pd.qcut(
+        prefix = line[:qcut_start]
+        # Everything after the closing ')' of pd.qcut(...)
+        suffix = line[args_end:]
+
+        # Extract the assignment target from prefix (e.g. "df['col'] = ")
+        assign_match = re.match(r"^(\s*)(df\[[^\]]+\])\s*=\s*$", prefix)
+        if assign_match and suffix.lstrip().startswith(".fillna("):
+            indent = assign_match.group(1)
+            col_ref = assign_match.group(2)
+            lines.append(f"{indent}{col_ref} = pd.qcut({inner})")
+            lines.append(f"{indent}{col_ref} = {col_ref}{suffix.lstrip()}")
+        else:
+            # No chain or no assignment — just add duplicates='drop'
+            lines.append(f"{prefix}pd.qcut({inner}){suffix}")
+
     return "\n".join(lines)
 
 
@@ -205,8 +282,18 @@ def execute_dimension_code(series: pd.Series, code: str) -> pd.DataFrame:
     """Execute AI's dimension code on the real vector."""
     import numpy as np
 
-    code = _sanitize_dimension_code(code)
+    logger.warning("EXECUTE-DIMENSION: series name=%r len=%d dtype=%s",
+                   getattr(series, "name", "?"), len(series), series.dtype)
+    logger.warning("EXECUTE-DIMENSION: code (first 400):\n%s", code[:400])
+
+    sanitized = _sanitize_dimension_code(code)
+    if sanitized != code:
+        logger.warning("EXECUTE-DIMENSION: code was sanitized (qcut fix applied)")
+        logger.warning("EXECUTE-DIMENSION: sanitized code:\n%s", sanitized[:400])
+    code = sanitized
+
     df = pd.DataFrame({"value": series})
+    logger.warning("EXECUTE-DIMENSION: df shape before exec=%s", df.shape)
 
     # Monkey-patch Categorical.fillna for safety
     _orig = pd.Categorical.fillna
@@ -217,6 +304,19 @@ def execute_dimension_code(series: pd.Series, code: str) -> pd.DataFrame:
     pd.Categorical.fillna = _safe
     try:
         exec(code, {"df": df, "pd": pd, "np": np})
+        logger.warning("EXECUTE-DIMENSION: exec succeeded — df columns=%s shape=%s", list(df.columns), df.shape)
+    except TypeError as exc:
+        if "not supported between" in str(exc) or "unsupported operand" in str(exc):
+            logger.warning("EXECUTE-DIMENSION: dtype mismatch error: %s", exc)
+            raise TypeError(
+                f"Dimension code tried a numeric operation on a non-numeric column. "
+                f"Column 'value' dtype is {series.dtype}. Original error: {exc}"
+            ) from exc
+        logger.warning("EXECUTE-DIMENSION: exec FAILED: %s", exc, exc_info=True)
+        raise
+    except Exception as exec_exc:
+        logger.warning("EXECUTE-DIMENSION: exec FAILED: %s", exec_exc, exc_info=True)
+        raise
     finally:
         pd.Categorical.fillna = _orig
 

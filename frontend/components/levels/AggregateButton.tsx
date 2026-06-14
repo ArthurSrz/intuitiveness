@@ -70,7 +70,7 @@ export function AggregateButton({
           type="text"
           value={intent}
           onChange={(e) => setIntent(e.target.value)}
-          placeholder="What single number captures the truth?"
+          placeholder="What summary do you need? (e.g. average, total, median)"
           style={{
             width: "100%", height: 36, borderRadius: "var(--radius-md)",
             border: "1px solid var(--border-strong)", background: "var(--bg)",
@@ -95,7 +95,7 @@ export function AggregateButton({
         >
           <Icon name="core" size={16} />
           <span style={{ fontWeight: 600, color: "var(--blue)" }}>
-            {analyzing ? "AI is analyzing your vector..." : "Compute the core datum"}
+            {analyzing ? "Calculating your summary..." : "Calculate the summary number"}
           </span>
           {error && (
             <span style={{ color: "var(--error)", fontSize: 12, marginLeft: "auto" }}>

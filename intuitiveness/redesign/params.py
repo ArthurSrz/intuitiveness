@@ -76,6 +76,7 @@ class L1toL0Params(TransitionParams):
 class L0toL1Params(TransitionParams):
     """L0→L1: reconstruct a vector from the atomic datum via an enrichment."""
     enrichment_function: Optional[str] = None
+    prebuilt_series: Optional[Any] = None
     metadata: Dict[str, Any] = field(default_factory=dict)
 
 
@@ -95,6 +96,7 @@ class L2toL3Params(TransitionParams):
     source_column: Optional[str] = None
     entity_column: Optional[str] = None
     value_column: Optional[str] = None
+    prebuilt_dataframe: Optional[Any] = None
     metadata: Dict[str, Any] = field(default_factory=dict)
 
 

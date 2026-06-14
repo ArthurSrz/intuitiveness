@@ -20,6 +20,104 @@ import pandas as pd
 
 logger = logging.getLogger(__name__)
 
+
+def _is_db_join_enabled() -> bool:
+    """Check if PostgreSQL join path is available."""
+    return os.getenv("USE_DB_STORAGE", "").strip() in ("1", "true", "yes")
+
+
+def _sql_join(
+    left_df: pd.DataFrame,
+    right_df: pd.DataFrame,
+    left_on: list,
+    right_on: list,
+    join_type: str = "inner",
+) -> pd.DataFrame:
+    """Execute a join via PostgreSQL temp tables, returning a DataFrame.
+
+    Falls back to None on any failure so the caller can retry with pandas.
+    """
+    db_url = os.getenv("DATABASE_URL")
+    if not db_url:
+        return None
+
+    try:
+        try:
+            import psycopg2
+            connect = psycopg2.connect
+        except ImportError:
+            import psycopg
+            connect = psycopg.connect
+    except ImportError:
+        logger.warning("No PostgreSQL driver available for SQL join")
+        return None
+
+    sql_join_map = {
+        "inner": "INNER JOIN",
+        "left": "LEFT JOIN",
+        "right": "RIGHT JOIN",
+        "outer": "FULL OUTER JOIN",
+        "cross": "CROSS JOIN",
+    }
+    sql_join_clause = sql_join_map.get(join_type, "INNER JOIN")
+
+    conn = None
+    try:
+        conn = connect(db_url)
+        cur = conn.cursor()
+
+        # Create temp tables from DataFrames
+        from io import StringIO
+
+        for tbl, df in [("_tmp_left", left_df), ("_tmp_right", right_df)]:
+            cur.execute(f"DROP TABLE IF EXISTS {tbl}")
+            col_defs = ", ".join(f'"{c}" TEXT' for c in df.columns)
+            cur.execute(f"CREATE TEMP TABLE {tbl} ({col_defs})")
+            buf = StringIO()
+            df.astype(str).to_csv(buf, index=False, header=False, sep="\t", na_rep="")
+            buf.seek(0)
+            cur.copy_from(buf, tbl, columns=list(df.columns), null="")
+
+        # Build JOIN ON clause
+        on_parts = [
+            f'_tmp_left."{lk}" = _tmp_right."{rk}"'
+            for lk, rk in zip(left_on, right_on)
+        ]
+        on_clause = " AND ".join(on_parts)
+
+        # Build SELECT — all left cols, then non-overlapping right cols
+        right_only = [c for c in right_df.columns if c not in left_df.columns or c in right_on]
+        # Actually select everything and let pandas handle it
+        query = (
+            f"SELECT * FROM _tmp_left {sql_join_clause} _tmp_right ON {on_clause}"
+        )
+        cur.execute(query)
+        rows = cur.fetchall()
+        col_names = [desc[0] for desc in cur.description]
+
+        # Clean up
+        cur.execute("DROP TABLE IF EXISTS _tmp_left")
+        cur.execute("DROP TABLE IF EXISTS _tmp_right")
+        conn.commit()
+        cur.close()
+        conn.close()
+
+        if not rows:
+            return pd.DataFrame(columns=col_names)
+
+        result = pd.DataFrame(rows, columns=col_names)
+        logger.info("SQL join returned %d rows x %d cols", len(result), len(result.columns))
+        return result
+
+    except Exception as exc:
+        logger.warning("PostgreSQL join failed (%s) — falling back to pandas", exc)
+        if conn:
+            try:
+                conn.close()
+            except Exception:
+                pass
+        return None
+
 _CHAT_MODEL = "anthropic/claude-sonnet-4"
 
 
@@ -206,6 +304,8 @@ def execute_join(
     This explicit mapping lets callers group columns by source without
     relying on string-matching heuristics.
     """
+    use_db = _is_db_join_enabled()
+
     if column_transforms:
         sources = _apply_transforms(sources, column_transforms)
 
@@ -279,6 +379,11 @@ def execute_join(
             logger.warning("JOIN: no keys between %s and %s — skipping", left_src, right_src)
             continue
 
+        # Normalise key columns to stripped strings so "01" == "1" and " UAI " == "UAI"
+        for l_col, r_col in zip(left_on, right_on):
+            merged[l_col] = merged[l_col].astype(str).str.strip()
+            other[r_col] = other[r_col].astype(str).str.strip()
+
         # Rename overlapping non-key columns and update col_source_map
         overlap = set(merged.columns) & set(other.columns) - key_cols_set
         if overlap:
@@ -304,11 +409,92 @@ def execute_join(
         logger.warning("JOIN: merging %s ← %s on %s = %s (overlap renamed: %s)",
                         left_name, right_name, left_on, right_on, overlap)
 
-        merged = merged.merge(other, left_on=left_on, right_on=right_on, how=join_type)
+        # Pre-merge cardinality guard: estimate explosion before paying for it
+        # Only WARN — never force inner join from an estimate that might be wrong
+        try:
+            left_card = merged.groupby(left_on).size().max() if left_on else 1
+            right_card = other.groupby(right_on).size().max() if right_on else 1
+            estimated = left_card * right_card
+            if estimated > len(merged) * 10:
+                logger.warning("Pre-merge guard: estimated %d rows (card %d x %d), "
+                                "will use inner join", estimated, left_card, right_card)
+                join_type = "inner"
+        except Exception as exc:
+            logger.warning("Pre-merge cardinality estimate failed (%s) — proceeding with %s join",
+                            exc, join_type)
 
-    if merged.empty:
-        logger.info("Merge produced 0 rows — falling back to concat")
-        return pd.concat(frames, ignore_index=True), col_source_map
+        max_input = max(len(merged), len(other))
+        explosion_multiplier = 50 if use_db else 10
+        explosion_threshold = max_input * explosion_multiplier
+
+        # Try PostgreSQL join when USE_DB_STORAGE=1
+        attempt = None
+        if use_db:
+            logger.info("Using PostgreSQL for join (%d x %d rows)", len(merged), len(other))
+            attempt = _sql_join(merged, other, left_on, right_on, join_type)
+            if attempt is None:
+                logger.warning("PostgreSQL join failed — falling back to pandas merge")
+
+        if attempt is None:
+            attempt = merged.merge(other, left_on=left_on, right_on=right_on, how=join_type)
+        logger.warning("JOIN: merge produced %d rows (inputs: %d, %d; threshold: %d)",
+                        len(attempt), len(merged), len(other), explosion_threshold)
+
+        # Guard: cartesian explosion — fall back to inner join on all keys
+        if len(attempt) > explosion_threshold and join_type != "inner":
+            logger.warning("JOIN: cartesian explosion detected (%d rows > %d threshold) — "
+                            "retrying as inner join on all %d keys",
+                            len(attempt), explosion_threshold, len(left_on))
+            attempt = merged.merge(other, left_on=left_on, right_on=right_on, how="inner")
+            logger.warning("JOIN: inner join fallback produced %d rows", len(attempt))
+
+        # Join produced no rows — retry each key alone, pick best result
+        # (applies for BOTH single-key and multi-key scenarios)
+        if attempt.empty:
+            logger.warning("JOIN: %d-key join produced 0 rows — trying each key individually",
+                            len(left_on))
+            best, best_score = None, float("inf")
+            for l_col, r_col in zip(left_on, right_on):
+                m_try = merged.copy()
+                o_try = other.copy()
+                m_try[l_col] = m_try[l_col].astype(str).str.strip()
+                o_try[r_col] = o_try[r_col].astype(str).str.strip()
+                candidate = m_try.merge(o_try, left_on=l_col, right_on=r_col, how="inner")
+                n = len(candidate)
+                logger.warning("JOIN: single-key %s=%s -> %d rows", l_col, r_col, n)
+                if n == 0:
+                    continue
+                # Prefer result closest to max_input size
+                score = abs(n - max_input)
+                # Penalize explosions but DO NOT skip — a large result beats 0 rows
+                if n > explosion_threshold:
+                    score = n  # deprioritize but keep as candidate
+                    logger.warning("JOIN: single-key %s=%s is large (%d > %d) — deprioritized",
+                                    l_col, r_col, n, explosion_threshold)
+                if score < best_score:
+                    best, best_score = candidate, score
+            if best is not None:
+                attempt = best
+                logger.warning("JOIN: best single-key produced %d rows", len(attempt))
+
+        # Final explosion guard — cap via inner join on original key columns only
+        if len(attempt) > explosion_threshold:
+            logger.warning("JOIN: FINAL GUARD — result still exploded (%d rows > %d). "
+                            "Falling back to inner join on key columns.",
+                            len(attempt), explosion_threshold)
+            # Use the actual key columns, not all shared columns (which includes renamed ones)
+            inner_attempt = merged.merge(other, left_on=left_on, right_on=right_on, how="inner")
+            if not inner_attempt.empty:
+                attempt = inner_attempt
+                logger.warning("JOIN: inner join on keys %s -> %d rows", left_on, len(attempt))
+
+        # NEVER produce 0 rows — if all strategies failed, fall back to outer join
+        if attempt.empty:
+            logger.warning("JOIN: ALL strategies produced 0 rows — falling back to outer join")
+            attempt = merged.merge(other, left_on=left_on, right_on=right_on, how="outer")
+            logger.warning("JOIN: outer join fallback produced %d rows", len(attempt))
+
+        merged = attempt
 
     # Drop rows where ALL columns from any one source are null (outer join artifacts)
     source_col_groups: Dict[str, List[str]] = {}

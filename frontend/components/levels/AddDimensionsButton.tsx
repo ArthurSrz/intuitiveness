@@ -16,15 +16,17 @@ interface DimensionAnalyzeResult {
 export function AddDimensionsButton({
   sessionId,
   onConfirm,
+  initialIntent,
 }: {
   sessionId: string;
   onConfirm?: () => void;
+  initialIntent?: string;
 }) {
   const [analyzing, setAnalyzing] = useState(false);
   const [confirming, setConfirming] = useState(false);
   const [result, setResult] = useState<DimensionAnalyzeResult | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [intent, setIntent] = useState("");
+  const [intent, setIntent] = useState(initialIntent ?? "");
   const [showCode, setShowCode] = useState(false);
 
   async function analyze() {
@@ -48,7 +50,9 @@ export function AddDimensionsButton({
       await apiPost(`/sessions/${sessionId}/dimension-confirm`, {
         code: result.code,
       });
-      if (onConfirm) onConfirm();
+      if (onConfirm) await onConfirm();
+      setConfirming(false);
+      setResult(null);
     } catch (e) { setError(String(e)); setConfirming(false); }
   }
 
@@ -79,7 +83,9 @@ export function AddDimensionsButton({
         >
           <Icon name="categories" size={16} />
           <span style={{ fontWeight: 600, color: "var(--blue)" }}>
-            {analyzing ? "AI is building dimensions..." : "Add dimensions — split by groups"}
+            {analyzing ? "Creating groups (this can take 15-30 seconds)..." : "Split into groups to compare"}
+          </span>
+          <span className="chip" style={{ background: "var(--blue)", color: "#fff", fontSize: 10, padding: "2px 6px" }}>Next step
           </span>
           {error && <span style={{ color: "var(--error)", fontSize: 12, marginLeft: "auto" }}>{error}</span>}
         </button>
@@ -94,7 +100,7 @@ export function AddDimensionsButton({
     <div className="card" style={{ padding: 0, overflow: "hidden", border: "1.5px solid var(--blue)" }}>
       <div style={{ padding: "12px 16px", borderBottom: "1px solid var(--border)", display: "flex", alignItems: "center", gap: 10, background: "var(--blue-soft)" }}>
         <Icon name="categories" size={16} />
-        <span style={{ fontWeight: 700, fontSize: 14, color: "var(--blue)" }}>Dimension Preview</span>
+        <span style={{ fontWeight: 700, fontSize: 14, color: "var(--blue)" }}>Preview: how your values will be grouped</span>
         {result.proposed_columns.length > 0 && (
           <span className="chip mono" style={{ fontSize: 11 }}>
             {result.proposed_columns.join(", ")}

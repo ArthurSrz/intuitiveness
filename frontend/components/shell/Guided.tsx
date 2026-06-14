@@ -1,7 +1,7 @@
 "use client";
 
 import { Icon } from "@/components/ui/Icon";
-import type { Step } from "@/lib/design";
+import { STEPS, type Step } from "@/lib/design";
 
 /*
  * Guided-workflow header (phase chip + title + question + level metric) and the
@@ -72,6 +72,7 @@ export function WorkflowNav({
   onNext,
   pending,
   lastAction,
+  nextDisabled,
 }: {
   stepIndex: number;
   total: number;
@@ -79,6 +80,7 @@ export function WorkflowNav({
   onNext: () => void;
   pending?: boolean;
   lastAction: { label: string; onClick: () => void };
+  nextDisabled?: boolean;
 }) {
   const atStart = stepIndex === 0;
   const atEnd = stepIndex === total - 1;
@@ -97,26 +99,43 @@ export function WorkflowNav({
         <Icon name="up" size={16} /> Previous
       </button>
       <div style={{ display: "flex", alignItems: "center", gap: 7, margin: "0 auto" }}>
-        {Array.from({ length: total }).map((_, i) => (
-          <span
-            key={i}
-            style={{
-              width: i === stepIndex ? 22 : 7,
-              height: 7,
-              borderRadius: 99,
-              background: i === stepIndex ? "var(--blue)" : i < stepIndex ? "var(--blue-ring)" : "var(--border-strong)",
-              transition: "all .25s",
-            }}
-          />
-        ))}
+        {Array.from({ length: total }).map((_, i) => {
+          const phase = STEPS[i]?.phase;
+          const active = i === stepIndex;
+          const visited = i < stepIndex;
+          let color: string;
+          let dimColor: string;
+          if (phase === "pivot") {
+            color = "var(--success)";
+            dimColor = "var(--success-soft)";
+          } else if (phase === "ascent") {
+            color = "var(--blue)";
+            dimColor = "var(--blue-ring)";
+          } else {
+            color = "var(--neutral)";
+            dimColor = "var(--neutral-soft)";
+          }
+          return (
+            <span
+              key={i}
+              style={{
+                width: active ? 22 : 7,
+                height: 7,
+                borderRadius: 99,
+                background: active ? color : visited ? dimColor : "var(--border-strong)",
+                transition: "all .25s",
+              }}
+            />
+          );
+        })}
       </div>
       {atEnd ? (
         <button className="pill-btn dark" onClick={lastAction.onClick} disabled={pending} style={{ height: 40 }}>
           {lastAction.label} <Icon name="export" size={16} stroke={2.1} />
         </button>
       ) : (
-        <button className="pill-btn primary" onClick={onNext} disabled={pending} style={{ height: 40 }}>
-          {pending ? "Working…" : "Next"} <Icon name="down" size={16} stroke={2.2} />
+        <button className="pill-btn primary" onClick={onNext} disabled={pending || nextDisabled} style={{ height: 40 }}>
+          {pending ? "Working…" : nextDisabled ? "Use the action above ↑" : "Next"} <Icon name={nextDisabled ? "up" : "down"} size={16} stroke={2.2} />
         </button>
       )}
     </div>

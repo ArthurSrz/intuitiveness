@@ -50,6 +50,41 @@ from intuitiveness.redesign.params import (
     TransitionParams,
 )
 
+# Soft-import: avoid hard coupling to the backend app package.
+try:
+    from backend.app.categorizers import _quantile_categorize
+except ImportError:
+
+    def _quantile_categorize(
+        df: pd.DataFrame, col: str, domains: list[str]
+    ) -> pd.Series:
+        """Fallback quantile categorizer (mirrors backend implementation)."""
+        _UNMATCHED = "uncategorized"
+        n = len(domains)
+        mask = df[col].notna()
+        if not mask.any():
+            return pd.Series(_UNMATCHED, index=df.index)
+        try:
+            cats = pd.qcut(
+                df.loc[mask, col].rank(method="first"), q=n, labels=domains
+            )
+            result = pd.Series(_UNMATCHED, index=df.index)
+            result.loc[mask] = cats.astype(str)
+            return result
+        except Exception:
+            ranks = df.loc[mask, col].rank(method="first")
+            edges = [ranks.quantile(i / n) for i in range(1, n)]
+
+            def bucket(r: float) -> str:
+                for i, e in enumerate(edges):
+                    if r <= e:
+                        return domains[i]
+                return domains[-1]
+
+            result = pd.Series(_UNMATCHED, index=df.index)
+            result.loc[mask] = ranks.apply(bucket)
+            return result
+
 
 class TransitionError(ValueError):
     """Raised when a requested transition is not well-formed (stateless rule)."""
@@ -266,38 +301,47 @@ class Redesigner:
     # ------------------------------------------------------------------ #
     @staticmethod
     def _l0_to_l1(dataset: Level0Dataset, params: L0toL1Params) -> Level1Dataset:
-        # Reconstruct a vector using the SAME enrichment transform as legacy
-        # (ascent/enrichment.py), so output is identical. L0→L1 legitimately
+        # Reconstruct a vector from L0 datum. L0→L1 legitimately
         # changes item count (reconstruction), so row-count is NOT preserved.
-        from intuitiveness.ascent.enrichment import EnrichmentRegistry
-
-        registry = EnrichmentRegistry.get_instance()
-        enrichment_func = params.enrichment_function
-        if enrichment_func is None:
-            if getattr(dataset, "has_parent", False):
-                enrichment_func = "source_expansion"
-            else:
-                defaults = registry.get_defaults(
-                    ComplexityLevel.LEVEL_0, ComplexityLevel.LEVEL_1
-                )
-                if not defaults:
-                    raise TransitionError(
-                        "L0→L1 needs an enrichment_function (no parent data, no defaults)."
-                    )
-                enrichment_func = defaults[0].name
-
-        func = registry.get(enrichment_func) if isinstance(enrichment_func, str) else enrichment_func
         data = dataset.get_data()
-        context = dataset.get_parent_data() if func.requires_context else None
-        if func.requires_context and context is None:
-            raise TransitionError(
-                f"Enrichment '{func.name}' requires parent data, but none is available."
-            )
-        series = func(data, context)
-        if not isinstance(series, pd.Series):
-            series = pd.Series(list(series)) if hasattr(series, "__iter__") and not isinstance(series, (str, dict)) else pd.Series([series])
-        if len(series) == 0:
-            raise TransitionError(f"Enrichment '{func.name}' produced an empty vector.")
+
+        if params.prebuilt_series is not None:
+            # Caller already ran exec() on AI code — use the result directly.
+            series = params.prebuilt_series
+            if not isinstance(series, pd.Series):
+                series = pd.Series(series)
+            if len(series) == 0:
+                raise TransitionError("Prebuilt series is empty.")
+            enrichment_func = "code"
+        else:
+            from intuitiveness.ascent.enrichment import EnrichmentRegistry
+
+            registry = EnrichmentRegistry.get_instance()
+            enrichment_func = params.enrichment_function
+            if enrichment_func is None:
+                if getattr(dataset, "has_parent", False):
+                    enrichment_func = "source_expansion"
+                else:
+                    defaults = registry.get_defaults(
+                        ComplexityLevel.LEVEL_0, ComplexityLevel.LEVEL_1
+                    )
+                    if not defaults:
+                        raise TransitionError(
+                            "L0→L1 needs an enrichment_function (no parent data, no defaults)."
+                        )
+                    enrichment_func = defaults[0].name
+
+            func = registry.get(enrichment_func) if isinstance(enrichment_func, str) else enrichment_func
+            context = dataset.get_parent_data() if func.requires_context else None
+            if func.requires_context and context is None:
+                raise TransitionError(
+                    f"Enrichment '{func.name}' requires parent data, but none is available."
+                )
+            series = func(data, context)
+            if not isinstance(series, pd.Series):
+                series = pd.Series(list(series)) if hasattr(series, "__iter__") and not isinstance(series, (str, dict)) else pd.Series([series])
+            if len(series) == 0:
+                raise TransitionError(f"Enrichment '{func.name}' produced an empty vector.")
 
         lineage = Redesigner._stamp(
             dataset, "L0→L1", ComplexityLevel.LEVEL_0, ComplexityLevel.LEVEL_1,
@@ -330,7 +374,6 @@ class Redesigner:
 
             free_labels = [d for d in dimensions if isinstance(d, str) and not registry.has(d)]
             if free_labels:
-                from backend.app.categorizers import _quantile_categorize
                 df["category"] = list(_quantile_categorize(df, "value", free_labels))
 
         before, after = _row_count(series), _row_count(df)
@@ -344,43 +387,47 @@ class Redesigner:
 
     @staticmethod
     def _l2_to_l3(dataset: Level2Dataset, params: L2toL3Params) -> Level3Dataset:
-        # Mirror legacy _increase_2_to_3: apply analytic dimensions/relationships
-        # to the table via the shared DimensionRegistry. Rows preserved.
-        from intuitiveness.ascent.dimensions import (
-            DimensionRegistry, DimensionDefinition, RelationshipDefinition,
-            apply_relationships_to_dataframe,
-        )
+        before = _row_count(dataset.get_data())
 
-        registry = DimensionRegistry.get_instance()
-        df = dataset.get_data().copy()
-        before = _row_count(df)
+        if params.prebuilt_dataframe is not None:
+            df = params.prebuilt_dataframe
+            dimensions = list(params.dimensions) or ["AI-generated"]
+        else:
+            # Mirror legacy _increase_2_to_3: apply analytic dimensions/relationships
+            # to the table via the shared DimensionRegistry. Rows preserved.
+            from intuitiveness.ascent.dimensions import (
+                DimensionRegistry, DimensionDefinition, RelationshipDefinition,
+                apply_relationships_to_dataframe,
+            )
 
-        dimensions = list(params.dimensions)
-        relationships = list(params.relationships)
-        if not dimensions and not relationships:
-            defaults = registry.get_defaults(ComplexityLevel.LEVEL_2, ComplexityLevel.LEVEL_3)
-            dimensions = [d.name for d in defaults] if defaults else []
+            registry = DimensionRegistry.get_instance()
+            df = dataset.get_data().copy()
 
-        source_column = params.source_column
-        if source_column is None:
-            source_column = "value" if "value" in df.columns else (df.columns[0] if len(df.columns) else None)
+            dimensions = list(params.dimensions)
+            relationships = list(params.relationships)
+            if not dimensions and not relationships:
+                defaults = registry.get_defaults(ComplexityLevel.LEVEL_2, ComplexityLevel.LEVEL_3)
+                dimensions = [d.name for d in defaults] if defaults else []
 
-        for dim in dimensions:
-            if isinstance(dim, str) and not registry.has(dim):
-                continue  # free-form labels handled below
-            dim_def = registry.get(dim) if isinstance(dim, str) else dim
-            df = dim_def.apply_to_dataframe(df, source_column=source_column)
+            source_column = params.source_column
+            if source_column is None:
+                source_column = "value" if "value" in df.columns else (df.columns[0] if len(df.columns) else None)
 
-        free_labels = [d for d in dimensions if isinstance(d, str) and not registry.has(d)]
-        if free_labels:
-            from backend.app.categorizers import _quantile_categorize
-            col = source_column if source_column in df.columns else (df.columns[0] if len(df.columns) else "value")
-            df["category"] = list(_quantile_categorize(df, col, free_labels))
+            for dim in dimensions:
+                if isinstance(dim, str) and not registry.has(dim):
+                    continue  # free-form labels handled below
+                dim_def = registry.get(dim) if isinstance(dim, str) else dim
+                df = dim_def.apply_to_dataframe(df, source_column=source_column)
 
-        if relationships:
-            rel_defs = [r if isinstance(r, RelationshipDefinition) else RelationshipDefinition.from_dict(r)
-                        for r in relationships]
-            df = apply_relationships_to_dataframe(df, rel_defs, source_column)
+            free_labels = [d for d in dimensions if isinstance(d, str) and not registry.has(d)]
+            if free_labels:
+                col = source_column if source_column in df.columns else (df.columns[0] if len(df.columns) else "value")
+                df["category"] = list(_quantile_categorize(df, col, free_labels))
+
+            if relationships:
+                rel_defs = [r if isinstance(r, RelationshipDefinition) else RelationshipDefinition.from_dict(r)
+                            for r in relationships]
+                df = apply_relationships_to_dataframe(df, rel_defs, source_column)
 
         after = _row_count(df)
         Redesigner._require_row_count_preserved(before, after, "L2→L3")

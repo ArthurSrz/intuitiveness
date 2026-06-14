@@ -28,11 +28,12 @@ export interface LevelViewProps {
   options?: SessionOptions;
   ascendMove?: AscendMove;
   phase?: "descent" | "ascent";
+  initialIntent?: string;
 }
 
 export function LevelView({
   node, level, onAddSource, sessionId, onConnect,
-  edgeParams, onEdgeChange, options, ascendMove, phase,
+  edgeParams, onEdgeChange, options, ascendMove, phase, initialIntent,
 }: LevelViewProps) {
   if (!node) {
     return (
@@ -52,16 +53,16 @@ export function LevelView({
       return <L4Sources node={node} onAddSource={onAddSource} sessionId={sessionId} onConnect={onConnect} />;
     case 3:
       return node.payload_kind === "dataframe" ? (
-        <L2Table node={node} code="L3" glyph="graph" />
+        <L2Table node={node} code="L3" glyph="graph" phase={phase} />
       ) : (
         <L3Graph node={node} sessionId={sessionId} onConfirm={onConnect} />
       );
     case 2:
-      return <L2Table node={node} edgeProps={edgeProps} sessionId={sessionId} onConfirm={onConnect} />;
+      return <L2Table node={node} edgeProps={edgeProps} sessionId={sessionId} onConfirm={onConnect} phase={phase} initialIntent={initialIntent} />;
     case 1:
-      return <L1Vector node={node} edgeProps={edgeProps} sessionId={sessionId} onConfirm={onConnect} />;
+      return <L1Vector node={node} edgeProps={edgeProps} sessionId={sessionId} onConfirm={onConnect} phase={phase} initialIntent={initialIntent} />;
     case 0:
-      return <L0Datum node={node} edgeProps={edgeProps} sessionId={sessionId} onConfirm={onConnect} />;
+      return <L0Datum node={node} edgeProps={edgeProps} sessionId={sessionId} onConfirm={onConnect} phase={phase} initialIntent={initialIntent} />;
     default:
       return (
         <div className="rounded-lg border border-border bg-surface p-5 text-sm text-fg-muted shadow-sm">

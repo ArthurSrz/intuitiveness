@@ -178,7 +178,10 @@ class NavigationSession:
         """
         edge = (current_level.value, target_level.value)
         if edge == (0, 1):
-            return L0toL1Params(enrichment_function=params.get("enrichment_func"))
+            return L0toL1Params(
+                enrichment_function=params.get("enrichment_func"),
+                prebuilt_series=params.get("prebuilt_series"),
+            )
         if edge == (1, 2):
             return L1toL2Params(
                 dimensions=params.get("dimensions", []),
@@ -189,6 +192,7 @@ class NavigationSession:
                 dimensions=params.get("dimensions", []),
                 relationships=params.get("relationships", []),
                 source_column=params.get("source_column"),
+                prebuilt_dataframe=params.get("prebuilt_dataframe"),
             )
         raise NavigationError(f"Unsupported ascent edge {current_level.name}→{target_level.name}.")
 

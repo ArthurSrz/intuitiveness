@@ -19,12 +19,14 @@ interface SuggestedIntent {
 export function IntentCard({
   value,
   onChange,
+  onTextChange,
   active,
   sessionId,
   locked,
 }: {
   value: string;
   onChange: (id: string) => void;
+  onTextChange?: (text: string) => void;
   active: boolean;
   sessionId?: string;
   locked?: boolean;
@@ -151,7 +153,7 @@ export function IntentCard({
           return (
             <button
               key={it.id}
-              onClick={() => onChange(it.id)}
+              onClick={() => { onChange(it.id); onTextChange?.(it.question); }}
               style={{
                 display: "flex",
                 gap: 11,
@@ -276,11 +278,11 @@ export function CoreCard({ reached, datum }: { reached: boolean; datum?: string 
   );
 }
 
-export function JourneyCard({ stats }: { stats: { k: string; v: string; accent?: boolean }[] }) {
+export function JourneyCard({ stats, phase }: { stats: { k: string; v: string; accent?: boolean }[]; phase?: "descent" | "ascent" }) {
   return (
     <div className="card">
       <div className="t-name" style={{ marginBottom: 12 }}>
-        The reduction
+        {phase === "ascent" ? "The reconstruction" : "The reduction"}
       </div>
       <div style={{ display: "flex", flexDirection: "column" }}>
         {stats.map((s, i) => (

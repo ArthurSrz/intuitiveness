@@ -33,7 +33,7 @@ export function L3Graph({ node, sessionId, onConfirm }: { node: NodeDetail; sess
   if (!graph || graph.nodes.length === 0) {
     return (
       <div className="card" style={{ padding: 12 }}>
-        <span className="chip"><Icon name="graph" size={15} /> L3 · Graph</span>
+        <span className="chip"><Icon name="graph" size={15} /> Connected data</span>
         <p className="t-meta" style={{ padding: "8px 6px" }}>No graph payload available.</p>
       </div>
     );
@@ -127,7 +127,7 @@ function SchemaView({ graph, node: detail }: { graph: DecodedGraph; node: NodeDe
     <div className="card" style={{ padding: 0, overflow: "hidden" }}>
       {/* Header */}
       <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "12px 16px", borderBottom: "1px solid var(--border)" }}>
-        <span className="chip"><Icon name="graph" size={15} /> L3 · Schema</span>
+        <span className="chip"><Icon name="graph" size={15} /> Data connections</span>
         <span className="t-meta" style={{ marginLeft: "auto" }}>
           {sources.length} sources · {concepts.length} concepts · {mappings.length} mappings
         </span>
@@ -382,7 +382,7 @@ function MultiLevelTable({
     <div className="card" style={{ padding: 0, overflow: "hidden" }}>
       {/* Header */}
       <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "12px 16px", borderBottom: "1px solid var(--border)" }}>
-        <span className="chip"><Icon name="table" size={15} /> L3 · Linked data</span>
+        <span className="chip"><Icon name="table" size={15} /> Linked data</span>
         <span className="t-meta mono" style={{ marginLeft: "auto" }}>
           {table.rows.length} rows · {table.columns.length} cols
         </span>
@@ -562,14 +562,14 @@ function ReconciliatedView({
           {sourceNames.length} sources · {catalog.length} shared concept{catalog.length === 1 ? "" : "s"} → {table.rows.length.toLocaleString()} rows linked
         </span>
         <span className="t-meta" style={{ fontSize: 11 }}>
-          Artefactual heterogeneity reduced — relational structure established
+          Your files have been merged into one connected table
         </span>
       </div>
 
       {/* Schema reconciliation */}
       <div className="card" style={{ padding: 0, overflow: "hidden" }}>
         <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "12px 16px", borderBottom: "1px solid var(--border)" }}>
-          <span className="chip"><Icon name="graph" size={15} /> L3 · Schema</span>
+          <span className="chip"><Icon name="graph" size={15} /> Data connections</span>
           <span className="t-meta" style={{ marginLeft: "auto" }}>
             {sourceNames.length} sources · {catalog.length} concepts
           </span>
@@ -698,15 +698,26 @@ function EntityGraph({ graph, node: detail }: { graph: DecodedGraph; node: NodeD
     <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
       {/* Graph view (compact when table is present) */}
       <div className="card" style={{ padding: 12 }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "4px 6px 12px", flexWrap: "wrap" }}>
-          <span className="chip"><Icon name="graph" size={15} /> L3 · Knowledge Graph</span>
-          <span className="t-name" style={{ fontWeight: 700 }}>
-            {detail.decision_description ?? "Entity / relationship graph"}
-          </span>
-          <span className="t-meta" style={{ marginLeft: "auto" }}>
-            <span className="mono">{nodes.length}</span> entities
-            {edges.length > 0 && <> · <span className="mono">{edges.length}</span> links</>}
-          </span>
+        <div style={{ display: "flex", flexDirection: "column", gap: 8, padding: "4px 6px 12px" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+            <span className="chip"><Icon name="graph" size={15} /> Connected data</span>
+            <span className="t-meta" style={{ marginLeft: "auto" }}>
+              <span className="mono">{nodes.length}</span> items found
+              {edges.length > 0 && <> · <span className="mono">{edges.length}</span> connections</>}
+            </span>
+          </div>
+          <p className="t-body" style={{ margin: 0, fontSize: 13, color: "var(--text-2)", lineHeight: 1.5 }}>
+            {detail.decision_description
+              ? detail.decision_description
+              : `We found ${nodes.length} items in your dataset. Here are a few examples: ${
+                  graph.nodes.slice(0, 5).map((n) => labelForNode(n)).join(", ")
+                }${graph.nodes.length > 5 ? "..." : ""}`}
+          </p>
+          {nodes.length > 50 && (
+            <p className="t-meta" style={{ margin: 0, fontSize: 11, color: "var(--text-2)" }}>
+              The dots below each represent one item. You do not need to read them all — the next step will organize them for you.
+            </p>
+          )}
         </div>
         <div style={{ height: isRowData ? 200 : 420, overflow: "hidden", borderRadius: "var(--radius-lg)", border: "1px solid var(--border)", background: "var(--surface)" }}>
           <ReactFlow nodes={nodes} edges={edges} fitView proOptions={{ hideAttribution: true }} nodesDraggable nodesConnectable={false}>
@@ -720,7 +731,7 @@ function EntityGraph({ graph, node: detail }: { graph: DecodedGraph; node: NodeD
       {table && (
         <div className="card" style={{ padding: 0, overflow: "hidden" }}>
           <div style={{ padding: "12px 16px", borderBottom: "1px solid var(--border)", display: "flex", alignItems: "center", gap: 10 }}>
-            <span className="chip"><Icon name="table" size={15} /> L3 · Merged Data</span>
+            <span className="chip"><Icon name="table" size={15} /> Merged data</span>
             <span className="t-meta mono">
               {table.rows.length} rows x {table.columns.length} cols
             </span>

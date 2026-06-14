@@ -207,7 +207,7 @@ export default function HomePage() {
             Intuitiveness
           </div>
           <div className="t-meta" style={{ fontSize: 11.5, marginTop: 2 }}>
-            dataset design · tabular data
+            make sense of complex data
           </div>
         </div>
         <div style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: 8 }}>
@@ -282,7 +282,7 @@ export default function HomePage() {
                 className="pill-btn primary lg"
                 onClick={() => document.getElementById("entry-options")?.scrollIntoView({ behavior: "smooth" })}
               >
-                Start the descent <Icon name="arrowRight" size={18} stroke={2.1} />
+                Start exploring <Icon name="arrowRight" size={18} stroke={2.1} />
               </button>
             </div>
           </div>
@@ -290,7 +290,7 @@ export default function HomePage() {
           {/* diagram card */}
           <div className="card" style={{ padding: 26, background: "var(--bg)" }}>
             <div className="t-label" style={{ color: "var(--text-2)", marginBottom: 18 }}>
-              THE FIVE GRANULARITY LEVELS
+              HOW IT WORKS
             </div>
             <DescentAscentDiagram />
           </div>
@@ -382,7 +382,7 @@ export default function HomePage() {
                       type="text"
                       value={wbQuery}
                       onChange={(e) => setWbQuery(e.target.value)}
-                      placeholder={`"GDP per capita", "life expectancy"…`}
+                      placeholder="e.g. fertility rate, GDP, education spending"
                       style={{ width: "100%", boxSizing: "border-box", border: "1px solid var(--border)", borderRadius: "var(--radius)", background: "var(--surface)", outline: "none", color: "var(--text)", fontFamily: "var(--font)", fontSize: 14, padding: "9px 12px" }}
                     />
                     <button type="submit" className="pill-btn primary" style={{ width: "100%", justifyContent: "center" }} disabled={wbBusy || !wbQuery.trim()}>
@@ -396,7 +396,7 @@ export default function HomePage() {
                         <div key={ind.id} style={{ display: "flex", alignItems: "center", gap: 10, padding: "8px 0", borderBottom: "1px solid var(--border)" }}>
                           <div style={{ flex: 1, minWidth: 0 }}>
                             <div className="t-name" style={{ fontSize: 13, marginBottom: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{ind.name}</div>
-                            <div className="t-meta mono" style={{ fontSize: 11 }}>{ind.id}</div>
+                            {/* indicator codes hidden — non-technical users don't need them */}
                           </div>
                           <button className="pill-btn ghost" style={{ height: 30, flex: "none", fontSize: 12 }} disabled={!!wbImportingId} onClick={() => handleWbImport(ind)}>
                             {wbImportingId === ind.id ? "Loading…" : <>Load <Icon name="arrowRight" size={12} /></>}
@@ -424,8 +424,8 @@ export default function HomePage() {
                   <div className="t-name" style={{ fontSize: 15 }}>Upload your data</div>
                 </div>
               </div>
-              <p className="t-meta" style={{ margin: 0 }}>Upload one or more CSV files. Encoding and delimiter are auto-detected.</p>
-              <input ref={fileInputRef} type="file" accept=".csv,text/csv" multiple style={{ display: "none" }} onChange={handleUpload} />
+              <p className="t-meta" style={{ margin: 0 }}>Upload your spreadsheet (.xlsx or .csv) and start exploring.</p>
+              <input ref={fileInputRef} type="file" accept=".csv,.xlsx,text/csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" multiple style={{ display: "none" }} onChange={handleUpload} />
               {activePanel === "upload" && (
                 <button
                   className="pill-btn primary"
@@ -433,7 +433,7 @@ export default function HomePage() {
                   disabled={busy}
                   onClick={(e) => { e.stopPropagation(); !busy && fileInputRef.current?.click(); }}
                 >
-                  {uploadCsv.isPending ? "Uploading…" : <>Choose CSV files <Icon name="export" size={15} stroke={2.1} /></>}
+                  {uploadCsv.isPending ? "Uploading…" : <>Choose a file <Icon name="export" size={15} stroke={2.1} /></>}
                 </button>
               )}
             </div>
@@ -495,11 +495,11 @@ export default function HomePage() {
 /* ---- the five-level descent/ascent diagram in the hero card ---- */
 function DescentAscentDiagram() {
   const steps = [
-    { code: "L4", glyph: "table", label: "Unlinked" },
-    { code: "L3", glyph: "graph", label: "Linked" },
-    { code: "L2", glyph: "categories", label: "Table" },
-    { code: "L1", glyph: "vector", label: "Vector" },
-    { code: "L0", glyph: "core", label: "Value" },
+    { code: "Start", glyph: "table", label: "Your raw files" },
+    { code: "Step 1", glyph: "graph", label: "Find links" },
+    { code: "Step 2", glyph: "categories", label: "Group & sort" },
+    { code: "Step 3", glyph: "vector", label: "Key numbers" },
+    { code: "Result", glyph: "core", label: "Your answer" },
   ];
   const colColor = (i: number) => gradientColor(i / (steps.length - 1));
 
@@ -588,10 +588,10 @@ function DescentAscentDiagram() {
       </div>
       <div style={{ display: "flex", alignItems: "center", gap: 16, flexWrap: "wrap" }}>
         <span className="chip" style={{ background: "var(--neutral-soft)", color: "var(--neutral)" }}>
-          <Icon name="arrowRight" size={14} stroke={2.2} /> Descent · four reductions to the core
+          <Icon name="arrowRight" size={14} stroke={2.2} /> Simplify -- find the core insight
         </span>
         <span className="chip" style={{ background: "var(--blue-soft)", color: "var(--blue)" }}>
-          <Icon name="up" size={14} stroke={2.2} /> Ascent · three amplifications with intent
+          <Icon name="up" size={14} stroke={2.2} /> Rebuild -- add context for your question
         </span>
       </div>
     </div>

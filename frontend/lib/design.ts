@@ -17,11 +17,11 @@ export interface LevelMeta {
 }
 
 export const LEVELS: LevelMeta[] = [
-  { n: 4, code: "L4", name: "Heterogeneous Sources", glyph: "table", tag: "Unlinkable, multi-source data" },
-  { n: 3, code: "L3", name: "Knowledge Graph", glyph: "graph", tag: "Entities linked through shared structure" },
-  { n: 2, code: "L2", name: "Domain Table", glyph: "categories", tag: "One coherent domain, categorized" },
-  { n: 1, code: "L1", name: "Feature Vector", glyph: "vector", tag: "One variable per entity" },
-  { n: 0, code: "L0", name: "Atomic Datum", glyph: "core", tag: "A single certain value" },
+  { n: 4, code: "L4", name: "Your raw files", glyph: "table", tag: "All your data files, not yet connected" },
+  { n: 3, code: "L3", name: "Connected data", glyph: "graph", tag: "Files linked through shared columns" },
+  { n: 2, code: "L2", name: "Grouped table", glyph: "categories", tag: "Data organized into categories" },
+  { n: 1, code: "L1", name: "Values list", glyph: "vector", tag: "One number per item" },
+  { n: 0, code: "L0", name: "Summary number", glyph: "core", tag: "One number that captures the big picture" },
 ];
 
 /** Free-navigation level identities — the five granularity levels (paper §3). */
@@ -29,11 +29,11 @@ export const NAV_LEVELS: Record<
   number,
   { code: string; name: string; glyph: string; desc: string }
 > = {
-  4: { code: "L4", name: "Sources", glyph: "table", desc: "Heterogeneous, unlinkable datasets" },
-  3: { code: "L3", name: "Graph", glyph: "graph", desc: "Entities linked through shared structure" },
-  2: { code: "L2", name: "Domain", glyph: "categories", desc: "One coherent table · categorized by meaning" },
-  1: { code: "L1", name: "Vector", glyph: "vector", desc: "One variable · one value per entity" },
-  0: { code: "L0", name: "Datum", glyph: "core", desc: "A single atomic value" },
+  4: { code: "L4", name: "Raw files", glyph: "table", desc: "Your data files, not yet connected" },
+  3: { code: "L3", name: "Connected", glyph: "graph", desc: "Files linked through shared columns" },
+  2: { code: "L2", name: "Grouped", glyph: "categories", desc: "One table, organized into categories" },
+  1: { code: "L1", name: "Values", glyph: "vector", desc: "One number per item" },
+  0: { code: "L0", name: "Summary", glyph: "core", desc: "One number that captures the big picture" },
 };
 
 /** Guided-workflow steps — the FULL descent–ascent cycle: L4 → L0, then L0 → L3. */
@@ -49,33 +49,33 @@ export interface Step {
 
 export const STEPS: Step[] = [
   /* ---- descent: trade away complexity for certainty ---- */
-  { id: "upload", glyph: "dataset", title: "Heterogeneous Sources", level: "L4", phase: "descent", stageLevel: 4, question: "Your data as-is — unlinkable, multi-source. The descent trades away complexity one level at a time." },
-  { id: "entities", glyph: "graph", title: "Match Entities", level: "L4 → L3", phase: "descent", stageLevel: 3, question: "Trade heterogeneity for structure — connect sources through shared entities." },
-  { id: "domains", glyph: "categories", title: "Map Domains", level: "L3 → L2", phase: "descent", stageLevel: 2, question: "Trade domain breadth for coherence — name the categories that carve your data." },
-  { id: "features", glyph: "vector", title: "Select Feature", level: "L2 → L1", phase: "descent", stageLevel: 1, question: "Trade dimensionality for legibility — isolate the one variable that matters." },
-  { id: "metric", glyph: "core", title: "Aggregate", level: "L1 → L0", phase: "descent", stageLevel: 0, question: "Trade extent for certainty — compress to a single atomic value." },
+  { id: "upload", glyph: "dataset", title: "Load your data", level: "Step 1", phase: "descent", stageLevel: 4, question: "Start with your raw files. We will simplify them step by step." },
+  { id: "entities", glyph: "graph", title: "Find what connects your files", level: "Step 2", phase: "descent", stageLevel: 3, question: "The app looks for shared columns so your files can talk to each other." },
+  { id: "domains", glyph: "categories", title: "Group into categories", level: "Step 3", phase: "descent", stageLevel: 2, question: "Organize your data into meaningful groups for easier analysis." },
+  { id: "features", glyph: "vector", title: "Pick the key number", level: "Step 4", phase: "descent", stageLevel: 1, question: "Choose the single measurement that matters most to you." },
+  { id: "metric", glyph: "core", title: "Get the summary", level: "Step 5", phase: "descent", stageLevel: 0, question: "Compress everything into one number that captures the big picture." },
   /* ---- pivot: the core datum + your intent ---- */
-  { id: "intent", glyph: "intent", title: "Set Your Intent", level: "L0", phase: "pivot", stageLevel: 0, question: "You've reached the core datum. What question will you rebuild the data to answer?" },
+  { id: "intent", glyph: "intent", title: "Ask your question", level: "Pivot", phase: "pivot", stageLevel: 0, question: "You have one summary number. Now decide: what question do you want your data to answer?" },
   /* ---- ascent: rebuild only what your intent needs ---- */
-  { id: "rebuild", glyph: "vector", title: "Enrich", level: "L0 → L1", phase: "ascent", stageLevel: 1, question: "Reconstruct a vector — one comparable number per entity, guided by your intent." },
-  { id: "split", glyph: "categories", title: "Add Dimensions", level: "L1 → L2", phase: "ascent", stageLevel: 2, question: "Add the categorical dimension that answers your question." },
-  { id: "link", glyph: "graph", title: "Link Domains", level: "L2 → L3", phase: "ascent", stageLevel: 3, question: "Link back the one relationship your intent asked for — a dataset built for your question." },
+  { id: "rebuild", glyph: "vector", title: "Expand the details", level: "Step 6", phase: "ascent", stageLevel: 1, question: "Bring back individual values, but only the ones relevant to your question." },
+  { id: "split", glyph: "categories", title: "Compare groups", level: "Step 7", phase: "ascent", stageLevel: 2, question: "Split into groups so you can spot differences and patterns." },
+  { id: "link", glyph: "graph", title: "Bring in related data", level: "Step 8", phase: "ascent", stageLevel: 3, question: "Connect to other datasets to test whether your insight holds up." },
 ];
 
 /** Header copy keyed by phase + level. */
 export const LEVEL_COPY: Record<"descent" | "ascent", Record<number, { title: string; sub: string }>> = {
   descent: {
-    4: { title: "Heterogeneous sources", sub: "Multiple unlinkable datasets — every column, every row. The descent trades away complexity to find the core." },
-    3: { title: "Relational structure gained", sub: "Sources are now linked through shared entities. You traded heterogeneity for a knowledge graph." },
-    2: { title: "Domain coherence gained", sub: "The graph is now a single coherent table, sliced by the categories you named. Breadth traded for focus." },
-    1: { title: "Feature legibility gained", sub: "One variable isolated — every entity reduced to a single comparable number. Dimensions traded for clarity." },
-    0: { title: "Atomic certainty", sub: "One value remains. This is the floor — the core datum. Extent traded for certainty." },
+    4: { title: "Your raw data", sub: "All your files loaded. We will simplify them step by step to find the essential number." },
+    3: { title: "Files connected", sub: "Your files are now linked through columns they share. This lets us work with them as one dataset." },
+    2: { title: "Data grouped", sub: "Your data is organized into meaningful categories, making it easier to spot patterns." },
+    1: { title: "One number per item", sub: "Each item now has a single comparable value. We are almost at the summary." },
+    0: { title: "The big picture", sub: "Everything compressed into one number. This is your starting point for analysis." },
   },
   ascent: {
-    0: { title: "The core datum — with intent", sub: "The descent found the floor. The ascent rebuilds upward, but only the dimensions your question needs." },
-    1: { title: "Vector rebuilt with purpose", sub: "The datum is re-expanded into a feature vector — one number per entity, guided by your intent." },
-    2: { title: "Dimensions shaped by your question", sub: "Categorical dimensions added — a purposeful cut that answers what you came to ask." },
-    3: { title: "A dataset built for your question", sub: "Domains linked by the relationship your intent asked for. Ready for analysis." },
+    0: { title: "Your question", sub: "You have the summary. Now choose what question you want to answer — we will rebuild the data around it." },
+    1: { title: "Details restored", sub: "Individual values are back, but only the ones relevant to your question." },
+    2: { title: "Groups compared", sub: "Your data is split into groups so you can see differences and test your question." },
+    3: { title: "Related data added", sub: "Other datasets brought in to put your insight to the test." },
   },
 };
 

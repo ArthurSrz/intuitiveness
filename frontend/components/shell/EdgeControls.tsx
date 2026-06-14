@@ -359,9 +359,9 @@ export function EdgeControls({
       if (level === 2) return "reduce dimensionality → gain feature legibility";
       if (level === 1) return "reduce extent → gain atomic certainty";
     } else {
-      if (level === 0) return "enrich the datum → rebuild a vector";
-      if (level === 1) return "add categorical dimensions";
-      if (level === 2) return "link domains into a knowledge graph";
+      if (level === 0) return "trade atomic certainty for individual variation — the incubation stage";
+      if (level === 1) return "trade feature isolation for attribute coverage — the insight stage";
+      if (level === 2) return "trade domain isolation for inter-domain linkage — the evaluation stage";
     }
     return "";
   })();
