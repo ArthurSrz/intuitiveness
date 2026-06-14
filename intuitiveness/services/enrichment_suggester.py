@@ -10,46 +10,13 @@ from __future__ import annotations
 
 import json
 import logging
-import os
 from typing import Any, Dict
 
 import pandas as pd
 
+from intuitiveness.services.llm_client import call_llm
+
 logger = logging.getLogger(__name__)
-
-_CHAT_MODEL = "anthropic/claude-sonnet-4"
-
-
-def _get_chat_client():
-    # OpenRouter first (preferred), then Anthropic as fallback
-    or_key = os.getenv("OPENROUTER_API_KEY")
-    if or_key:
-        try:
-            from openai import OpenAI
-            return ("openai", OpenAI(
-                api_key=or_key,
-                base_url=os.getenv("OPENROUTER_BASE_URL", "https://openrouter.ai/api/v1"),
-            ))
-        except ImportError:
-            pass
-    anthropic_key = os.getenv("ANTHROPIC_API_KEY")
-    if anthropic_key:
-        try:
-            import anthropic
-            return ("anthropic", anthropic.Anthropic(api_key=anthropic_key))
-        except ImportError:
-            pass
-    api_key = os.getenv("EMBEDDING_API_KEY") or os.getenv("OPENAI_API_KEY")
-    if not api_key:
-        return None
-    try:
-        from openai import OpenAI
-    except ImportError:
-        return None
-    return ("openai", OpenAI(
-        api_key=api_key,
-        base_url=os.getenv("OPENROUTER_BASE_URL", "https://openrouter.ai/api/v1"),
-    ))
 
 
 _SYSTEM_PROMPT = """You are a Python data analyst. You write pandas code to rebuild a vector from a single datum value.
@@ -61,47 +28,8 @@ RULES:
 4. Respond ONLY with valid JSON, no markdown."""
 
 
-def _call_llm(client_tuple, prompt: str) -> str:
-    kind, client = client_tuple
-    if kind == "anthropic":
-        response = client.messages.create(
-            model="claude-sonnet-4-20250514",
-            max_tokens=1024,
-            system=_SYSTEM_PROMPT,
-            messages=[{"role": "user", "content": prompt}],
-        )
-        content = response.content[0].text
-    else:
-        response = client.chat.completions.create(
-            model=os.getenv("ENRICHMENT_SUGGEST_MODEL", _CHAT_MODEL),
-            messages=[
-                {"role": "system", "content": _SYSTEM_PROMPT},
-                {"role": "user", "content": prompt},
-            ],
-            temperature=0.3,
-            response_format={"type": "json_object"},
-        )
-        content = response.choices[0].message.content or ""
-    if "```json" in content:
-        content = content.split("```json", 1)[1].split("```", 1)[0]
-    elif "```" in content:
-        content = content.split("```", 1)[1].split("```", 1)[0]
-    return content
-
-
 def suggest_enrichment(datum_value: Any, parent_info: Dict[str, Any], intent: str = "") -> Dict[str, Any]:
     """AI writes code to rebuild a vector from the L0 datum for L0->L1 ascent."""
-    client = _get_chat_client()
-
-    if client is None:
-        return {
-            "code": "series = parent_series.copy()",
-            "explanation": "Rebuild the full vector from the parent data.",
-            "confidence": "heuristic",
-            "preview_description": "Restoring the original vector as-is.",
-            "error": None,
-        }
-
     prompt = f"""A user reduced their data to a single value and now wants to rebuild it with purpose.
 
 ## The Datum
@@ -139,9 +67,9 @@ Respond in JSON:
 }}"""
 
     try:
-        content = _call_llm(client, prompt)
+        content = call_llm(_SYSTEM_PROMPT, prompt, model_env_var="ENRICHMENT_SUGGEST_MODEL")
         result = json.loads(content.strip())
-    except Exception as exc:
+    except (RuntimeError, Exception) as exc:
         logger.warning("Enrichment suggestion failed: %s", exc)
         return {
             "code": "series = parent_series.copy()",

@@ -10,45 +10,13 @@ from __future__ import annotations
 
 import json
 import logging
-import os
 from typing import Any, Dict
 
 import pandas as pd
 
+from intuitiveness.services.llm_client import call_llm
+
 logger = logging.getLogger(__name__)
-
-_CHAT_MODEL = "anthropic/claude-sonnet-4"
-
-
-def _get_chat_client():
-    or_key = os.getenv("OPENROUTER_API_KEY")
-    if or_key:
-        try:
-            from openai import OpenAI
-            return ("openai", OpenAI(
-                api_key=or_key,
-                base_url=os.getenv("OPENROUTER_BASE_URL", "https://openrouter.ai/api/v1"),
-            ))
-        except ImportError:
-            pass
-    anthropic_key = os.getenv("ANTHROPIC_API_KEY")
-    if anthropic_key:
-        try:
-            import anthropic
-            return ("anthropic", anthropic.Anthropic(api_key=anthropic_key))
-        except ImportError:
-            pass
-    api_key = os.getenv("EMBEDDING_API_KEY") or os.getenv("OPENAI_API_KEY")
-    if not api_key:
-        return None
-    try:
-        from openai import OpenAI
-    except ImportError:
-        return None
-    return ("openai", OpenAI(
-        api_key=api_key,
-        base_url=os.getenv("OPENROUTER_BASE_URL", "https://openrouter.ai/api/v1"),
-    ))
 
 
 _SYSTEM_PROMPT = """You are a Python data analyst. You write pandas code to add categorical dimensions to a feature vector.
@@ -69,34 +37,6 @@ CRITICAL NAMING RULES — the user is non-technical:
 11. The explanation field must describe what you did in plain language a non-programmer can understand."""
 
 
-def _call_llm(client_tuple, prompt: str) -> str:
-    kind, client = client_tuple
-    if kind == "anthropic":
-        response = client.messages.create(
-            model="claude-sonnet-4-20250514",
-            max_tokens=1024,
-            system=_SYSTEM_PROMPT,
-            messages=[{"role": "user", "content": prompt}],
-        )
-        content = response.content[0].text
-    else:
-        response = client.chat.completions.create(
-            model=os.getenv("DIMENSION_SUGGEST_MODEL", _CHAT_MODEL),
-            messages=[
-                {"role": "system", "content": _SYSTEM_PROMPT},
-                {"role": "user", "content": prompt},
-            ],
-            temperature=0.1,
-            response_format={"type": "json_object"},
-        )
-        content = response.choices[0].message.content or ""
-    if "```json" in content:
-        content = content.split("```json", 1)[1].split("```", 1)[0]
-    elif "```" in content:
-        content = content.split("```", 1)[1].split("```", 1)[0]
-    return content
-
-
 def _sample_index(series: pd.Series, n: int = 10) -> list:
     idx = series.index[:n]
     return [str(i) for i in idx]
@@ -114,20 +54,6 @@ def suggest_dimensions(vector_info: Dict[str, Any], intent: str = "") -> Dict[st
                    vector_info.get("min"), vector_info.get("max"), vector_info.get("mean"))
     logger.warning("DIMENSION-SUGGEST sample_index=%s sample_values=%s",
                    vector_info.get("sample_index"), vector_info.get("sample_values"))
-
-    client = _get_chat_client()
-    logger.warning("DIMENSION-SUGGEST client=%s", "None (no API key)" if client is None else client[0])
-
-    if client is None:
-        logger.warning("DIMENSION-SUGGEST: no API key — returning heuristic fallback")
-        return {
-            "explanation": "Split values into above/below median.",
-            "confidence": "heuristic",
-            "code": "df['category'] = np.where(df['value'] > df['value'].median(), 'above median', 'below median').astype(str)",
-            "proposed_columns": ["category"],
-            "sample_distribution": {},
-            "error": None,
-        }
 
     dtypes_info = json.dumps(vector_info.get("dtypes", {"value": "unknown"}))
 
@@ -174,11 +100,21 @@ Respond in JSON:
 
     logger.warning("DIMENSION-SUGGEST: sending prompt to LLM (len=%d)", len(prompt))
     try:
-        content = _call_llm(client, prompt)
+        content = call_llm(_SYSTEM_PROMPT, prompt, model_env_var="DIMENSION_SUGGEST_MODEL")
         logger.warning("DIMENSION-SUGGEST LLM raw response (first 500): %s", content[:500])
         result = json.loads(content.strip())
         logger.warning("DIMENSION-SUGGEST parsed result keys=%s proposed_columns=%s",
                        list(result.keys()), result.get("proposed_columns"))
+    except RuntimeError:
+        logger.warning("DIMENSION-SUGGEST: no API key — returning heuristic fallback")
+        return {
+            "explanation": "Split values into above/below median.",
+            "confidence": "heuristic",
+            "code": "df['category'] = np.where(df['value'] > df['value'].median(), 'above median', 'below median').astype(str)",
+            "proposed_columns": ["category"],
+            "sample_distribution": {},
+            "error": None,
+        }
     except Exception as exc:
         logger.warning("DIMENSION-SUGGEST LLM failed: %s", exc, exc_info=True)
         return {

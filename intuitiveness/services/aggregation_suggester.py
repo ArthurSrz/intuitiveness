@@ -9,63 +9,13 @@ from __future__ import annotations
 
 import json
 import logging
-import os
 from typing import Any, Dict
 
 import pandas as pd
 
+from intuitiveness.services.llm_client import call_llm
+
 logger = logging.getLogger(__name__)
-
-_CHAT_MODEL = "anthropic/claude-sonnet-4"
-
-
-def _get_chat_client():
-    anthropic_key = os.getenv("ANTHROPIC_API_KEY")
-    if anthropic_key:
-        try:
-            import anthropic
-            return ("anthropic", anthropic.Anthropic(api_key=anthropic_key))
-        except ImportError:
-            pass
-    api_key = (
-        os.getenv("OPENROUTER_API_KEY")
-        or os.getenv("EMBEDDING_API_KEY")
-        or os.getenv("OPENAI_API_KEY")
-    )
-    if not api_key:
-        return None
-    try:
-        from openai import OpenAI
-    except ImportError:
-        return None
-    return ("openai", OpenAI(
-        api_key=api_key,
-        base_url=os.getenv("OPENROUTER_BASE_URL", "https://openrouter.ai/api/v1"),
-    ))
-
-
-def _call_llm(client_tuple, prompt: str) -> str:
-    kind, client = client_tuple
-    if kind == "anthropic":
-        response = client.messages.create(
-            model="claude-sonnet-4-20250514",
-            max_tokens=1024,
-            messages=[{"role": "user", "content": prompt}],
-        )
-        content = response.content[0].text
-    else:
-        response = client.chat.completions.create(
-            model=os.getenv("AGGREGATION_SUGGEST_MODEL", _CHAT_MODEL),
-            messages=[{"role": "user", "content": prompt}],
-            temperature=0.1,
-            response_format={"type": "json_object"},
-        )
-        content = response.choices[0].message.content or ""
-    if "```json" in content:
-        content = content.split("```json", 1)[1].split("```", 1)[0]
-    elif "```" in content:
-        content = content.split("```", 1)[1].split("```", 1)[0]
-    return content
 
 
 def _to_series(data: Any) -> pd.Series:
@@ -102,26 +52,7 @@ def suggest_aggregation(data: Any, intent: str = "") -> Dict[str, Any]:
     if series.empty:
         return {"error": "Empty vector", "proposed_aggregation": "mean", "columns": []}
 
-    client = _get_chat_client()
     profile = _build_vector_profile(series)
-
-    if client is None:
-        agg = "mean" if pd.api.types.is_numeric_dtype(series) else "count"
-        try:
-            import numpy as np
-            local_vars: Dict[str, Any] = {"series": series, "pd": pd, "np": np}
-            val = float(series.mean()) if agg == "mean" else int(series.count())
-        except Exception:
-            val = None
-        return {
-            "proposed_aggregation": agg,
-            "explanation": f"Auto-selected '{agg}' for the '{profile['name']}' vector.",
-            "confidence": "heuristic",
-            "code": f"datum = series.{agg}()",
-            "preview_value": round(val, 2) if val is not None else None,
-            "vector_profile": profile,
-            "error": None,
-        }
 
     prompt = f"""You are a data analyst. You have a feature vector (one value per entity):
 
@@ -153,8 +84,23 @@ Respond in JSON:
 }}"""
 
     try:
-        content = _call_llm(client, prompt)
+        content = call_llm("", prompt, model_env_var="AGGREGATION_SUGGEST_MODEL")
         result = json.loads(content.strip())
+    except RuntimeError:
+        agg = "mean" if pd.api.types.is_numeric_dtype(series) else "count"
+        try:
+            val = float(series.mean()) if agg == "mean" else int(series.count())
+        except Exception:
+            val = None
+        return {
+            "proposed_aggregation": agg,
+            "explanation": f"Auto-selected '{agg}' for the '{profile['name']}' vector.",
+            "confidence": "heuristic",
+            "code": f"datum = series.{agg}()",
+            "preview_value": round(val, 2) if val is not None else None,
+            "vector_profile": profile,
+            "error": None,
+        }
     except Exception as exc:
         logger.warning("Aggregation suggestion LLM call failed: %s", exc)
         return {
